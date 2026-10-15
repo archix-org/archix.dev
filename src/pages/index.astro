@@ -11,6 +11,7 @@ const install = 'git clone https://aur.archlinux.org/archix.git && cd archix && 
 
 const flags = [
 	['archix', 'Full update, like running yay with no arguments'],
+	['archix <terms>', 'Search the repos and the AUR, pick from a numbered list, install and declare the picks'],
 	['archix -S <pkg>', 'Install from the repos or the AUR, and add it to your config'],
 	['archix -Ss <query>', 'Search the repos and the AUR'],
 	['archix -Syu', 'Update from live mirrors and adopt the result into the lock'],

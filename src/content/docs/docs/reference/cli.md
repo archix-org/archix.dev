@@ -7,9 +7,36 @@ sidebar:
 
 ```
 archix [--config <dir>] [--host <name>] <command> [flags]
+archix [--config <dir>] [--host <name>] <terms>...
 ```
 
 Running `archix` with no command does a full upgrade, like `yay`. See [`upgrade`](#upgrade--syu).
+
+## Search and install: `archix <terms>`
+
+Like `yay <terms>`, words that aren't a command are a search. archix searches the configured repos at the lock's snapshot and the AUR, numbers the results with the best match as 1, printed last, right above the prompt, and installs what you pick:
+
+```console
+$ archix btop
+3 aur/btop-gpu-git 1.4.5.r12.g5d3e2a1-1 (+4 0.12)
+    A monitor of resources, with GPU support
+2 aur/btop-git 1.4.5.r3.gc1a2b3d-1 (+12 0.35)
+    A monitor of resources
+1 extra/btop 1.4.5-1
+    A monitor of system resources, bpytop ported to C++
+==> Packages to install (eg: 1 2 3, 1-3 or ^4): 1
+...
+install    btop 1.4.5-1
+apply 1 change? [Y/n]
+```
+
+Matching is the same as [`search`](#search--ss): every term has to appear in the name or the description. Results are ranked: an exact name first, then names starting with the first term, then names containing a term, then matches in the description only. Within each group, repo packages come before AUR ones, then they're sorted by name.
+
+The prompt takes numbers (`1 2 3`), ranges (`1-3`) and exclusions (`^4`, `^2-3`), separated by spaces or commas. Exclusions on their own mean all but those, and an empty answer installs nothing. Anything else stops with `"x" isn't a number, a range like 1-3 or an exclusion like ^4`, or `6 is outside 1-5`. With no results, it prints `no packages match btpo` and exits.
+
+The picks go through [`install`](#install--s): they're declared in `lua/hosts/<host>/installed.lua`, then archix switches, with the usual preview and `apply N changes?` prompt, and puts `installed.lua` back if that fails. Run as a normal user, archix calls sudo itself for that part, like yay does, running `sudo` on its own binary with `--config <dir> --host <host> install`, `--noconfirm` if you gave it, and `-- <picks>`.
+
+Commands always win over terms: `archix status` runs `status`, and a typo such as `archix swtich` searches for "swtich". `--noconfirm` can go anywhere among the terms; it's taken out of the search and skips the switch's question. Bare `archix`, with no terms, is still the full upgrade.
 
 `ax` is a short alias for `archix`. The AUR packages install it as a symlink, `/usr/bin/ax`, and it takes every command and flag below: `sudo ax switch`, `ax diff`, `sudo ax -Syu`. Help and usage errors use the name you typed, such as `Usage: ax [OPTIONS] [COMMAND]`, while archix's own messages, `--version` included, still say `archix`. See [Installation](/docs/installation/#ax-the-short-name).
 
@@ -168,7 +195,7 @@ See [pacman and yay](/docs/concepts/pacman-and-yay/#adopting) and [Safety](/docs
 
 | Flag | Description |
 | --- | --- |
-| `--noconfirm` | Don't ask. Applies without the `apply N changes?` question, adopts newer packages, declares packages installed with pacman or yay, trusts new AUR build recipes without showing them, falls back when a third-party package is gone, and takes the nearest newer version when a locked AUR version can't be built. It refuses unsafe downgrades: `refusing unsafe downgrades with --noconfirm; pass --allow-unsafe-downgrade to go ahead`. |
+| `--noconfirm` | Don't ask. Applies without the `apply N changes?` question, adopts newer packages, declares packages installed with pacman or yay, trusts new AUR build recipes without showing them, falls back when a third-party package is gone, and takes the nearest newer version when a locked AUR version can't be built. It refuses unsafe downgrades: ``refusing unsafe downgrades with --noconfirm; to go ahead, run `archix switch` or `archix rollback` with --allow-unsafe-downgrade``. |
 | `--allow-unsafe-downgrade` | Go back across versions that may not read newer data (postgresql majors and the like) without asking. They're still listed. |
 | `--accept-nearest newer\|older` | When a locked AUR version can't be built, take the nearest newer or older one without asking. Overrides the `missing_versions` option. |
 
@@ -287,12 +314,13 @@ the switch to generation 43 (snapshot 2026-10-15) (started at unix time 17920512
 
 Before it does anything, `recover` checks that pacman isn't running and removes a stale pacman lock. With no unfinished switch, it prints `nothing to recover: no switch is unfinished`. It doesn't evaluate the config.
 
-The flags skip the question. Only one can be given.
+`--continue`, `--rollback` and `--abandon` skip the question; only one of them can be given.
 
 | Flag | Description |
 | --- | --- |
 | `--continue` | Finish the interrupted switch by rerunning the steps that hadn't completed, then run the hooks and every `on_change` script of the generation it switched to. |
-| `--rollback` | Return to the packages, files, users and services from before the interrupted switch, then run the hooks and every `on_change` script of that state. |
+| `--rollback` | Return to the packages, files, users and services from before the interrupted switch, then run the hooks and every `on_change` script of that state. Downgrades that may break data are listed first, and it asks `downgrade anyway? [y/N]`. |
+| `--allow-unsafe-downgrade` | With `--rollback`, go back across versions that may not read newer data without asking. |
 | `--abandon` | Close the journal without changing anything, after showing what state the system is in: the differences from the switch's target, and `pacman -Qk` on the packages it touched. |
 
 ```console
@@ -403,7 +431,7 @@ extra/wezterm 20240203.110809.5046fc22-3 [installed]
     GPU-accelerated cross-platform terminal emulator and multiplexer written in Rust
 ```
 
-Repo results come first, then AUR results, most popular first, with their votes and popularity. `[installed]` marks installed packages and `(out of date)` flagged AUR packages.
+Results are ranked as for [`archix <terms>`](#search-and-install-archix-terms), best first: an exact name, then names starting with the first term, then names containing a term, then description matches, with repo packages before AUR ones within each group. AUR results show their votes and popularity. `[installed]` marks installed packages and `(out of date)` flagged AUR packages. To pick from the results and install, leave out `search`: `archix zen browser`.
 
 ### `lock`
 

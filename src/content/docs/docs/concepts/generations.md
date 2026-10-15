@@ -86,9 +86,9 @@ archix knows these packages, and how many version parts make their major version
 | `postgresql`, `forgejo`, `nextcloud`, `redis`, `valkey` | The first part | `17.2-1` back to `16.6-1` |
 | `mariadb`, `mysql`, `percona-server`, `gitea`, `mattermost` | The first two parts | `11.4.3-1` back to `11.2.1-1` |
 
-Downgrades within a major version, such as `17.2-1` to `17.1-3`, pass without a question. For anything else, mark the versions yourself with [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades): a downgrade from at or above a listed version to below it asks too, `lemon 3.54.0-1 -> 3.53.4-1 crosses 3.54, which unsafe_downgrades marks`. Each generation stores its `unsafe_downgrades`, so a rollback checks both the generation it leaves and the one it goes back to, without evaluating your config.
+Downgrades within a major version, such as `17.2-1` to `17.1-3`, pass without a question. For anything else, mark the versions yourself with [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades): a downgrade from at or above a listed version to below it asks too, `lemon 3.54.0-1 -> 3.53.4-1 crosses 3.54, which unsafe_downgrades marks`. Each generation stores its `unsafe_downgrades`, so a rollback checks both the generation it leaves and the one it goes back to, every version either lists for a package, without evaluating your config.
 
-Answer `y` only once the data is taken care of, such as restored from a dump the older version can read. `--noconfirm` refuses unsafe downgrades: `refusing unsafe downgrades with --noconfirm; pass --allow-unsafe-downgrade to go ahead`. `--allow-unsafe-downgrade` still lists them, but doesn't ask. A [switch](/docs/reference/cli/#switch) asks the same way, for example after `archix update --to` an earlier date.
+Answer `y` only once the data is taken care of, such as restored from a dump the older version can read. `--noconfirm` refuses unsafe downgrades: ``refusing unsafe downgrades with --noconfirm; to go ahead, run `archix switch` or `archix rollback` with --allow-unsafe-downgrade``. `--allow-unsafe-downgrade` still lists them, but doesn't ask. A [switch](/docs/reference/cli/#switch) asks the same way, for example after `archix update --to` an earlier date, and so does `archix recover --rollback`, which takes `--allow-unsafe-downgrade` too. `install`, `remove` and `upgrade` don't take the flag; with `--noconfirm` they adopt newer installed versions instead of going back, so they rarely downgrade at all.
 
 Rollback changes the system, not your config. Your `init.lua` and `archix.lock` still describe the newer generation, so the next `archix switch` will apply them again. That's deliberate: archix never rewrites your config behind your back. Before switching again, fix the config, revert the lock in git, or move it back with `archix update --to`.
 
@@ -128,7 +128,7 @@ The `on_change` scripts it skipped are recorded, script and all, in `/var/lib/ar
 
 Naming the current generation puts back whatever still differs, Flatpak apps included, and runs its hooks.
 
-A rollback from the boot menu doesn't ask about [unsafe downgrades](#downgrades-that-may-break-data). You picked the entry because the newer generation didn't work, and there's no one to answer that early, so it goes ahead, the way NixOS does. If it went back across one, archix leaves a note that's shown at every login, by `/etc/profile.d/archix.sh`, until the next switch or rollback that changes something:
+A rollback from the boot menu doesn't ask about [unsafe downgrades](#downgrades-that-may-break-data). You picked the entry because the newer generation didn't work, and there's no one to answer that early, so it goes ahead, the way NixOS does. If it went back across one, archix leaves a note that's shown at every login until the next switch or rollback: in login shells, by `/etc/profile.d/archix.sh`, and as a desktop notification, through `notify-send`:
 
 ```
 archix: the boot-menu rollback to generation 41 went back across versions that may not read newer data; check these services:

@@ -68,6 +68,25 @@ archix is also an AUR helper, with the flags you already type:
 | `archix -Syu` | `archix upgrade` |
 | `archix -Syu <pkg>` | `archix upgrade`, also installing `<pkg>` |
 | `archix` | `archix upgrade` |
+| `archix <terms>` | `archix search <terms>`, then install the numbers you pick |
+
+Like `yay <terms>`, a search with no command lists numbered results, the best match as 1 next to the prompt, and installs what you pick through `archix install`, declaring it in `installed.lua`:
+
+```console
+$ archix btop
+3 aur/btop-gpu-git 1.4.5.r12.g5d3e2a1-1 (+4 0.12)
+    A monitor of resources, with GPU support
+2 aur/btop-git 1.4.5.r3.gc1a2b3d-1 (+12 0.35)
+    A monitor of resources
+1 extra/btop 1.4.5-1
+    A monitor of system resources, bpytop ported to C++
+==> Packages to install (eg: 1 2 3, 1-3 or ^4): 1
+...
+install    btop 1.4.5-1
+apply 1 change? [Y/n]
+```
+
+Run as your user, archix asks sudo for the install itself. Commands win over terms, so `archix status` is never a search. See [`archix <terms>`](/docs/reference/cli/#search-and-install-archix-terms).
 
 `-Sy` on its own, and `-S` or `-Ss` without arguments, fail with a hint: archix never syncs databases without upgrading. See the [CLI reference](/docs/reference/cli/#install--s) for every flag.
 

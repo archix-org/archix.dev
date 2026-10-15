@@ -11,10 +11,10 @@ archix replaces yay and paru. It searches and installs from the official repos, 
 
 ```console
 $ archix search zen browser
-aur/zen-browser-bin 1.16.3b-1 (+412 18.53)
-    Zen Browser, a Firefox-based browser focused on privacy
 aur/zen-browser 1.16.3b-1 (+38 2.10)
     Zen Browser, built from source
+aur/zen-browser-bin 1.16.3b-1 (+412 18.53)
+    Zen Browser, a Firefox-based browser focused on privacy
 $ sudo archix install zen-browser-bin
 $ sudo archix remove zen-browser-bin
 ```
@@ -28,10 +28,11 @@ The pacman-style aliases do the same:
 | `archix -R <pkg>` | `archix remove <pkg>` |
 | `archix -Syu` | `archix upgrade`: `pacman -Syu`, adopt, newest AUR recipes, switch |
 | `archix` | `archix -Syu` |
+| `archix <terms>` | Search, pick from a numbered list, and install, like `yay <terms>` |
 
 There's one `packages` list for everything. `install` looks a name up in your configured repos first, official and third-party, and only names they don't have are looked up in the AUR. A recipe of your own in `pkgbuilds/` beats both for a name you declare that it builds under exactly that name; see [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
 
-Search covers the locked snapshot's repos and the AUR's package list, most popular first, with votes, popularity and out-of-date flags. archix downloads that list (`packages-meta-v1.json.gz`) when it first needs it, refreshes it when it's more than an hour old and on `archix update`, and only loads it when a name isn't in the repos.
+Search covers the locked snapshot's repos and the AUR's package list, with votes, popularity and out-of-date flags. Exact names rank first, then names starting with your first term, then names containing a term, then description matches, and repo packages come before AUR ones. `archix zen browser`, without `search`, numbers the results and installs the ones you pick; see [`archix <terms>`](/docs/reference/cli/#search-and-install-archix-terms). archix downloads that list (`packages-meta-v1.json.gz`) when it first needs it, refreshes it when it's more than an hour old and on `archix update`, and only loads it when a name isn't in the repos.
 
 ## Where `archix install` writes
 

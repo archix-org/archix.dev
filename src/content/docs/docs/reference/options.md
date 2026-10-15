@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-This page documents every option archix ships: packages and repositories, the AUR, third-party repos, generations, the system (files, users, services and more), booting, AppImages, Flatpak apps, your home directory and the `programs.*` modules. Your installed archix is still the authoritative list, because `archix options` is generated from the declarations themselves, and it includes options your own modules declare.
+This page documents every option archix ships: packages and repositories, the AUR, third-party repos, generations, the system (files, users, services and more), activation hooks, booting, AppImages, Flatpak apps, your home directory and the `programs.*` modules. Your installed archix is still the authoritative list, because `archix options` is generated from the declarations themselves, and it includes options your own modules declare.
 
 All of these modules are built in and loaded before your `init.lua`. You never import them.
 
@@ -293,8 +293,11 @@ Files archix writes, keyed by absolute path; give one of `text`, `source`, `link
 | `mode` | `str` | `"0644"` | Octal permissions. |
 | `owner` | `str` | `"root"` | |
 | `group` | `str` | `"root"` | |
+| `on_change` | `null or lines` | `null` | A bash script run as root after a switch or rollback that changed this file, before the [hooks](#hooks). |
 
 Give exactly one of `text`, `source`, `link` and `url`. `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
+
+`on_change` runs when the file's entry differs from the one in the generation the system is leaving: on the first switch that manages it, when its contents, mode, owner, group or link target change, and on a rollback to a generation where it was different. A failing script is a soft failure, listed as `failed: on_change of <path>: ...`. See [Activation hooks](/docs/guides/hooks/#on_change).
 
 A `url` needs a `sha256` of 64 hex digits; without one, `diff` and `switch` stop with `files.<path>: url needs sha256`. The hash is what's locked: `diff` compares the file on disk against it without downloading anything, and `switch` downloads the file after you confirm, before it changes anything. A download whose hash differs stops the switch: `<url> has sha256 <actual>, but the config says <sha256>`. The contents go into the same store as every other managed file, so rollback restores them even after the URL is gone.
 
@@ -306,6 +309,7 @@ files = {
   ["/etc/sudoers.d/wheel"] = { text = "%wheel ALL=(ALL:ALL) ALL", mode = "0440" },
   ["/etc/X11/xorg.conf.d/30-touchpad.conf"] = { source = "files/30-touchpad.conf" },
   ["/etc/resolv.conf"] = { link = "/run/systemd/resolve/stub-resolv.conf" },
+  ["/etc/foo.conf"] = { text = "port = 8080", on_change = "systemctl try-restart foo" },
   ["/usr/local/bin/hello"] = archix.fetchurl {
     url = "https://downloads.example.org/hello/1.2.0/hello-x86_64",
     sha256 = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
@@ -521,6 +525,40 @@ udev rules, keyed by file name without `.rules`. They're written to `/etc/udev/r
 ```lua
 udev_rules = {
   ["60-ioschedulers"] = [[ACTION=="add|change", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/scheduler}="none"]],
+},
+```
+
+## Hooks
+
+Scripts archix runs as part of every switch and rollback. See [Activation hooks](/docs/guides/hooks/) for a walkthrough.
+
+### `hooks`
+
+| | |
+| --- | --- |
+| Type | `attrs of submodule` |
+| Default | `{}` |
+| Declared in | `<archix>/hooks.lua` |
+
+Scripts run at the end of every switch and rollback, after files are written and services started, like NixOS activation scripts. They run every time, so make them idempotent; a failing hook is reported without undoing the switch.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `run` | `lines` | *required* | The bash script to run; it runs with `set -e` and `pipefail`. |
+| `user` | `null or str` | `null` | Run as this user, in their home with their session bus when they're logged in; root by default. |
+| `after` | `list of str` | `[]` | Hooks that must run before this one. |
+
+Hooks run in the `:: running activation hooks` step, after the [`on_change`](#files) scripts and before the result is verified and the new generation becomes current. They also run on a switch that has nothing to change. The order is by `after`, then by name, and the switch preview shows it on a `run hooks` line. An `after` that names no hook is an error, `hooks.<name>.after names "<hook>", which isn't a hook`, and so is a cycle, `hooks <names> wait on each other in a cycle`.
+
+Each script runs as `bash -e -o pipefail -c` in a clean environment: `PATH=/usr/local/sbin:/usr/local/bin:/usr/bin`, `HOME`, `USER` and `LOGNAME`, and `LANG` if archix has one. Root hooks run in `/`. With `user`, the hook runs as that user without opening a login session, in their home, with `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` set while they're logged in, so `systemctl --user` reaches their session.
+
+A failing hook is a soft failure: the switch finishes, the new generation becomes current, and archix lists `failed: hook <name>: exited with exit status: 1` and exits non-zero.
+
+```lua
+users = { alice = { groups = { "wheel" } } },
+hooks = {
+  tailscale = { run = "tailscale set --operator=alice" },
+  lan = { user = "alice", run = "tailscale set --exit-node-allow-lan-access", after = { "tailscale" } },
 },
 ```
 
@@ -773,10 +811,13 @@ Files in the user's home, keyed by path relative to it (a leading `~/` is allowe
 | `url` | `null or str` | `null` | Download the file from here; needs `sha256`. `archix.fetchurl { url, sha256 }` builds both. |
 | `sha256` | `null or str` | `null` | The sha256 the download from `url` must have; `archix prefetch <url>` prints it. |
 | `executable` | `bool` | `false` | Write the file with mode `0755` instead of `0644`. |
+| `on_change` | `null or lines` | `null` | A bash script run as `home.user` after a switch or rollback that changed this file, before the [hooks](#hooks). |
 
 Give exactly one of `text`, `source`, `link` and `url`. A `source` is copied, and a directory `source` needs `live = true`. `live` only works with `source`; with `text`, `link` or `url` it's an error: `home.files.<path>: live = true needs source, the file in the config to link to`. A `url` works as it does in [`files`](#files): the hash is locked, and the download happens at switch. Paths can't leave the home or the config directory.
 
 When a path is a directory archix didn't manage before, such as an existing `~/.config/nvim` you now link into the config, it's moved to `/var/lib/archix/backups` and comes back when the entry leaves the config. See [Dotfiles and apps](/docs/guides/dotfiles-and-apps/).
+
+`on_change` runs when the file changed between generations, as in [`files`](#files), but as `home.user`, in the environment of a [user hook](/docs/guides/hooks/#user-hooks). A `live` entry is a link, so editing the file behind it never runs `on_change`.
 
 ```lua
 home = {
@@ -785,6 +826,7 @@ home = {
     [".config/nvim"] = { source = "home/.config/nvim", live = true },
     ["bin/hello"] = { text = "#!/bin/sh\necho hi\n", executable = true },
     [".config/user-dirs.dirs"] = { source = "home/user-dirs.dirs" },
+    [".config/waybar/config.jsonc"] = { source = "home/waybar/config.jsonc", on_change = "pkill -SIGUSR2 -x waybar || true" },
     [".local/share/fonts/Inter.ttf"] = archix.fetchurl {
       url = "https://downloads.example.org/fonts/Inter-4.1.ttf",
       sha256 = "9f0c6a3d1b7e24c58a6d0e3f9b1c47a2e8d5f06b3c9a1e7d4f2b8c0a6e3d9f15",

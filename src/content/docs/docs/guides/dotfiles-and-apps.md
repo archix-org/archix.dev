@@ -44,6 +44,7 @@ home = {
 | `link` | Make the path a symlink to this target. |
 | `url`, `sha256` | Download the file, and refuse it unless it has this sha256. See [Files from a URL](#files-from-a-url). |
 | `executable` | Mode `0755` instead of `0644`. |
+| `on_change` | A bash script run as the user when a switch or rollback changed the file. See [Reload apps when a file changes](#reload-apps-when-a-file-changes). |
 
 Copies are real files, not links into a store, so apps see ordinary files they can read and watch. archix stores their contents with the generation and knows exactly what it wrote. If you, or an app, edit a managed file, `archix diff` flags it before the next switch:
 
@@ -54,6 +55,30 @@ update     /home/me/.config/kitty/kitty.conf (edited outside archix; your versio
 The switch then writes the declared version, and saves yours under `/var/lib/archix/edited/` so nothing is lost. Move the change into your config to keep it.
 
 When archix first takes over a path that already exists, it backs up the original to `/var/lib/archix/backups`. If the entry later leaves the config, archix deletes the file, or puts that original back. See [Safety](/docs/concepts/safety/).
+
+## Reload apps when a file changes
+
+Most apps read their config when they start. For a running app to pick up a new one, give the file an `on_change` script, Home Manager's `onChange`. It runs as `home.user`, only when a switch or rollback changed that file:
+
+```lua title="lua/modules/desktop.lua"
+return {
+  users = { me = { groups = { "wheel" } } },
+  home = {
+    user = "me",
+    files = {
+      [".config/waybar/config.jsonc"] = { source = "home/waybar/config.jsonc", on_change = "pkill -SIGUSR2 -x waybar || true" },
+      [".config/kitty/kitty.conf"] = { on_change = "pkill -USR1 -x kitty || true" },
+    },
+  },
+  programs = {
+    kitty = { enable = true, settings = { font_size = 11 } },
+  },
+}
+```
+
+A file a `programs.*` module writes is a `home.files` entry too, so `on_change` works on `kitty.conf` above without repeating its contents. The script runs with `set -e`, so `|| true` keeps an app that isn't running from failing it.
+
+"Changed" means the file's entry differs from the previous generation's: its contents, mode or link target. So it runs on the first switch that writes the file, but not when a switch only puts back a file you edited by hand, and never for edits behind a [live link](#live-links-for-app-written-configs), since the link itself stays the same. A failing script doesn't undo the switch; it's listed and archix exits non-zero. For scripts that should run on every switch, such as `systemctl --user` commands, see [Activation hooks](/docs/guides/hooks/).
 
 ## Files from a URL
 
@@ -249,6 +274,7 @@ If you're coming from Home Manager, your config translates closely. Option names
 | `xdg.mimeApps.defaultApplications` | `mime_apps.default_applications` |
 | `systemd.user.timers.<name>` | `home.systemd.timers.<name>` |
 | `home.file.<path>` | `home.files.<path>` |
+| `home.file.<path>.onChange` | `home.files.<path>.on_change` |
 
 `archix options` lists every option, and the [options reference](/docs/reference/options/#programs) documents them all.
 

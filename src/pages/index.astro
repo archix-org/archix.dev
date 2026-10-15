@@ -18,14 +18,14 @@ const flags = [
 ];
 
 const manages = [
-	['Packages', 'Official repos and the AUR in one list, resolved from the repos first'],
-	['Repos', 'CachyOS, chaotic-aur and other third-party repos, with their pacman.conf blocks and keys'],
+	['Packages', 'Official repos, the AUR and third-party repos like CachyOS, with their pacman.conf blocks and keys'],
 	['/etc', 'Any file under /etc, written atomically and tracked by hash'],
 	['systemd', 'System and user units, enabled and started on switch'],
 	['Kernel', 'Kernel parameters, sysctl, modprobe and udev rules'],
 	['Users', 'Users and groups. Passwords stay yours: archix never touches them'],
 	['Dotfiles', 'Real files with recorded hashes, so edits made outside archix show up in diff'],
 	['Apps', 'programs.* modules ported from Home Manager and checked byte for byte against its tests, plus writers for toml, json, yaml, ini, kdl and more'],
+	['Hooks', 'Activation scripts that run on every switch and rollback, and on_change scripts for files that changed'],
 ];
 
 const safety = [

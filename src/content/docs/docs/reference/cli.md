@@ -102,6 +102,7 @@ resolving 87 declared packages against the 2026-10-09 snapshot
 wrote /etc/archix/archix.lock
 install    htop 3.4.1-1
 boot entry for the new generation
+run hooks  tailscale
 apply 2 changes? [Y/n]
 downloading htop-3.4.1-1-x86_64.pkg.tar.zst
 :: installing packages
@@ -112,6 +113,8 @@ downloading htop-3.4.1-1-x86_64.pkg.tar.zst
 :: writing managed files
 :: reloading systemd, sysctl, udev and locales
 :: enabling and starting services
+:: running activation hooks
+   hook tailscale
 :: verifying the result
 :: writing the boot entry
 :: making the new generation current
@@ -119,6 +122,8 @@ switched to generation 2 (snapshot 2026-10-09)
 ```
 
 `switch` re-locks at the locked date if the config changed, lists the package, file, user, group, service and Flatpak changes, and asks before applying them. Then it downloads files declared with a `url` into the store (each checked against its `sha256`), builds AUR packages in a clean chroot, downloads every package to `/var/cache/archix/pkg` (each file checked against the lock's `sha256`) and applies the steps above from a [journal](/docs/concepts/safety/#the-journal).
+
+With [`hooks`](/docs/guides/hooks/) declared, the preview ends with a `run hooks` line listing them in the order they'll run. Hooks aren't counted in `apply N changes?`. They run in the `:: running activation hooks` step, after the `on_change` scripts of files the switch changed, and each one prints a `hook <name>` line as it starts.
 
 With [Flatpak apps](/docs/guides/flatpak-and-appimages/) declared, `switch` locks new apps to their remote's current commit, then, once the new generation is current, adds the remotes they use, locks apps whose remote it just added, installs missing apps, pins every app to its locked commit with `flatpak update --commit=`, and uninstalls the apps that left the config:
 
@@ -130,7 +135,7 @@ flatpak    remove org.gimp.GIMP
 
 A Flatpak step that fails is a soft failure, like a service that doesn't start. Before it asks, `switch` also checks that no managed file would replace something it can't back up, and stops with a plain error if one would; see [Safety](/docs/concepts/safety/#managed-files-backups-and-hand-edits).
 
-If the system already matches, it prints `nothing to do: the system matches generation 2 (snapshot 2026-10-09)`. If only settings changed, such as `ignored_packages`, and archix doesn't manage booting, it records a new generation without running the apply steps: `switched to generation 3 (snapshot 2026-10-09); no package changes were needed`. That's also what the first switch after `archix init` usually prints. Files archix takes over unchanged are backed up either way.
+If the system already matches, it prints `nothing to do: the system matches generation 2 (snapshot 2026-10-09)`. If only settings changed, such as `ignored_packages`, and archix doesn't manage booting, it records a new generation without running the apply steps: `switched to generation 3 (snapshot 2026-10-09); no package changes were needed`. That's also what the first switch after `archix init` usually prints. Files archix takes over unchanged are backed up either way. Hooks run in both cases, after that line, under `:: running activation hooks`, like NixOS runs activation scripts on every switch.
 
 `switch` refuses to start while pacman is running, while a stale pacman lock (`/var/lib/pacman/db.lck`) exists, or while an earlier switch is unfinished. If installed packages are newer than the lock because of pacman or an AUR helper, it offers to adopt them first:
 
@@ -233,7 +238,7 @@ roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n]
 rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-Packages are reinstalled at the generation's exact versions, from the cache when they're there and from the Arch Linux Archive otherwise. Files, fetched ones included, come from the store, so they don't need their URL. Flatpak apps are pinned back to the generation's commits, which are downloaded from their remote, and apps the newer generation added are uninstalled. The prompt counts package, file and Flatpak changes. Like `switch`, it checks before changing anything that no file would replace something it can't back up. `rollback` doesn't evaluate the config, so it works even when the config is broken. `archix rollback 42` moves forward again. Naming the current generation repairs it: `generation 42 is current; putting back whatever differs from it`, which reinstalls drifted packages and rewrites changed files, users and services. It runs through the same journal as a switch, and refuses while a switch is unfinished; use `archix recover --rollback` for that. See [Generations and rollback](/docs/concepts/generations/).
+Packages are reinstalled at the generation's exact versions, from the cache when they're there and from the Arch Linux Archive otherwise. Files, fetched ones included, come from the store, so they don't need their URL. Flatpak apps are pinned back to the generation's commits, which are downloaded from their remote, and apps the newer generation added are uninstalled. The prompt counts package, file and Flatpak changes. Like `switch`, it checks before changing anything that no file would replace something it can't back up. `rollback` doesn't evaluate the config, so it works even when the config is broken. `archix rollback 42` moves forward again. Naming the current generation repairs it: `generation 42 is current; putting back whatever differs from it`, which reinstalls drifted packages and rewrites changed files, users and services. The generation's [hooks](/docs/guides/hooks/) run in the same step as on a switch, after the `on_change` scripts of files the rollback changed. A rollback that finds nothing to put back prints `generation 41 (snapshot 2026-10-09) is current; no package changes were needed` and runs no hooks. It runs through the same journal as a switch, and refuses while a switch is unfinished; use `archix recover --rollback` for that. See [Generations and rollback](/docs/concepts/generations/).
 
 | Argument or flag | Description |
 | --- | --- |
@@ -269,7 +274,7 @@ The flags skip the question. Only one can be given.
 | Flag | Description |
 | --- | --- |
 | `--continue` | Finish the interrupted switch by rerunning the steps that hadn't completed. |
-| `--rollback` | Return to the packages, files, users and services from before the interrupted switch. |
+| `--rollback` | Return to the packages, files, users and services from before the interrupted switch, and run that generation's hooks. |
 | `--abandon` | Close the journal without changing anything, after showing what state the system is in: the differences from the switch's target, and `pacman -Qk` on the packages it touched. |
 
 ```console
@@ -480,7 +485,7 @@ Two hidden commands are run by files archix installs, not by you: `archix hook-r
 
 - `0` when the command succeeded.
 - `1` on errors, with each error printed to stderr as `error: ...`. That includes config errors (every one is reported, not just the first), resolution failures, a declined prompt and failures before apply starts, which leave the system untouched.
-- Non-zero after a switch or rollback with soft failures: the new generation is current, the steps that failed (services, reloads, Flatpak apps) are listed, and the last line is `error: the new generation is current, but 2 steps failed (listed above)`. See [Safety](/docs/concepts/safety/#hard-and-soft-failures).
+- Non-zero after a switch or rollback with soft failures: the new generation is current, the steps that failed (services, reloads, hooks, `on_change` scripts, Flatpak apps) are listed, and the last line is `error: the new generation is current, but 2 steps failed (listed above)`. See [Safety](/docs/concepts/safety/#hard-and-soft-failures).
 - Non-zero when a hard failure stopped a switch. The journal stays open until you run `archix recover`.
 - While a switch is unfinished, `switch`, `upgrade`, `install`, `remove`, `rollback`, `lock`, `update` and `gc` refuse to run and exit `1`, naming the interrupted switch and pointing to `archix recover`.
 

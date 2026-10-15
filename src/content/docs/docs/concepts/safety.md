@@ -46,6 +46,7 @@ apply 3 changes? [Y/n]
 :: writing managed files
 :: reloading systemd, sysctl, udev and locales
 :: enabling and starting services
+:: restarting what uses replaced files
 :: verifying the result
 :: writing the boot entry
 :: making the new generation current
@@ -75,11 +76,45 @@ the running kernel was replaced: reboot to finish (its modules stay loadable unt
 
 They say so after every switch until you reboot, since the running kernel's package is still gone. A rollback from the boot menu keeps the modules the same way, but prints no notice.
 
-The directory archix put back belongs to no package, so archix records it in `/var/lib/archix/restored-modules` and deletes it once that kernel is no longer running: at the next boot, when [`archix-boot.service`](/docs/concepts/generations/#rolling-back-from-the-boot-menu) runs, or at the start of the next switch or rollback. If a package owns that directory again by then, because you reinstalled the same kernel version, archix leaves it alone and forgets it.
+archix records every kernel whose modules it kept in `/var/lib/archix/kept-modules`, and cleans up once that kernel is no longer running: at the next switch or rollback, or at the next boot from an archix boot entry. It deletes the directory it put back in `/usr/lib/modules`, unless a package owns it again because you reinstalled the same kernel version, and the copy in `/var/lib/archix/kernels`, unless a [boot entry](/docs/concepts/generations/#older-kernels-keep-booting) was built with that kernel and still needs it.
 
 [Activation hooks](/docs/guides/hooks/) aren't one of these steps. They run after the switch is complete, once the new generation is current and Flatpak apps are installed, under `:: running activation hooks`: first the `on_change` scripts of files the switch changed, then every hook. A hook can't leave a switch unfinished, so the journal doesn't track them. With hooks declared, the preview before the prompt lists them on a `run hooks` line.
 
 archix also checks pacman before it starts. If pacman is running, or a `db.lck` is left over with no pacman running, `switch` refuses and tells you why, rather than fight another package manager.
+
+## Restarting what uses replaced files
+
+A running program keeps using the files it started with. When pacman replaces a binary or a shared library, the old one is deleted, but every process that loaded it keeps running the old code until it restarts. After a `glibc` or `openssl` upgrade, a daemon that has been up for a week still runs last week's library.
+
+archix restarts those units itself, in the `:: restarting what uses replaced files` step, after services are started and before the result is verified. It covers system units, and the user units of every user whose user manager is running, logged in or lingering, through `systemctl --user -M <user>@`. A unit is restarted when:
+
+- **its processes use replaced files.** A process that maps or holds open a deleted file under `/usr` is still running code pacman replaced. That catches binaries and shared libraries exactly, glibc included: a glibc upgrade restarts only what loaded the old glibc. It counts every such file, including ones left by an earlier `pacman -Syu`.
+- **interpreted code it needs changed.** Python, Perl, Node, Ruby and Lua code isn't mapped, so a daemon written in them doesn't show up that way. When the switch changes a package that ships files under `/usr/lib/python3*`, `/usr/share/perl5`, `/usr/lib/perl5`, `/usr/lib/node_modules`, `/usr/lib/ruby`, `/usr/share/lua` or `/usr/lib/lua`, archix restarts the running units whose packages depend on it, through `depends` and installed optional dependencies. A unit's packages are the ones that own its unit file and the absolute paths in its `ExecStart`. So upgrading `python-urllib3` restarts a Python daemon that uses it through `python-requests`.
+
+Restarts use `systemctl try-restart`, so a unit that isn't running isn't started. If pid 1 itself still maps replaced files, after a systemd or glibc upgrade, archix runs `systemctl daemon-reexec`; a user manager in that position gets `systemctl --user daemon-reexec`.
+
+```console
+:: restarting what uses replaced files
+:: restarting cups.service php-fpm.service
+:: restarting pipewire.service wireplumber.service for alice
+:: still using replaced files until you log out or reboot: firefox, plasma-plasmashell.service, sddm.service
+```
+
+Some units are never restarted, because restarting them would end your session or cut you off. archix lists them on the last line instead, for you to pick up by logging out or rebooting:
+
+- system units: the display manager, `display-manager.service` and the unit it points to, such as `sddm.service`; `dbus.service`, `dbus-broker.service`, `systemd-logind.service`, `NetworkManager.service`, `sshd.service`, and every `getty@`, `serial-getty@` and `user@` unit;
+- user units whose names start with `dbus`, `plasma-kwin`, `plasma-plasmashell`, `plasma-ksmserver`, `plasma-workspace`, `niri`, `gnome-shell`, `org.gnome.Shell`, `hyprland`, `sway` or `wayland-wm`: the desktop session itself;
+- programs in session and app scopes, your desktop apps, listed by process name.
+
+[`restart_if_changed`](/docs/reference/options/#restart_if_changed) changes that per unit: `true` restarts a unit even if it's on the list, `false` never restarts it and lists it instead.
+
+```lua title="lua/hosts/server/init.lua"
+return {
+  restart_if_changed = { ["sshd.service"] = true, ["postgresql.service"] = false },
+}
+```
+
+A restart that fails is a [soft failure](#hard-and-soft-failures), listed as `failed: systemctl try-restart: ...` with systemctl's message, and the switch is kept. A rollback from the boot menu skips the step: it runs before the services it would restart have started. `archix recover --continue` runs it if the interrupted switch hadn't got to it.
 
 ## The journal
 
@@ -152,10 +187,11 @@ Not every failure during apply means the same thing.
 error: installing packages failed; the switch is unfinished, run `archix recover`: pacman exited with exit status: 1
 ```
 
-**Soft failures** don't: a service that fails to start, a reload such as `sysctl --system` that fails, a [hook or `on_change` script](/docs/guides/hooks/#failures) that exits non-zero, or a Flatpak app that can't be installed, pinned or removed. Flatpak apps are synced after the new generation becomes current, outside the journal. The new generation becomes current, archix lists what failed and exits non-zero, like NixOS does. A broken unit is usually a config problem you fix and switch again, and undoing the whole generation for it would be worse.
+**Soft failures** don't: a service that fails to start, a reload such as `sysctl --system` that fails, a [restart](#restarting-what-uses-replaced-files) that fails, a [hook or `on_change` script](/docs/guides/hooks/#failures) that exits non-zero, or a Flatpak app that can't be installed, pinned or removed. Flatpak apps are synced after the new generation becomes current, outside the journal. The new generation becomes current, archix lists what failed and exits non-zero, like NixOS does. A broken unit is usually a config problem you fix and switch again, and undoing the whole generation for it would be worse.
 
 ```console
 :: enabling and starting services
+:: restarting what uses replaced files
 :: verifying the result
 :: writing the boot entry
 :: making the new generation current

@@ -39,6 +39,7 @@ You already know the ideas behind archix: a declarative config, a lockfile, gene
 | `environment.etc` | `files` |
 | `systemd.services`, `systemd.user.services` | `units`, `services`, `home.systemd` |
 | `users.users` | `users` |
+| `restartIfChanged`, `stopIfChanged` on a service | `restart_if_changed.<unit>` |
 | `system.activationScripts`, Home Manager's `home.activation` | `hooks` |
 | Home Manager's `home.file.<path>.onChange` | `home.files.<path>.on_change`, and `on_change` on `files` |
 | `nix-collect-garbage` | `archix gc` |
@@ -97,6 +98,10 @@ On NixOS, imperative changes mostly don't stick. On archix they're allowed. `pac
 ### Bootloaders
 
 systemd-boot only. GRUB and Limine are not supported. Each generation gets a UKI, signed with sbctl if you have keys, so Secure Boot works without lanzaboote. Picking an older generation in the boot menu rolls the system back to it early in boot, by reinstalling that generation's packages and files from the cache rather than switching a store path, so it works on any filesystem.
+
+### Restarts follow replaced files, not unit changes
+
+NixOS restarts a service when its unit changes, which with a store covers every new dependency. archix has no store paths to compare, so it finds what to restart from the running system: units whose processes still map or hold open deleted files under `/usr`, and units whose packages depend on a changed package that ships Python, Perl, Node, Ruby or Lua code. Like `restartIfChanged = false`, it never restarts the display manager, dbus, logind, NetworkManager, sshd, gettys or your desktop session's units, and lists them for a logout instead. [`restart_if_changed`](/docs/reference/options/#restart_if_changed) overrides that per unit, `true` or `false`; there's no separate stop-then-start mode. See [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files).
 
 ### Activation hooks are soft failures
 

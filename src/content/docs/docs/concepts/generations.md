@@ -43,7 +43,7 @@ roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n]
 rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-This makes the system match the previous generation: its exact package versions are reinstalled, from the cache when they're there and from the Arch Linux Archive otherwise, and its files, users, groups and services are applied again. Files come from the store, so a file declared with a `url` comes back even when the URL is gone. Its [hooks](/docs/guides/hooks/) run last, once it's current and its Flatpak apps are pinned, after the `on_change` scripts of files the rollback changed, under `:: running activation hooks` as on a switch. It goes through the same journal as a switch, so an interrupted rollback is as recoverable as an interrupted switch. See [Safety](/docs/concepts/safety/).
+This makes the system match the previous generation: its exact package versions are reinstalled, from the cache when they're there and from the Arch Linux Archive otherwise, and its files, users, groups and services are applied again. Units still using files the rollback replaced are [restarted](/docs/concepts/safety/#restarting-what-uses-replaced-files), as on a switch. Files come from the store, so a file declared with a `url` comes back even when the URL is gone. Its [hooks](/docs/guides/hooks/) run last, once it's current and its Flatpak apps are pinned, after the `on_change` scripts of files the rollback changed, under `:: running activation hooks` as on a switch. It goes through the same journal as a switch, so an interrupted rollback is as recoverable as an interrupted switch. See [Safety](/docs/concepts/safety/).
 
 Flatpak apps follow last, once the generation is current. Each app is pinned back to the commit the generation recorded, and apps the newer generation added are uninstalled:
 
@@ -85,7 +85,7 @@ The entry starts generation 41's kernel with `archix.generation=41` on its comma
 archix: booted generation 41, but 42 is current; rolling back to 41
 ```
 
-You land in generation 41, and it stays current until your next switch. This works the same on every filesystem.
+You land in generation 41, and it stays current until your next switch. Nothing has started yet that early, so the boot-time rollback skips restarting units. This works the same on every filesystem.
 
 Flatpak commits come from their remote, and the network isn't up that early in boot, so the boot service leaves Flatpak apps as they are and says so:
 
@@ -107,7 +107,7 @@ Naming the current generation puts back whatever still differs, Flatpak apps inc
 
 An older entry needs its kernel's modules, which pacman deletes when it upgrades the kernel. archix keeps a hardlinked copy of each entry's modules in `/var/lib/archix/kernels`, and the boot service puts the booted kernel's modules back before anything loads them. `gc` deletes the copies of kernels no kept boot entry uses.
 
-That's separate from what happens to the *running* kernel during a switch. archix also copies the running kernel's modules into `/var/lib/archix/kernels` before pacman replaces its package, and puts them back in `/usr/lib/modules` so they keep loading until you reboot. That put-back directory is temporary: archix deletes it at the next boot or switch, once that kernel isn't running. See [The running kernel](/docs/concepts/safety/#the-running-kernel).
+That's separate from what happens to the *running* kernel during a switch. archix also copies the running kernel's modules into `/var/lib/archix/kernels` before pacman replaces its package, and puts them back in `/usr/lib/modules` so they keep loading until you reboot. Both are temporary: once that kernel isn't running, archix deletes the put-back directory and the copy, at the next switch or rollback, or at the next boot from an archix boot entry. A copy a boot entry still uses stays. See [The running kernel](/docs/concepts/safety/#the-running-kernel).
 
 ### When pacman itself is broken
 
@@ -149,7 +149,7 @@ Generations cost disk space, mostly in the package cache. archix cleans up after
 | Rescue entries | The newest 2 |
 | Package cache, managed-file contents (downloads included), snapshot databases | Only what kept generations need |
 | Preserved kernel modules in `/var/lib/archix/kernels` | Only the kernels of kept boot entries |
-| Running-kernel modules put back in `/usr/lib/modules` | Deleted at the next boot or switch, once that kernel isn't running |
+| Running-kernel modules kept during a switch | Deleted once that kernel isn't running, at the next switch or rollback, or at the next boot from an archix boot entry, unless a boot entry still uses the copy |
 | btrfs snapshots | Deleted with their generation |
 | When | `gc` runs after every switch |
 

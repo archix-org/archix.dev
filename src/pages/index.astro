@@ -20,7 +20,7 @@ const flags = [
 const manages = [
 	['Packages', 'Official repos, the AUR, third-party repos like CachyOS, your own PKGBUILDs, and official packages with your patches'],
 	['/etc', 'Any file under /etc, written atomically and tracked by hash'],
-	['systemd', 'System and user units, enabled and started on switch'],
+	['systemd', 'System and user units, enabled and started on switch, and restarted when the code they run was updated'],
 	['Kernel', 'Kernel parameters, sysctl, modprobe and udev rules'],
 	['Users', 'Users and groups. Passwords stay yours: archix never touches them'],
 	['Dotfiles', 'Real files with recorded hashes, so edits made outside archix show up in diff'],

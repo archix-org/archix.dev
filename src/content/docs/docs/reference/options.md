@@ -406,6 +406,22 @@ User units to enable (`true`) or disable (`false`) for every user, with `systemc
 user_services = { ["pipewire-pulse.socket"] = true },
 ```
 
+### `restart_if_changed`
+
+| | |
+| --- | --- |
+| Type | `attrs of bool` |
+| Default | `{}` |
+| Declared in | `<archix>/system.lua` |
+
+System or user units to always (`true`) or never (`false`) restart when a switch replaces files they use. By default archix restarts them, except the display manager, dbus, logind, NetworkManager, sshd, gettys and the desktop session's own units, which it lists for a logout instead.
+
+Keys are full unit names, such as `sshd.service`, and apply to system and user units of that name alike. `true` restarts a unit archix would otherwise only list; `false` lists one it would otherwise restart. Either way, a unit is only restarted if it's running. See [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files).
+
+```lua
+restart_if_changed = { ["sshd.service"] = true, ["postgresql.service"] = false },
+```
+
 ### `users`
 
 | | |

@@ -13,12 +13,13 @@ Generations live in `/var/lib/archix/generations/<n>/generation.json`, and `/var
 
 - **The packages.** The snapshot date and every package's exact version, file and sha256, including the sha256 of each AUR package it built.
 - **The managed files, users, groups and services.** File contents are stored once by sha256 in `/var/lib/archix/blobs`, so identical files across generations cost nothing extra. Files downloaded with [`archix.fetchurl`](/docs/reference/lua-api/#archixfetchurl), AppImages included, are stored the same way. Every switch that records a generation stores the contents it needs, including one with nothing else to apply, so rolling back to any kept generation finds its files.
+- **The hooks.** Every [hook](/docs/guides/hooks/) and `on_change` script, so a rollback runs the ones the generation was built with.
 - **The Flatpak apps.** The remote, ref and commit each declared app was pinned to.
 - **The settings it was applied with.** `undeclared_packages`, `ignored_packages`, the generation limits and the boot settings, so rollback and `gc` work without evaluating your config.
 - **The config's git commit**, if your config directory is a git repo, and whether the tree had uncommitted changes.
 - **Its btrfs snapshot**, on a btrfs root.
 
-A switch that only changes settings, such as `ignored_packages` or a boot option, still creates a generation, so turning on Secure Boot gives you newly signed entries. A switch that changes nothing prints `nothing to do: the system matches generation 42 (snapshot 2026-10-15)` and creates none. A switch with nothing to apply but a new generation to record, such as the first one after `archix init` when archix doesn't manage booting, prints `switched to generation 1 (snapshot 2026-10-09); no package changes were needed`.
+A switch that only changes settings, such as `ignored_packages` or a boot option, still creates a generation, so turning on Secure Boot gives you newly signed entries. A switch that changes nothing prints `nothing to do: the system matches generation 42 (snapshot 2026-10-15)` and creates none, though it still runs the generation's [hooks](/docs/guides/hooks/). A switch with nothing to apply but a new generation to record, such as the first one after `archix init` when archix doesn't manage booting, prints `switched to generation 1 (snapshot 2026-10-09); no package changes were needed`.
 
 ```console
 $ archix generations
@@ -42,7 +43,7 @@ roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n]
 rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-This makes the system match the previous generation: its exact package versions are reinstalled, from the cache when they're there and from the Arch Linux Archive otherwise, and its files, users, groups and services are applied again. Files come from the store, so a file declared with a `url` comes back even when the URL is gone. It goes through the same journal as a switch, so an interrupted rollback is as recoverable as an interrupted switch. See [Safety](/docs/concepts/safety/).
+This makes the system match the previous generation: its exact package versions are reinstalled, from the cache when they're there and from the Arch Linux Archive otherwise, and its files, users, groups and services are applied again. Files come from the store, so a file declared with a `url` comes back even when the URL is gone. Its [hooks](/docs/guides/hooks/) run last, once it's current and its Flatpak apps are pinned, after the `on_change` scripts of files the rollback changed, under `:: running activation hooks` as on a switch. It goes through the same journal as a switch, so an interrupted rollback is as recoverable as an interrupted switch. See [Safety](/docs/concepts/safety/).
 
 Flatpak apps follow last, once the generation is current. Each app is pinned back to the commit the generation recorded, and apps the newer generation added are uninstalled:
 
@@ -60,7 +61,7 @@ $ sudo archix rollback 40
 $ sudo archix rollback 42
 ```
 
-Naming the current generation repairs it. `archix rollback 42` with 42 current prints `generation 42 is current; putting back whatever differs from it`, then reinstalls drifted packages and rewrites changed files, users and services. That's also how you finish after [rescue mode](/docs/concepts/safety/#rescue-mode).
+Naming the current generation repairs it. `archix rollback 42` with 42 current prints `generation 42 is current; putting back whatever differs from it`, then reinstalls drifted packages, rewrites changed files, users and services, and reruns its hooks. That's also how you finish after [rescue mode](/docs/concepts/safety/#rescue-mode).
 
 `rollback` doesn't evaluate your config, so it works even when the config is broken. It refuses while a switch is unfinished; `archix recover --rollback` is the way back from that.
 
@@ -92,7 +93,15 @@ Flatpak commits come from their remote, and the network isn't up that early in b
 archix: Flatpak apps aren't pinned at boot; run `sudo archix rollback 41` once you're online
 ```
 
-Naming the current generation puts back whatever still differs, Flatpak apps included.
+[Hooks](/docs/guides/hooks/#when-they-run) and `on_change` scripts are skipped too, since nobody is logged in yet:
+
+```
+archix: hooks don't run at boot; the next switch or `sudo archix rollback 41` runs them once you're online
+```
+
+The `on_change` scripts it skipped are recorded, script and all, in `/var/lib/archix/pending-on-change`, and the next switch, rollback or recovery runs them, even if its own config dropped them. See [Activation hooks](/docs/guides/hooks/).
+
+Naming the current generation puts back whatever still differs, Flatpak apps included, and runs its hooks.
 
 ### Older kernels keep booting
 

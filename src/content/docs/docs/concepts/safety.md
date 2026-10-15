@@ -54,6 +54,8 @@ switched to generation 42 (snapshot 2026-10-15)
 
 Services are stopped and disabled while their unit files still exist, and enabled and started only after `systemctl daemon-reload` has seen the new ones.
 
+[Activation hooks](/docs/guides/hooks/) aren't one of these steps. They run after the switch is complete, once the new generation is current and Flatpak apps are installed, under `:: running activation hooks`: first the `on_change` scripts of files the switch changed, then every hook. A hook can't leave a switch unfinished, so the journal doesn't track them. With hooks declared, the preview before the prompt lists them on a `run hooks` line.
+
 archix also checks pacman before it starts. If pacman is running, or a `db.lck` is left over with no pacman running, `switch` refuses and tells you why, rather than fight another package manager.
 
 ## The journal
@@ -127,7 +129,7 @@ Not every failure during apply means the same thing.
 error: installing packages failed; the switch is unfinished, run `archix recover`: pacman exited with exit status: 1
 ```
 
-**Soft failures** don't: a service that fails to start, a reload such as `sysctl --system` that fails, or a Flatpak app that can't be installed, pinned or removed. Flatpak apps are synced after the new generation becomes current, outside the journal. The new generation becomes current, archix lists what failed and exits non-zero, like NixOS does. A broken unit is usually a config problem you fix and switch again, and undoing the whole generation for it would be worse.
+**Soft failures** don't: a service that fails to start, a reload such as `sysctl --system` that fails, a [hook or `on_change` script](/docs/guides/hooks/#failures) that exits non-zero, or a Flatpak app that can't be installed, pinned or removed. Flatpak apps are synced after the new generation becomes current, outside the journal. The new generation becomes current, archix lists what failed and exits non-zero, like NixOS does. A broken unit is usually a config problem you fix and switch again, and undoing the whole generation for it would be worse.
 
 ```console
 :: enabling and starting services
@@ -138,6 +140,8 @@ switched to generation 43 (snapshot 2026-10-15)
 failed: systemctl enable --now nginx.service: Job for nginx.service failed because the control process exited with error code.
 error: the new generation is current, but 1 step failed (listed above)
 ```
+
+A failed hook is listed the same way, `failed: hook tailscale: exited with exit status: 1`, and so is an `on_change` script, by its file: `failed: on_change of /etc/foo.conf: exited with exit status: 1`. Hooks also run on a switch that changes nothing, where a failure ends with `error: nothing was changed, but 1 step failed (listed above)`, and on rollbacks, where it's `error: generation 41 (snapshot 2026-10-09) is current, but 1 step failed (listed above)`.
 
 ## Unfinished switches
 
@@ -183,6 +187,8 @@ $ sudo archix recover --abandon
 Pick continue if the interruption was something outside archix, like a power cut. Pick rollback if you don't trust the new package set. Pick abandon if you want to inspect and fix things by hand; afterwards `archix diff` shows how the system differs from the lock, and the next `archix switch` reinstalls whatever the lock needs. Rollback and abandon both delete the generation the interrupted switch had created, since it never became current.
 
 A recovery rollback is journaled too. If it gets interrupted in turn, `archix recover` picks it up the same way.
+
+Continue and rollback both finish like a switch. They run the [hooks](/docs/guides/hooks/) of the state they end in, and every `on_change` script of it, since archix can't tell which files the interrupted switch had already rewritten; that's why those scripts must be idempotent. Soft failures are reported as on a switch, ending with `error: generation 43 (snapshot 2026-10-15) is current, but 1 step failed (listed above)` or `error: the rollback finished, but 1 step failed (listed above)`, and a non-zero exit.
 
 ## Interrupted pacman transactions
 

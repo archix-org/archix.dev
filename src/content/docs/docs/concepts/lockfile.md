@@ -50,11 +50,12 @@ Each package is one inline table on one line, sorted by name, so a lock diff in 
 | `pinned` | Packages held at a version other than the snapshot's. Only present when there are any. See [Pins](#pins). |
 | `packages` | One inline table per package, dependencies included, keyed by package name. |
 | `version`, `file` | The exact package version and its package file. |
-| `repo` | Where it comes from: an official repo such as `core`, a third-party repo by name, `archive` for a pin, or `aur`. |
+| `repo` | Where it comes from: an official repo such as `core`, a third-party repo by name, `archive` for a pin, `aur`, or `local` for a package built from the config's own recipes. |
 | `sha256` | The checksum of the package file. A file that doesn't match is never installed. AUR packages have none; see below. |
-| `base`, `commit` | For AUR packages: the package base and the git commit of its build recipe. |
+| `base`, `commit` | For AUR packages: the package base and the git commit of its build recipe. For `local` packages: `local:<dir>` or `patch:<pkgbase>`, and a hash of the recipe. See [Local recipes and patched packages](#local-recipes-and-patched-packages). |
 | `explicit` | Whether pacman marks it as explicitly installed or as a dependency. |
 | `build_only` | `true` for an AUR package that's only needed to build other AUR packages. It's built, but never installed. |
+| `recipes` | A hash of each recipe in `pkgbuilds/` and of each package's patches, from when the lock was written. Only present when there are any. |
 | `flatpak` | One inline table per Flatpak app, with its remote, ref and commit. Only present when the host declares apps. See [Flatpak apps](#flatpak-apps-commits). |
 
 Every host can sit on a different date. The laptop doesn't have to update just because the desktop did.
@@ -99,6 +100,27 @@ zen-browser-bin = { version = "1.16.3b-1", repo = "aur", file = "zen-browser-bin
 `version` comes from that commit's `.SRCINFO`. There's no `sha256`: AUR builds aren't bit-for-bit reproducible, so the commit is what's locked. Each generation records the sha256 of the file it actually built, so rollback reuses that exact file.
 
 Dependencies the repos can satisfy are resolved from the repos; the rest come from the AUR. An AUR package needed only to build another one is `build_only`. Every recipe is shown for review before it enters the lock. See [The AUR](/docs/guides/aur/).
+
+## Local recipes and patched packages
+
+Packages built from [PKGBUILDs in the config](/docs/guides/local-pkgbuilds-and-patches/) have `repo = "local"`. There's no `sha256`, as with AUR packages, because the recipe is what's locked:
+
+```toml title="archix.lock"
+[hosts.desktop.packages]
+backup-scripts = { version = "1.2.0-1", repo = "local", file = "backup-scripts-1.2.0-1-any.pkg.tar.zst", base = "local:backup-scripts", commit = "7f3c9a1e5b2d8046c1e9f7a3b5d2c8e0a4f6b1d3c5e7a9f2b4d6c8e0a1f3b5d7", explicit = true }
+hyprland = { version = "0.51.1-2.1", repo = "local", file = "hyprland-0.51.1-2.1-x86_64.pkg.tar.zst", base = "patch:hyprland", commit = "3a9e1c7b5d2f8046e1c3a5b7d9f0e2c4a6b8d0f1+c2e8a4f60b1d3e57", explicit = true }
+
+[hosts.desktop.recipes]
+"local:backup-scripts" = "7f3c9a1e5b2d8046c1e9f7a3b5d2c8e0a4f6b1d3c5e7a9f2b4d6c8e0a1f3b5d7"
+"patch:hyprland" = "c2e8a4f60b1d3e579a1c3e5f7b9d2f4a6c8e0b2d4f6a8c1e3b5d7f9a0c2e4b6d"
+```
+
+- **`local:<dir>`** is a recipe in `pkgbuilds/<dir>/`. Its `commit` is a hash of the directory's files, by path, contents and executable bit, leaving out makepkg's output (`src/`, `pkg/`, `.git`, `.SRCINFO`, `*.pkg.tar*` and `*.log`).
+- **`patch:<pkgbase>`** is Arch's recipe for that pkgbase with the config's [`patches`](/docs/reference/options/#patches). Its `commit` is the commit of Arch's recipe, `+`, and the start of a hash of the patches. The version carries a pkgrel sub-release, `2.1` on top of Arch's `2`.
+
+The `recipes` table follows the host's packages. It holds the hash of every recipe in `pkgbuilds/`, keyed `local:<dir>`, and the hash of each patched package's patches, keyed `patch:<package>`. archix compares it with the config the way it compares `declared`, so editing a recipe or a patch makes the lock out of date: `archix status` says ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``, and the next `lock` or `switch` resolves again. When the version stayed the same, the switch rebuilds the package anyway: `rebuild    backup-scripts 1.2.0-1 (its recipe changed)`.
+
+`archix update` moves a patched package with the snapshot and rebuilds it for the new version. Local recipes only change when you change them.
 
 ## Third-party repos: cached copies
 

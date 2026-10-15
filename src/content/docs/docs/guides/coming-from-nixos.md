@@ -2,7 +2,7 @@
 title: Coming from NixOS
 description: Map NixOS concepts to archix, understand what works differently, and port an existing NixOS and Home Manager config.
 sidebar:
-  order: 6
+  order: 7
 ---
 
 You already know the ideas behind archix: a declarative config, a lockfile, generations and rollback, a typed module system with priorities. This page maps what you know onto archix, then covers what's different and how to port a config.
@@ -28,6 +28,8 @@ You already know the ideas behind archix: a declarative config, a lockfile, gene
 | `lib.mkOption { type = ...; }` | `archix.option { type = ... }` |
 | `types.listOf`, `attrsOf`, `nullOr`, `enum`, `submodule` | `archix.types.list_of`, `attrs_of`, `nullable`, `enum`, `submodule` |
 | `builtins.readFile ./x` | `archix.read_file("x")` |
+| A derivation in `pkgs/*.nix` | A PKGBUILD in `pkgbuilds/<dir>/` |
+| `overrideAttrs (old: { patches = old.patches ++ [ ./fix.patch ]; })` | `patches.<package> = { "patches/fix.patch" }` |
 | `pkgs.fetchurl { url; sha256; }` | `archix.fetchurl { url = ..., sha256 = ... }`, as a file in `files` or `home.files` |
 | `nix-prefetch-url` | `archix prefetch` |
 | `services.flatpak` with nix-flatpak's `packages` | `flatpak.apps`, locked to commits in `archix.lock` |
@@ -51,7 +53,7 @@ The priorities use the same numbers: option defaults are 1500, `default` is 1000
 
 archix installs Arch's binary packages. There's no store, no derivations, no build closure to evaluate, and nothing to wait for while nixpkgs catches up. The filesystem is a normal FHS layout, so binaries from the internet, language toolchains and proprietary apps just work.
 
-The flip side: you can't override how a package is built from your config, the way `overrideAttrs` does. If you need a custom build, publish it to the AUR or to a repo of your own declared in `custom_repos`. archix locks those like everything else, and builds AUR packages in a clean chroot.
+Custom builds still live in your config. A package you'd write as a derivation in `pkgs/*.nix` becomes a PKGBUILD in `pkgbuilds/<dir>/`, and declaring its name is enough. An `overrideAttrs` that adds `patches` becomes [`patches.<package>`](/docs/reference/options/#patches): archix rebuilds Arch's own recipe for the locked version with your patches. Both are locked by a hash of the recipe and built in the same clean chroot as AUR packages. Other changes to how an official package is built, such as different configure flags, mean copying its recipe into `pkgbuilds/`. See [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
 
 ### A lock of versions, not of inputs
 

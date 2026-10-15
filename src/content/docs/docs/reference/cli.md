@@ -11,6 +11,8 @@ archix [--config <dir>] [--host <name>] <command> [flags]
 
 Running `archix` with no command does a full upgrade, like `yay`. See [`upgrade`](#upgrade--syu).
 
+`ax` is a short alias for `archix`. The AUR packages install it as a symlink, `/usr/bin/ax`, and it takes every command and flag below: `sudo ax switch`, `ax diff`, `sudo ax -Syu`. Help and usage errors use the name you typed, such as `Usage: ax [OPTIONS] [COMMAND]`, while archix's own messages, `--version` included, still say `archix`. See [Installation](/docs/installation/#ax-the-short-name).
+
 ## Global flags
 
 These work with every command.
@@ -121,7 +123,7 @@ downloading htop-3.4.1-1-x86_64.pkg.tar.zst
 switched to generation 2 (snapshot 2026-10-09)
 ```
 
-`switch` re-locks at the locked date if the config changed, lists the package, file, user, group, service and Flatpak changes, and asks before applying them. Then it downloads files declared with a `url` into the store (each checked against its `sha256`), builds AUR packages in a clean chroot, downloads every package to `/var/cache/archix/pkg` (each file checked against the lock's `sha256`) and applies the steps above from a [journal](/docs/concepts/safety/#the-journal).
+`switch` re-locks at the locked date if the config changed, lists the package, file, user, group, service and Flatpak changes, and asks before applying them. A package built from a recipe in the config that changed while its version didn't is listed as `rebuild    backup-scripts 1.2.0-1 (its recipe changed)`, and rebuilt and reinstalled at the same version. Then it downloads files declared with a `url` into the store (each checked against its `sha256`), builds AUR packages and the config's own [recipes and patched packages](/docs/guides/local-pkgbuilds-and-patches/) in a clean chroot, downloads every package to `/var/cache/archix/pkg` (each file checked against the lock's `sha256`) and applies the steps above from a [journal](/docs/concepts/safety/#the-journal).
 
 With [`hooks`](/docs/guides/hooks/) declared, the preview ends with a `run hooks` line listing them in the order they'll run. Hooks aren't counted in `apply N changes?`, and they aren't a journal step: they run last, under `:: running activation hooks`, once the new generation is current and Flatpak apps are installed and pinned. The `on_change` scripts of files the switch changed run first, then each hook prints a `hook <name>` line as it starts.
 
@@ -191,7 +193,7 @@ $ sudo archix install zen-browser-bin
 $ sudo archix -S neovim ripgrep
 ```
 
-The names go into `lua/hosts/<host>/installed.lua`, a plain Lua file archix imports automatically and you can edit too, and then archix switches. Names that aren't in your configured repos are looked up in the AUR, and new AUR build recipes are shown for review. If you abort, the switch fails or the config stops evaluating, `installed.lua` is put back as it was.
+The names go into `lua/hosts/<host>/installed.lua`, a plain Lua file archix imports automatically and you can edit too, and then archix switches. A name a recipe in `pkgbuilds/` builds comes from there; other names are looked up in your configured repos, then in the AUR, and new AUR build recipes are shown for review. A name found nowhere stops it: `` `foo` is in none of the configured repos, pkgbuilds/ or the AUR ``. If you abort, the switch fails or the config stops evaluating, `installed.lua` is put back as it was.
 
 | Flag | Description |
 | --- | --- |
@@ -331,6 +333,8 @@ update     /etc/issue (edited outside archix; your version gets saved)
 enable     sshd.service
 ```
 
+A package from one of the config's own recipes whose recipe changed at the same version shows as `rebuild    backup-scripts 1.2.0-1 (its recipe changed)`.
+
 When everything matches, it prints `the system matches the lock and the config`. If installed packages are newer than the lock, it says so first: ``3 packages are newer than the lock; `archix switch` will offer to adopt them instead of downgrading``. If the lock is out of date with the config, `diff` resolves a fresh lock in memory, prints `note: archix.lock is out of date for desktop; showing a fresh resolution`, and shows the result without saving it. Packages in `ignored_packages` never appear. With `undeclared_packages = "warn"`, undeclared packages are listed on their own line instead of as removals:
 
 ```console
@@ -356,7 +360,7 @@ desktop is locked to snapshot 2026-10-09 (212 packages)
 2 changes pending; see `archix diff`
 ```
 
-When everything is in place, the last line is `the system matches the lock`. When a switch is unfinished, the first lines say which one and at which step, and tell you to run `archix recover`. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``.
+When everything is in place, the last line is `the system matches the lock`. When a switch is unfinished, the first lines say which one and at which step, and tell you to run `archix recover`. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 
 ### `generations`
 

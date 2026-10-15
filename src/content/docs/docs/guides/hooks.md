@@ -2,7 +2,7 @@
 title: Activation hooks
 description: Run scripts at the end of every switch and rollback with hooks, and react to a changed file with on_change, like NixOS activation scripts and Home Manager's onChange.
 sidebar:
-  order: 5
+  order: 6
 ---
 
 Most of a system fits in files, units and services. Some of it doesn't: a daemon keeps settings you can only change with its own CLI, a service has to restart to read a new config file, a running app has to be told to reload. archix has two ways to do those things as part of a switch:

@@ -29,7 +29,7 @@ The pacman-style aliases do the same:
 | `archix -Syu` | `archix upgrade`: `pacman -Syu`, adopt, newest AUR recipes, switch |
 | `archix` | `archix -Syu` |
 
-There's one `packages` list for everything. `install` looks a name up in your configured repos first, official and third-party, and only names they don't have are looked up in the AUR.
+There's one `packages` list for everything. `install` looks a name up in your configured repos first, official and third-party, and only names they don't have are looked up in the AUR. A recipe of your own in `pkgbuilds/` beats both for the names it builds; see [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
 
 Search covers the locked snapshot's repos and the AUR's package list, most popular first, with votes, popularity and out-of-date flags. archix downloads that list (`packages-meta-v1.json.gz`) when it first needs it, refreshes it when it's more than an hour old and on `archix update`, and only loads it when a name isn't in the repos.
 
@@ -105,6 +105,8 @@ This fixes two classic AUR problems:
 
 - **Missing dependencies.** A PKGBUILD that forgot a dependency fails in the chroot instead of quietly building against whatever you have installed.
 - **Unreproducible builds.** The same recipe commit at the same snapshot date builds against the same dependencies, on every machine.
+
+Packages from your config's own [`pkgbuilds/` and `patches`](/docs/guides/local-pkgbuilds-and-patches/) build in the same chroot, the same way, and `build_on_host` works for them too. They're never shown for review: the recipe is already in your config.
 
 The chroot only has the official repos. Your third-party repos stay out of it, since they'd also need their signing keys inside.
 

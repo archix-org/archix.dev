@@ -2,7 +2,7 @@
 title: Dotfiles and apps
 description: Manage dotfiles and app configs with archix, from raw files and format writers to programs.* modules ported from Home Manager.
 sidebar:
-  order: 3
+  order: 4
 ---
 
 archix manages your home directory with the same switch that manages the system. Dotfiles become part of the generation, so a rollback takes your configs back too.

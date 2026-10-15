@@ -2,7 +2,7 @@
 title: Third-party repos
 description: How archix declares and locks CachyOS, chaotic-aur and other third-party repos, and what happens when a locked version can't be restored.
 sidebar:
-  order: 2
+  order: 3
 ---
 
 Many Arch-based systems install packages from repos that Arch doesn't run. CachyOS has its optimized `cachyos-v3`, `cachyos-core-v3` and `cachyos-extra-v3` repos and its kernels. EndeavourOS has `endeavouros`. Plenty of people add chaotic-aur for prebuilt AUR packages.

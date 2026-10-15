@@ -60,6 +60,8 @@ List only what you want; dependencies are resolved and locked for you, and marke
 
 AUR package names go in the same list. archix looks each name up in your configured repos first, third-party repos included, and only then in the AUR. See [AUR packages](/docs/guides/aur/).
 
+So do packages built from the config's own recipes. A recipe in `pkgbuilds/<dir>/` needs no option: declare a package it builds, and that recipe wins over the repos and the AUR for that name. A name found nowhere is an error: `` `foo` is in none of the configured repos, pkgbuilds/ or the AUR ``. See [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
+
 Like every list, `packages` concatenates across modules in definition order. Duplicates are harmless. Program modules add their own packages here, so `programs.kitty.enable = true` is enough to install kitty.
 
 ```lua
@@ -72,6 +74,29 @@ To replace the list a shared module built up instead of adding to it, force it:
 
 ```lua
 packages = archix.force { "base", "linux", "linux-firmware" },
+```
+
+### `patches`
+
+| | |
+| --- | --- |
+| Type | `attrs of list of str` |
+| Default | `{}` |
+| Declared in | `<archix>/packages.lua` |
+
+Patch files for official packages, keyed by package name and relative to the config directory. archix rebuilds Arch's own recipe for the locked version with them, applied with `patch -p1` before the recipe's `prepare()`, and adds a sub-release to the pkgrel. Recipes in `pkgbuilds/<dir>/` need no option: declaring a package they build is enough.
+
+archix clones Arch's recipe from gitlab.archlinux.org at the tag for the locked version, and applies each patch, in list order, in whichever top-level directory of `$srcdir` it fits. The patched build's pkgrel is a sub-release, `2` becoming `2.1`, so it sorts after Arch's. Other packages of the same pkgbase in the lock are swapped for the patched build too. It's locked with `repo = "local"` and `base = "patch:<pkgbase>"`, and `archix update` rebuilds it for each new version.
+
+The package has to come from the official repos and be in the host's lock, declared or as a dependency; otherwise `diff`, `lock` and `switch` stop with `patches.<name>: <name> isn't among this config's packages or their dependencies`, or `patches.<name>: <name> comes from aur, but only packages from the official repos can be patched`. A path can't leave the config directory. A patch that applies nowhere fails the build before the system changes.
+
+```lua title="lua/hosts/desktop/init.lua"
+return {
+  packages = { "hyprland" },
+  patches = {
+    hyprland = { "patches/hyprland/0001-fix-cursor-warp.patch" },
+  },
+}
 ```
 
 ### `repos`
@@ -128,7 +153,7 @@ return {
 
 Installed packages archix leaves alone and never reports as undeclared.
 
-Use it for packages you deliberately manage by hand, such as a driver you build yourself or a tool you test from a local checkout. An ignored package is never removed, whatever `undeclared_packages` says, and never shows up in `diff`. Like `packages`, the list concatenates across modules. `archix init` puts foreign packages that aren't on the AUR here.
+Use it for packages you deliberately manage by hand, such as a tool you test from a local checkout. A package you build yourself can instead go in [`pkgbuilds/`](/docs/guides/local-pkgbuilds-and-patches/), so it's locked and rolled back like the rest. An ignored package is never removed, whatever `undeclared_packages` says, and never shows up in `diff`. Like `packages`, the list concatenates across modules. `archix init` puts foreign packages that aren't on the AUR here.
 
 ```lua title="lua/modules/common.lua"
 return {

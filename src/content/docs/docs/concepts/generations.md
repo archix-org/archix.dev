@@ -155,14 +155,17 @@ Set `boot.loader = "systemd-boot"` (`archix init` offers it when systemd-boot is
 - The entry is written in the step before the generation becomes current, after the result has been verified, so a switch that fails never gets one.
 - Only the newest [`boot.entries`](/docs/reference/options/) generations (5 by default) keep an entry, and fewer if the ESP runs short of space. `gc` prunes the rest.
 - The newest two generations also get a rescue entry, `archix-42-rescue.efi`, titled "Arch Linux (archix rescue, generation 42)". Rescue entries need the static binary at `/usr/lib/archix/archix-static`, which the AUR packages install; see [Installation](/docs/installation/#the-static-rescue-binary).
+- With [`boot.protected_entry = true`](/docs/reference/options/#bootprotected_entry), the newest two generations also get a protected entry, `archix-42-protected.efi`, titled "Arch Linux (archix protected, generation 42)", with the kernel command line anti-cheat software asks for. See [The protected entry](/docs/guides/secure-boot/#the-protected-entry).
 
 GRUB and Limine are not supported. With them, rollback from a running system still works, but archix doesn't write generation boot entries.
 
 ### Secure Boot
 
-archix signs every UKI with `sbctl` when `boot.secure_boot` is `true`, or by default whenever `sbctl` has keys. It also signs systemd-boot itself, so you can keep Secure Boot enforcing without lanzaboote or a hand-written hook. Turning Secure Boot on counts as a settings change, so the next switch writes a newly signed entry.
+archix signs every UKI with `sbctl` when `boot.secure_boot` is `true`, or by default whenever `sbctl` has keys. It also signs systemd-boot itself, so you can keep Secure Boot enforcing without lanzaboote or a hand-written hook. `sudo archix secure-boot setup` creates the keys and enrolls them while the firmware is in setup mode. Turning Secure Boot on counts as a settings change, so the next switch writes a newly signed entry.
 
-Booting older generations, Secure Boot enforcing and the rescue entry are tested by booting archix-managed generations in a QEMU VM with OVMF firmware in CI.
+With Secure Boot enforcing, archix never makes an entry the firmware would refuse the default: a switch whose entry wouldn't be signed is refused before anything changes, and every built entry and the loader are checked for a signature before the entry is copied to the ESP. See [Secure Boot](/docs/guides/secure-boot/).
+
+Booting older generations, Secure Boot enforcing with keys enrolled by `archix secure-boot setup`, the protected entry, refusing an unsigned switch, and the rescue entry are tested by booting archix-managed generations in a QEMU VM with OVMF firmware in CI.
 
 ## btrfs snapshots
 
@@ -179,6 +182,7 @@ Generations cost disk space, mostly in the package cache. archix cleans up after
 | Generations kept | The current one, the newest 10, and every one younger than 30 days |
 | Boot entries | The newest 5, and fewer if the ESP runs out of space |
 | Rescue entries | The newest 2 |
+| Protected entries | The newest 2, with `boot.protected_entry` |
 | Package cache, managed-file contents (downloads included), snapshot databases | Only what kept generations need |
 | Preserved kernel modules in `/var/lib/archix/kernels` | Only the kernels of kept boot entries |
 | Running-kernel modules kept during a switch | Deleted once that kernel isn't running, at the next switch or rollback, or at the next boot from an archix boot entry, unless a boot entry still uses the copy |

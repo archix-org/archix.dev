@@ -116,6 +116,16 @@ return {
 
 A restart that fails is a [soft failure](#hard-and-soft-failures), listed as `failed: systemctl try-restart: ...` with systemctl's message, and the switch is kept. A rollback from the boot menu skips the step: it runs before the services it would restart have started. `archix recover --continue` runs it if the interrupted switch hadn't got to it.
 
+## Secure Boot
+
+With Secure Boot enforcing, an unsigned boot entry would be refused by the firmware, and a switch that made one the default would leave the machine unable to boot it. archix stops that in two places. Before a switch changes anything, it refuses one whose entry wouldn't be signed:
+
+```console
+error: Secure Boot is on, but this switch's boot entry wouldn't be signed (sbctl has no keys), so the firmware would refuse it; nothing was changed. Run `sudo archix secure-boot setup`, or set boot.secure_boot = true if sbctl already has keys
+```
+
+As a backstop, in `:: writing the boot entry`, it checks every built entry and the systemd-boot loader for a signature before copying the entry to the ESP. An unsigned one is a hard failure there, ``Secure Boot is on, but archix-43.efi isn't signed, so the firmware would refuse it; nothing was moved. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)``: the previous generation stays current and the default, and `archix recover` finishes or rolls back. Inside a chroot, where the firmware is the host's, the first check only warns and the backstop is skipped. See [Secure Boot](/docs/guides/secure-boot/).
+
 ## Unsafe downgrades
 
 Some packages migrate their data when a new major version starts, so the older version can't read it again: PostgreSQL, MariaDB, MySQL and a few more. A downgrade across such a version can leave a service that won't start, or worse. `switch` and `rollback` list those downgrades before the apply prompt and ask, defaulting to no:

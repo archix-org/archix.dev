@@ -121,7 +121,7 @@ These need root. Run without it, they stop with `` `archix switch` changes the s
 
 ### `switch`
 
-Make this machine match the config and the lock, and record the result as a new generation.
+Make this machine match the config and the lock, and record the result as a new generation. With Secure Boot enforcing and archix managing booting, a switch whose boot entry wouldn't be signed is refused before anything changes; see [Secure Boot](/docs/guides/secure-boot/#a-switch-never-makes-an-unbootable-entry-the-default).
 
 ```console
 $ sudo archix switch
@@ -355,6 +355,40 @@ It unpacks glibc, pacman, systemd, the kernel, archix itself and the rest of the
 | `--generation <n>` | the current one | The generation whose packages to restore. |
 | `--package <name>` | | Also restore this package, beyond the core set. Repeat it for more. |
 
+### `secure-boot`
+
+Set up and check Secure Boot. Neither subcommand evaluates the config. See [Secure Boot](/docs/guides/secure-boot/).
+
+#### `secure-boot setup`
+
+Create `sbctl` keys if needed and enroll them, with Microsoft's, while the firmware is in setup mode. Needs root.
+
+```console
+$ sudo archix secure-boot setup
+enrolled your Secure Boot keys; the next `archix switch` signs its boot entries with them
+then turn Secure Boot on in the firmware settings
+```
+
+If the firmware isn't in setup mode, it creates the keys but can't enroll them, and says `the keys exist, but the firmware isn't in setup mode, so they can't be enrolled`, then ``reboot into the firmware settings, reset or clear the Secure Boot keys (setup mode), then run `sudo archix secure-boot setup` again``. Keys are enrolled in the firmware's `db` with `sbctl enroll-keys --microsoft`; archix doesn't use shim or MOK.
+
+| Flag | Description |
+| --- | --- |
+| `--no-microsoft` | Leave Microsoft's keys out; GPU option ROMs and Windows may then fail to start, and some boards won't boot at all. It warns: `warning: without Microsoft's keys, GPU option ROMs and Windows may fail to start, and some boards won't boot at all`. |
+
+#### `secure-boot check`
+
+Show whether Secure Boot is on and keys are enrolled, one `  ok  ` or `  no  ` line per requirement. It exits non-zero if any isn't met, and doesn't need root.
+
+```console
+$ archix secure-boot check
+  ok  Secure Boot is on
+  ok  the firmware isn't in setup mode (keys are enrolled)
+```
+
+| Flag | Description |
+| --- | --- |
+| `--anticheat` | Also check what Easy Anti-Cheat Linux v2 requires of the boot: a kernel signed with a well-known key, integrity lockdown, kexec disabled, the BPF LSM, the IOMMU without passthrough, a TPM 2.0 and a measured boot, and no out-of-tree or unsigned kernel modules. It ends with `Easy Anti-Cheat Linux v2 would refuse this boot: N requirements aren't met` when any is unmet. See [Anti-cheat requirements](/docs/guides/secure-boot/#anti-cheat-requirements). |
+
 ## Commands that read the system or the config
 
 These don't change the system and don't need root. As a normal user, archix keeps its download cache in `~/.cache/archix` (or `$XDG_CACHE_HOME/archix`); as root it uses `/var/cache/archix`.
@@ -398,12 +432,13 @@ Show any unfinished switch, the current generation, changes made outside archix,
 $ archix status
 no unfinished switch
 current generation: 41 (snapshot 2026-10-09)
+Secure Boot: on
 2 packages were changed outside archix in 1 transaction since the last switch
 desktop is locked to snapshot 2026-10-09 (212 packages)
 2 changes pending; see `archix diff`
 ```
 
-When everything is in place, the last line is `the system matches the lock`. When a switch is unfinished, the first lines say which one and at which step, and tell you to run `archix recover`. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
+On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. When everything is in place, the last line is `the system matches the lock`. When a switch is unfinished, the first lines say which one and at which step, and tell you to run `archix recover`. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 
 ### `generations`
 

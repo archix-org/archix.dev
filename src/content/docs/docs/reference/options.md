@@ -627,7 +627,7 @@ archix can write a boot entry for every generation, so you can pick an older gen
 
 With `boot.loader` set, archix declares the packages it needs for this itself: the `boot.kernel` package, `mkinitcpio` and `systemd-ukify`, plus `sbctl` when `boot.secure_boot = true`. You don't list them in `packages`. With the default `secure_boot = null`, signing depends on sbctl being installed with keys, so keep `sbctl` declared yourself if you rely on that.
 
-The newest two generations also get a rescue entry when the static binary `/usr/lib/archix/archix-static` exists, which the `archix`, `archix-bin` and `archix-git` AUR packages install. See [Safety](/docs/concepts/safety/#rescue-mode).
+The newest two generations also get a rescue entry when the static binary `/usr/lib/archix/archix-static` exists, which the `archix`, `archix-bin` and `archix-git` AUR packages install, and a protected entry with [`boot.protected_entry`](#bootprotected_entry). See [Safety](/docs/concepts/safety/#rescue-mode) and [Secure Boot](/docs/guides/secure-boot/).
 
 ```lua
 boot = { loader = "systemd-boot", microcode = { "amd-ucode.img" } },
@@ -706,7 +706,21 @@ How many of the newest generations keep a boot entry; fewer if the ESP runs out 
 
 Sign boot entries with sbctl; by default, whenever sbctl has keys.
 
-`true` also declares the `sbctl` package. When signing, archix also signs systemd-boot's own binary. Changing this records a new generation, so turning Secure Boot on re-signs.
+`true` also declares the `sbctl` package. When signing, archix also signs systemd-boot's own binary. Changing this records a new generation, so turning Secure Boot on re-signs. `sudo archix secure-boot setup` creates and enrolls the keys.
+
+With Secure Boot enforcing, a switch whose entry wouldn't be signed, because this is `false` or `sbctl` has no keys, is refused before anything changes. See [Secure Boot](/docs/guides/secure-boot/).
+
+### `boot.protected_entry`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/boot.lua` |
+
+Also write an 'archix protected' entry for the newest generations with the kernel command line Easy Anti-Cheat Linux v2 asks for (integrity lockdown, kexec off, the BPF LSM, IOMMU without passthrough). It can't make the kernel well-known-signed; `archix secure-boot check --anticheat` shows what's still missing.
+
+The entry is `archix-<n>-protected.efi`, kept for the newest two generations like rescue entries, and signed like the rest. It adds `lockdown=integrity sysctl.kernel.kexec_load_disabled=1 lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0` to the command line. See [The protected entry](/docs/guides/secure-boot/#the-protected-entry).
 
 ### `boot.snapshots`
 

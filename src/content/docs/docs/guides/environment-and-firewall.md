@@ -18,6 +18,7 @@ return {
       EDITOR = "nvim",
       MOZ_ENABLE_WAYLAND = 1,
       XDG_DATA_DIRS = { "/usr/local/share", "/usr/share", "/var/lib/flatpak/exports/share" },
+      PATH = "$HOME/.local/bin:$PATH",
     },
   },
 }
@@ -28,9 +29,10 @@ A list is joined with `:`, so it works for path-like variables; numbers and othe
 - **`/etc/profile.d/archix-environment.sh`**, for login shells. Arch's bash and zsh read `/etc/profile`, which sources it:
 
   ```sh title="/etc/profile.d/archix-environment.sh"
-  export EDITOR='nvim'
-  export MOZ_ENABLE_WAYLAND='1'
-  export XDG_DATA_DIRS='/usr/local/share:/usr/share:/var/lib/flatpak/exports/share'
+  export EDITOR="nvim"
+  export MOZ_ENABLE_WAYLAND="1"
+  export PATH="$HOME/.local/bin:$PATH"
+  export XDG_DATA_DIRS="/usr/local/share:/usr/share:/var/lib/flatpak/exports/share"
   ```
 
 - **`/etc/environment.d/90-archix.conf`**, for systemd user services and graphical sessions started by them:
@@ -38,10 +40,11 @@ A list is joined with `:`, so it works for path-like variables; numbers and othe
   ```ini title="/etc/environment.d/90-archix.conf"
   EDITOR=nvim
   MOZ_ENABLE_WAYLAND=1
+  PATH=$HOME/.local/bin:$PATH
   XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/flatpak/exports/share
   ```
 
-The shell file quotes every value, so a `$` in it stays a literal `$` there, while `environment.d` expands `${VAR}` references. Write values that don't depend on other variables, and they mean the same in both. New values reach a session the next time you log in.
+Both files expand `$VAR` and `${VAR}`: the shell file puts each value in double quotes, escaping `"`, `\` and backticks, and `environment.d` expands references itself. So `PATH = "$HOME/.local/bin:$PATH"` adds to the existing `PATH` in a login shell and in a user service alike. New values reach a session the next time you log in.
 
 ## Shell aliases
 
@@ -174,10 +177,26 @@ chain blocklist {
 }
 ```
 
-Here port 8080 is open to the local network only. `extra_rules` adds more sets and chains inside the `archix` table; this `blocklist` chain runs before the input chain, so the blocked range is dropped even on port 22. archix doesn't check the syntax of either: a mistake makes `nft` refuse the file when the service loads it, which the switch reports as a [soft failure](/docs/concepts/safety/#hard-and-soft-failures), and the rules from before stay loaded.
+Here port 8080 is open to the local network only. `extra_rules` adds more sets and chains inside the `archix` table; this `blocklist` chain runs before the input chain, so the blocked range is dropped even on port 22. Before a switch changes anything, archix checks the whole ruleset with `nft -c -f`, so a typo stops it with nothing changed, followed by nft's own error:
+
+```console
+error: the firewall rules don't load (check extra_input_rules and extra_rules); nothing was changed:
+```
+
+That needs `nft`, so the very first switch that turns the firewall on, before `nftables` is installed, can't check. A bad rule then makes the service fail to load the file, which the switch reports as a [soft failure](/docs/concepts/safety/#hard-and-soft-failures); fix it and switch again, and from then on it's checked first.
 
 ### Other tables are left alone
 
 Docker, Tailscale, libvirt and others manage their own nftables tables. archix never touches them: it doesn't use `nftables.service`, whose stop flushes every table on the machine, and its own service only ever deletes the `archix` table.
 
-Each table's input chain still applies to every packet, though, so a packet another table accepts can still be dropped by `archix`'s. Docker's published ports are forwarded to containers rather than delivered to the host's input chain, so they keep working; a service on the host itself needs its port in `allowed_tcp_ports`. If `nftables.service` is also enabled, the rules in `/etc/nftables.conf` apply too; Arch's default file drops everything but SSH, so disable it with `services = { ["nftables.service"] = false }` when archix's firewall takes over.
+Each table's input chain still applies to every packet, though, so a packet another table accepts can still be dropped by `archix`'s. Docker's published ports are forwarded to containers rather than delivered to the host's input chain, so they keep working; a service on the host itself needs its port in `allowed_tcp_ports`. If `nftables.service` is also enabled, the rules in `/etc/nftables.conf` apply too, and Arch's default file drops everything but SSH. A switch with the firewall on says so:
+
+```console
+warning: nftables.service is enabled too, so /etc/nftables.conf (on Arch: drop everything but SSH) still applies on top of the archix firewall; set services["nftables.service"] = false
+```
+
+Setting it in your config disables and stops `nftables.service` on the next switch, and the warning goes away:
+
+```lua
+services = { ["nftables.service"] = false },
+```

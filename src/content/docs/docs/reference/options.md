@@ -624,7 +624,7 @@ See [Environment and firewall](/docs/guides/environment-and-firewall/) for a wal
 
 Environment variables for every user: login shells get them from `/etc/profile.d/archix-environment.sh`, and systemd user services and graphical sessions from `/etc/environment.d/90-archix.conf`. Lists are joined with `:`.
 
-The shell file has `export NAME='value'` lines, quoted, and `environment.d` has `NAME=value` lines; numbers and other values are written as text.
+The shell file has `export NAME="value"` lines and `environment.d` has `NAME=value` lines, and both expand `$VAR` and `${VAR}`; numbers and other values are written as text.
 
 ```lua
 environment = {
@@ -778,7 +778,7 @@ nftables rules added to the end of the input chain, such as `ip saddr 192.168.1.
 
 More nftables chains or sets inside the archix table.
 
-archix doesn't check the syntax of either; `nft` reports a mistake when the service loads the file, as a soft failure.
+Once `nftables` is installed, a switch checks the whole ruleset with `nft -c -f` before changing anything, and a mistake stops it: `the firewall rules don't load (check extra_input_rules and extra_rules); nothing was changed:` and nft's error. On the first switch, before `nft` is installed, a mistake is a soft failure when the service loads the file.
 
 ## Hooks
 

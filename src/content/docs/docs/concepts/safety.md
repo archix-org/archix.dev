@@ -18,6 +18,7 @@ The goal is simple: no failure during a switch, including pulling the power cord
 - offers to adopt packages that are newer than the lock,
 - checks that every managed file can replace what's on disk now, keeping a backup ([below](#managed-files-backups-and-hand-edits)),
 - when archix manages booting, checks that the ESP can hold the new boot entries, and with Secure Boot on, that they'll be signed ([below](#secure-boot)),
+- with the [firewall](/docs/guides/environment-and-firewall/#firewall) on and `nft` installed, checks the generated rules with `nft -c -f`,
 - lists the changes and asks you to confirm,
 - stores every managed file's contents, and downloads files declared with a `url`, checking each against its `sha256`,
 - builds every AUR package in a clean chroot,

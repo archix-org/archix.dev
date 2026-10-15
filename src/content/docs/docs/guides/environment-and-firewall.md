@@ -177,19 +177,19 @@ chain blocklist {
 }
 ```
 
-Here port 8080 is open to the local network only. `extra_rules` adds more sets and chains inside the `archix` table; this `blocklist` chain runs before the input chain, so the blocked range is dropped even on port 22. Before a switch changes anything, archix checks the whole ruleset with `nft -c -f`, so a typo stops it with nothing changed, followed by nft's own error:
+Here port 8080 is open to the local network only. `extra_rules` adds more sets and chains inside the `archix` table; this `blocklist` chain runs before the input chain, so the blocked range is dropped even on port 22. Before every switch, including one that turns out to have nothing to do, archix checks the whole ruleset with `nft -c -f`, so a typo stops it with nothing changed, followed by nft's own error:
 
 ```console
 error: the firewall rules don't load (check extra_input_rules and extra_rules); nothing was changed:
 ```
 
-That needs `nft`, so the very first switch that turns the firewall on, before `nftables` is installed, can't check. A bad rule then makes the service fail to load the file, which the switch reports as a [soft failure](/docs/concepts/safety/#hard-and-soft-failures); fix it and switch again, and from then on it's checked first.
+That needs `nft`, so the very first switch that turns the firewall on, before `nftables` is installed, can't check. A bad rule then makes the service fail to load the file, which the switch reports as a [soft failure](/docs/concepts/safety/#hard-and-soft-failures); fix it and switch again, and from then on it's checked first. A rollback doesn't check again: the generation's rules already passed when you switched to it.
 
 ### Other tables are left alone
 
 Docker, Tailscale, libvirt and others manage their own nftables tables. archix never touches them: it doesn't use `nftables.service`, whose stop flushes every table on the machine, and its own service only ever deletes the `archix` table.
 
-Each table's input chain still applies to every packet, though, so a packet another table accepts can still be dropped by `archix`'s. Docker's published ports are forwarded to containers rather than delivered to the host's input chain, so they keep working; a service on the host itself needs its port in `allowed_tcp_ports`. If `nftables.service` is also enabled, the rules in `/etc/nftables.conf` apply too, and Arch's default file drops everything but SSH. A switch with the firewall on says so:
+Each table's input chain still applies to every packet, though, so a packet another table accepts can still be dropped by `archix`'s. Docker's published ports are forwarded to containers rather than delivered to the host's input chain, so they keep working; a service on the host itself needs its port in `allowed_tcp_ports`. If `nftables.service` is also enabled, the rules in `/etc/nftables.conf` apply too, and Arch's default file drops everything but SSH. Every switch with the firewall on says so, including one with nothing to do:
 
 ```console
 warning: nftables.service is enabled too, so /etc/nftables.conf (on Arch: drop everything but SSH) still applies on top of the archix firewall; set services["nftables.service"] = false

@@ -65,6 +65,31 @@ Naming the current generation repairs it. `archix rollback 42` with 42 current p
 
 `rollback` doesn't evaluate your config, so it works even when the config is broken. It refuses while a switch is unfinished; `archix recover --rollback` is the way back from that.
 
+### Downgrades that may break data
+
+Packages roll back; their data doesn't. Some programs migrate the data they keep on disk when a new major version first starts, and the old version can't read it afterwards, or damages it. PostgreSQL refuses to start on a data directory a newer major version wrote. Rolling back across such a version is unsafe, so archix asks first, and the answer defaults to no:
+
+```console
+$ sudo archix rollback 40
+downgrade  postgresql 17.2-1 -> 16.6-1
+downgrade  postgresql-libs 17.2-1 -> 16.6-1
+unsafe downgrades: the older versions may refuse or damage data the newer ones wrote
+  postgresql 17.2-1 -> 16.6-1 goes back from major version 17 to 16, and postgresql migrates its data between them
+downgrade anyway? [y/N]
+error: aborted; nothing was changed
+```
+
+archix knows these packages, and how many version parts make their major version:
+
+| Packages | Major version | Unsafe |
+| --- | --- | --- |
+| `postgresql`, `forgejo`, `nextcloud`, `redis`, `valkey` | The first part | `17.2-1` back to `16.6-1` |
+| `mariadb`, `mysql`, `percona-server`, `gitea`, `mattermost` | The first two parts | `11.4.3-1` back to `11.2.1-1` |
+
+Downgrades within a major version, such as `17.2-1` to `17.1-3`, pass without a question. For anything else, mark the versions yourself with [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades): a downgrade from at or above a listed version to below it asks too, `lemon 3.54.0-1 -> 3.53.4-1 crosses 3.54, which unsafe_downgrades marks`. Each generation stores its `unsafe_downgrades`, so a rollback checks both the generation it leaves and the one it goes back to, without evaluating your config.
+
+Answer `y` only once the data is taken care of, such as restored from a dump the older version can read. `--noconfirm` refuses unsafe downgrades: `refusing unsafe downgrades with --noconfirm; pass --allow-unsafe-downgrade to go ahead`. `--allow-unsafe-downgrade` still lists them, but doesn't ask. A [switch](/docs/reference/cli/#switch) asks the same way, for example after `archix update --to` an earlier date.
+
 Rollback changes the system, not your config. Your `init.lua` and `archix.lock` still describe the newer generation, so the next `archix switch` will apply them again. That's deliberate: archix never rewrites your config behind your back. Before switching again, fix the config, revert the lock in git, or move it back with `archix update --to`.
 
 ## Rolling back from the boot menu
@@ -102,6 +127,13 @@ archix: hooks don't run at boot; the next switch or `sudo archix rollback 41` ru
 The `on_change` scripts it skipped are recorded, script and all, in `/var/lib/archix/pending-on-change`, and the next switch, rollback or recovery runs them, even if its own config dropped them. See [Activation hooks](/docs/guides/hooks/).
 
 Naming the current generation puts back whatever still differs, Flatpak apps included, and runs its hooks.
+
+A rollback from the boot menu doesn't ask about [unsafe downgrades](#downgrades-that-may-break-data). You picked the entry because the newer generation didn't work, and there's no one to answer that early, so it goes ahead, the way NixOS does. If it went back across one, archix leaves a note that's shown at every login, by `/etc/profile.d/archix.sh`, until the next switch or rollback that changes something:
+
+```
+archix: the boot-menu rollback to generation 41 went back across versions that may not read newer data; check these services:
+  postgresql 17.2-1 -> 16.6-1 goes back from major version 17 to 16, and postgresql migrates its data between them
+```
 
 ### Older kernels keep booting
 

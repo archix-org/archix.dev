@@ -154,11 +154,22 @@ installed with pacman or an AUR helper but not declared: htop ncdu
 declare them in installed.lua? (no removes them) [Y/n]
 ```
 
+Downgrades that may break data, such as PostgreSQL going back a major version, are listed after the preview and asked about separately, defaulting to no:
+
+```console
+unsafe downgrades: the older versions may refuse or damage data the newer ones wrote
+  postgresql 17.2-1 -> 16.6-1 goes back from major version 17 to 16, and postgresql migrates its data between them
+downgrade anyway? [y/N]
+```
+
+Pressing Enter stops with `aborted; nothing was changed`. See [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data) and the [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades) option.
+
 See [pacman and yay](/docs/concepts/pacman-and-yay/#adopting) and [Safety](/docs/concepts/safety/).
 
 | Flag | Description |
 | --- | --- |
-| `--noconfirm` | Don't ask. Applies without the `apply N changes?` question, adopts newer packages, declares packages installed with pacman or yay, trusts new AUR build recipes without showing them, falls back when a third-party package is gone, and takes the nearest newer version when a locked AUR version can't be built. |
+| `--noconfirm` | Don't ask. Applies without the `apply N changes?` question, adopts newer packages, declares packages installed with pacman or yay, trusts new AUR build recipes without showing them, falls back when a third-party package is gone, and takes the nearest newer version when a locked AUR version can't be built. It refuses unsafe downgrades: `refusing unsafe downgrades with --noconfirm; pass --allow-unsafe-downgrade to go ahead`. |
+| `--allow-unsafe-downgrade` | Go back across versions that may not read newer data (postgresql majors and the like) without asking. They're still listed. |
 | `--accept-nearest newer\|older` | When a locked AUR version can't be built, take the nearest newer or older one without asking. Overrides the `missing_versions` option. |
 
 ### `upgrade`, `-Syu`
@@ -244,12 +255,13 @@ roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n]
 rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-Packages are reinstalled at the generation's exact versions, from the cache when they're there and from the Arch Linux Archive otherwise. Files, fetched ones included, come from the store, so they don't need their URL. Flatpak apps are pinned back to the generation's commits, which are downloaded from their remote, and apps the newer generation added are uninstalled. The prompt counts package, file and Flatpak changes. Like `switch`, it checks before changing anything that no file would replace something it can't back up. `rollback` doesn't evaluate the config, so it works even when the config is broken. `archix rollback 42` moves forward again. A package built from one of the config's recipes at the same version, but from a different recipe, is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and that generation's cached build goes back. Like `switch`, it restarts what uses replaced files, keeps the running kernel's modules loadable and says `the running kernel was replaced: reboot to finish (its modules stay loadable until then)` when it replaced that kernel. Naming the current generation repairs it: `generation 42 is current; putting back whatever differs from it`, which reinstalls drifted packages and rewrites changed files, users and services. The preview lists the generation's [hooks](/docs/guides/hooks/) on a `run hooks` line, and they run last, as on a switch, after the `on_change` scripts of files the rollback changed. That includes a rollback that finds nothing to put back, which prints `generation 41 (snapshot 2026-10-09) is current; no package changes were needed` and then runs them, so naming the current generation also reruns its hooks. It runs through the same journal as a switch, and refuses while a switch is unfinished; use `archix recover --rollback` for that. See [Generations and rollback](/docs/concepts/generations/).
+Packages are reinstalled at the generation's exact versions, from the cache when they're there and from the Arch Linux Archive otherwise. Files, fetched ones included, come from the store, so they don't need their URL. Flatpak apps are pinned back to the generation's commits, which are downloaded from their remote, and apps the newer generation added are uninstalled. The prompt counts package, file and Flatpak changes. Like `switch`, it checks before changing anything that no file would replace something it can't back up. `rollback` doesn't evaluate the config, so it works even when the config is broken. `archix rollback 42` moves forward again. Downgrades that may break data are listed and asked about first, `downgrade anyway? [y/N]`, as on a switch. A package built from one of the config's recipes at the same version, but from a different recipe, is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and that generation's cached build goes back. Like `switch`, it restarts what uses replaced files, keeps the running kernel's modules loadable and says `the running kernel was replaced: reboot to finish (its modules stay loadable until then)` when it replaced that kernel. Naming the current generation repairs it: `generation 42 is current; putting back whatever differs from it`, which reinstalls drifted packages and rewrites changed files, users and services. The preview lists the generation's [hooks](/docs/guides/hooks/) on a `run hooks` line, and they run last, as on a switch, after the `on_change` scripts of files the rollback changed. That includes a rollback that finds nothing to put back, which prints `generation 41 (snapshot 2026-10-09) is current; no package changes were needed` and then runs them, so naming the current generation also reruns its hooks. It runs through the same journal as a switch, and refuses while a switch is unfinished; use `archix recover --rollback` for that. See [Generations and rollback](/docs/concepts/generations/).
 
 | Argument or flag | Description |
 | --- | --- |
 | `[generation]` | The generation number. `archix generations` lists them. |
-| `--noconfirm` | Don't ask. |
+| `--noconfirm` | Don't ask. Refuses [unsafe downgrades](/docs/concepts/generations/#downgrades-that-may-break-data) unless `--allow-unsafe-downgrade` is given too. |
+| `--allow-unsafe-downgrade` | Go back across versions that may not read newer data (postgresql majors and the like) without asking. They're still listed. |
 
 ### `gc`
 

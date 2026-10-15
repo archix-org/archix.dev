@@ -163,6 +163,24 @@ return {
 
 Ignoring only affects packages that aren't in the lock. A package you also declare in `packages` is managed as usual.
 
+### `unsafe_downgrades`
+
+| | |
+| --- | --- |
+| Type | `attrs of list of str` |
+| Default | `{}` |
+| Declared in | `<archix>/packages.lua` |
+
+Versions per package that a downgrade mustn't cross without asking, on top of archix's own list (postgresql and mariadb major versions and a few more). A switch or rollback going back across one asks, defaulting to no; `--noconfirm` refuses unless `--allow-unsafe-downgrade` is given.
+
+A downgrade from at or above a listed version to below it counts, for any package. Each generation stores the option, so a rollback checks it without evaluating the config. archix's own list covers `postgresql`, `forgejo`, `nextcloud`, `redis` and `valkey` by their first version part, and `mariadb`, `mysql`, `percona-server`, `gitea` and `mattermost` by their first two. See [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data).
+
+```lua
+unsafe_downgrades = { lemon = { "3.54" }, ["matrix-synapse"] = { "1.100", "2.0" } },
+```
+
+With that, going from `3.54.0-1` back to `3.53.4-1` asks: `lemon 3.54.0-1 -> 3.53.4-1 crosses 3.54, which unsafe_downgrades marks`.
+
 ## AUR
 
 See [AUR packages](/docs/guides/aur/) for how AUR packages are locked, reviewed and built.

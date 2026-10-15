@@ -176,7 +176,7 @@ wrote /etc/archix/archix.lock
 
 `+` is a new package, `~` a changed version, `-` a package that's no longer needed. Changed AUR recipes are shown as a diff for review before the lock is written. The newest snapshot is the newest one the archive has published, so right after midnight it may still be yesterday's.
 
-To move to a specific day instead, pass `--to`. It works in both directions, which makes it a quick way to step a whole host back to a day you know was good:
+To move to a specific day instead, pass `--to`. It works in both directions, which makes it a quick way to step a whole host back to a day you know was good. If that takes a package such as PostgreSQL back across a major version, the next `switch` [asks first](/docs/concepts/generations/#downgrades-that-may-break-data):
 
 ```console
 $ archix update --to 2026-10-01

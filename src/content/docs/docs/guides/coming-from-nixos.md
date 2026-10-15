@@ -103,6 +103,10 @@ systemd-boot only. GRUB and Limine are not supported. Each generation gets a UKI
 
 NixOS restarts a service when its unit changes, which with a store covers every new dependency. archix has no store paths to compare, so it finds what to restart from the running system: units whose processes still map or hold open deleted files under `/usr`, and units whose packages depend on a changed package that ships Python, Perl, Node, Ruby or Lua code. Like `restartIfChanged = false`, it never restarts the display manager, dbus, logind, NetworkManager, sshd, gettys or your desktop session's units, and lists them for a logout instead. [`restart_if_changed`](/docs/reference/options/#restart_if_changed) overrides that per unit, `true` or `false`; there's no separate stop-then-start mode. See [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files).
 
+### Rollback asks before unsafe downgrades
+
+NixOS rolls back without asking, even when an older PostgreSQL can't read the data the newer one migrated. archix asks first, defaulting to no, when `switch` or `rollback` would take PostgreSQL, MariaDB, MySQL and a few others back across a major version, or cross a version you list in [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades). `--noconfirm` refuses such downgrades unless you add `--allow-unsafe-downgrade`. Picking an older generation in the boot menu goes ahead without asking, as on NixOS, and leaves a note at login naming what to check. See [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data).
+
 ### Activation hooks are soft failures
 
 `hooks` are archix's activation scripts. Like `system.activationScripts`, they run on every switch, including one that changes nothing, so they have to be idempotent, and `after` orders them like `deps`. Each one is a bash script that runs as root, or as a `user` you name, which also covers what Home Manager's `home.activation` does. `on_change` on a `files` or `home.files` entry is Home Manager's `onChange`: it runs only when that file changed.

@@ -116,6 +116,27 @@ return {
 
 A restart that fails is a [soft failure](#hard-and-soft-failures), listed as `failed: systemctl try-restart: ...` with systemctl's message, and the switch is kept. A rollback from the boot menu skips the step: it runs before the services it would restart have started. `archix recover --continue` runs it if the interrupted switch hadn't got to it.
 
+## Unsafe downgrades
+
+Some packages migrate their data when a new major version starts, so the older version can't read it again: PostgreSQL, MariaDB, MySQL and a few more. A downgrade across such a version can leave a service that won't start, or worse. `switch` and `rollback` list those downgrades before the apply prompt and ask, defaulting to no:
+
+```console
+unsafe downgrades: the older versions may refuse or damage data the newer ones wrote
+  postgresql 17.2-1 -> 16.6-1 goes back from major version 17 to 16, and postgresql migrates its data between them
+downgrade anyway? [y/N]
+```
+
+Pressing Enter stops with `aborted; nothing was changed`. `--noconfirm` refuses them, `refusing unsafe downgrades with --noconfirm; pass --allow-unsafe-downgrade to go ahead`, and `--allow-unsafe-downgrade` goes ahead without asking. Add your own boundaries with [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades). See [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data) for the full list.
+
+A rollback from the boot menu goes ahead without asking. If it crossed one, the next logins show:
+
+```
+archix: the boot-menu rollback to generation 41 went back across versions that may not read newer data; check these services:
+  postgresql 17.2-1 -> 16.6-1 goes back from major version 17 to 16, and postgresql migrates its data between them
+```
+
+The note stays, in `/var/lib/archix/notes`, until the next switch or rollback that changes something.
+
 ## The journal
 
 Before apply starts, archix writes `/var/lib/archix/journal.json`, fsynced and renamed into place. It records the target generation, the package set from before the switch, the exact transaction, and which of the steps above are done. Each step is marked done as it completes.
@@ -209,7 +230,7 @@ archix never acts on an unfinished switch automatically. Guessing wrong after a 
 - `archix-boot.service` reports the unfinished switch at boot and changes nothing.
 - `switch`, `upgrade`, `install`, `remove`, `rollback`, `lock`, `update` and `gc` refuse to run, and say which switch is unfinished. Read-only commands such as `diff` and `status` keep working, so you can look around first.
 - pacman and yay keep working. The pacman hook adds a warning after each transaction.
-- You're told at login, by a message from `/etc/profile.d/archix.sh` and a desktop notification.
+- You're told at login, by a message from `/etc/profile.d/archix.sh` and a desktop notification. The same login script shows the note a boot-menu rollback leaves after [unsafe downgrades](#unsafe-downgrades).
 
 ```console
 $ archix status

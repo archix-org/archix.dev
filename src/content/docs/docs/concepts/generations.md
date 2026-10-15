@@ -105,7 +105,9 @@ Naming the current generation puts back whatever still differs, Flatpak apps inc
 
 ### Older kernels keep booting
 
-An older entry needs its kernel's modules, which pacman deletes when it upgrades the kernel. archix keeps a hardlinked copy of each entry's modules in `/var/lib/archix/kernels`, and the boot service puts the booted kernel's modules back before anything loads them.
+An older entry needs its kernel's modules, which pacman deletes when it upgrades the kernel. archix keeps a hardlinked copy of each entry's modules in `/var/lib/archix/kernels`, and the boot service puts the booted kernel's modules back before anything loads them. `gc` deletes the copies of kernels no kept boot entry uses.
+
+That's separate from what happens to the *running* kernel during a switch. archix also copies the running kernel's modules into `/var/lib/archix/kernels` before pacman replaces its package, and puts them back in `/usr/lib/modules` so they keep loading until you reboot. That put-back directory is temporary: archix deletes it at the next boot or switch, once that kernel isn't running. See [The running kernel](/docs/concepts/safety/#the-running-kernel).
 
 ### When pacman itself is broken
 
@@ -146,7 +148,8 @@ Generations cost disk space, mostly in the package cache. archix cleans up after
 | Boot entries | The newest 5, and fewer if the ESP runs out of space |
 | Rescue entries | The newest 2 |
 | Package cache, managed-file contents (downloads included), snapshot databases | Only what kept generations need |
-| Preserved kernel modules | Only the kernels of kept boot entries |
+| Preserved kernel modules in `/var/lib/archix/kernels` | Only the kernels of kept boot entries |
+| Running-kernel modules put back in `/usr/lib/modules` | Deleted at the next boot or switch, once that kernel isn't running |
 | btrfs snapshots | Deleted with their generation |
 | When | `gc` runs after every switch |
 

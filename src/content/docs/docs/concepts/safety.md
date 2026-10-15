@@ -54,6 +54,29 @@ switched to generation 42 (snapshot 2026-10-15)
 
 Services are stopped and disabled while their unit files still exist, and enabled and started only after `systemctl daemon-reload` has seen the new ones.
 
+### The running kernel
+
+Upgrading or removing a kernel package deletes its modules from `/usr/lib/modules`, including the running kernel's. On plain Arch, nothing new loads after that until you reboot: a USB stick doesn't mount, a VPN or filesystem module isn't found.
+
+archix keeps them loadable. When a switch, rollback or recovery is about to replace or remove the package that owns `/usr/lib/modules/$(uname -r)`, which it finds through the `pkgbase` file pacman's kernels leave in that directory, archix first keeps a hardlinked copy in `/var/lib/archix/kernels`. Once pacman is done, it puts the directory back:
+
+```console
+:: installing packages
+...
+:: kept the running kernel's modules, so they still load until you reboot
+```
+
+At the end, `switch`, `rollback` and `recover` say that only a reboot finishes the job:
+
+```console
+switched to generation 43 (snapshot 2026-10-15)
+the running kernel was replaced: reboot to finish (its modules stay loadable until then)
+```
+
+They say so after every switch until you reboot, since the running kernel's package is still gone. A rollback from the boot menu keeps the modules the same way, but prints no notice.
+
+The directory archix put back belongs to no package, so archix records it in `/var/lib/archix/restored-modules` and deletes it once that kernel is no longer running: at the next boot, when [`archix-boot.service`](/docs/concepts/generations/#rolling-back-from-the-boot-menu) runs, or at the start of the next switch or rollback. If a package owns that directory again by then, because you reinstalled the same kernel version, archix leaves it alone and forgets it.
+
 [Activation hooks](/docs/guides/hooks/) aren't one of these steps. They run after the switch is complete, once the new generation is current and Flatpak apps are installed, under `:: running activation hooks`: first the `on_change` scripts of files the switch changed, then every hook. A hook can't leave a switch unfinished, so the journal doesn't track them. With hooks declared, the preview before the prompt lists them on a `run hooks` line.
 
 archix also checks pacman before it starts. If pacman is running, or a `db.lck` is left over with no pacman running, `switch` refuses and tells you why, rather than fight another package manager.

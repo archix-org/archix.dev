@@ -67,14 +67,11 @@ A recipe nothing uses isn't built. One recipe can build several packages, as a s
 
 ### How names resolve
 
-A name you declare is looked up in this order:
+A recipe beats the repos only for a name you declare that it builds under exactly that name. Declare `backup-scripts` and the recipe in `pkgbuilds/backup-scripts/` builds it, even if a repo has a package of that name, so you can replace an official package with your own build.
 
-1. a recipe in `pkgbuilds/` that builds a package of exactly that name, which wins over the repos, so you can replace an official package with your own build;
-2. your configured repos, official and third-party;
-3. a recipe that `provides` the name;
-4. the AUR.
+A recipe that only `provides` a name doesn't take it from the repos. If the repos have that name, they win; to get the recipe's package, declare its real package name instead.
 
-Dependencies of recipes and AUR packages are resolved from the repos first, then from your recipes, by name or by what they `provides`, then from the AUR. So a recipe can supply a dependency the repos don't have, for another recipe or for an AUR package. A name none of them have stops `lock`, `diff` and `switch`:
+Everything else, dependencies included, resolves in the same order as for AUR packages: the repos first, official and third-party, then your recipes in `pkgbuilds/`, by name or by what they `provides`, then the AUR. So a recipe can supply a dependency the repos don't have, for another recipe or for an AUR package. A name none of them have stops `lock`, `diff` and `switch`:
 
 ```console
 error: `backup-scriptz` is in none of the configured repos, pkgbuilds/ or the AUR
@@ -97,11 +94,12 @@ restic = { version = "0.18.1-1", repo = "extra", file = "restic-0.18.1-1-x86_64.
 
 [hosts.desktop.recipes]
 "local:backup-scripts" = "7f3c9a1e5b2d8046c1e9f7a3b5d2c8e0a4f6b1d3c5e7a9f2b4d6c8e0a1f3b5d7"
+"local:wifi-firmware" = "builds:5d0b8e2f4a6c1e3b7d9f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1b3d5f7a9c0e2b"
 ```
 
-The hash covers every file in the directory, by path, contents and executable bit, so `chmod +x` on a file counts as a change. makepkg's own output is left out: `src/`, `pkg/`, `.git`, `.SRCINFO`, built `*.pkg.tar*` files and `*.log` files. You can run `makepkg` in the directory to try a recipe without making the lock stale.
+The hash covers every file in the directory, by path, contents and executable bit, so `chmod +x` on a file counts as a change. makepkg's own output at the top of the directory is left out: `src/`, `pkg/`, `.SRCINFO`, built `*.pkg.tar*` files and `*.log` files. `.git` is left out at any depth. Deeper down, everything counts, so a `files/src/fix.c` in the recipe is part of the hash. You can run `makepkg` in the directory to try a recipe without making the lock stale.
 
-The `recipes` table records the hash of every recipe in `pkgbuilds/` when the lock was written, used or not, so editing any recipe makes every host's lock out of date. When one changes, the lock is out of date: `archix status` says ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``, and the next `lock` or `switch` resolves again. See [The lockfile](/docs/concepts/lockfile/#local-recipes-and-patched-packages).
+The `recipes` table has an entry for every recipe in `pkgbuilds/`. A recipe the host's lock builds from is recorded by its content hash, as `local:backup-scripts` above. Any other recipe is recorded as `builds:` and a hash of the package names it builds and `provides`, as `local:wifi-firmware` is for a host that doesn't use it. So editing a recipe a host doesn't use leaves that host's lock alone, while adding a recipe, or changing what one builds, makes every host's lock out of date, since it could change how a name resolves. When the lock is out of date, `archix status` says ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``, and the next `lock` or `switch` resolves again. See [The lockfile](/docs/concepts/lockfile/#local-recipes-and-patched-packages).
 
 ### How it's built
 
@@ -121,20 +119,20 @@ They're never shown for [review](/docs/guides/aur/#build-recipe-review). The rec
 
 ### Rebuilds at the same version
 
-Change a recipe without bumping `pkgver` or `pkgrel`, and the package still has to be rebuilt to reach the system. archix compares the recipe hash the current generation built with the lock's, and when they differ at the same version, `diff` and `switch` list a rebuild:
+Change a recipe without bumping `pkgver` or `pkgrel`, and the package still has to be rebuilt to reach the system. archix compares the recipe hash the current generation built with the lock's, and when they differ at the same version, `diff` and `switch` list a reinstall:
 
 ```console
 $ sudo archix switch
 resolving 87 declared packages against the 2026-10-09 snapshot
 214 packages locked
 wrote /etc/archix/archix.lock
-rebuild    backup-scripts 1.2.0-1 (its recipe changed)
+reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)
 apply 1 change? [Y/n]
 ```
 
-The package is rebuilt and reinstalled at the same version. A package installed at the locked version that archix never built from this recipe, such as one you installed by hand, is rebuilt the same way.
+The package is built from the new recipe and reinstalled at the same version. A package installed at the locked version that archix never built from this recipe, such as one you installed by hand, is replaced the same way.
 
-Builds from local recipes are cached in `/var/cache/archix/pkg` under a file name prefixed with a hash of the recipe, so two builds of the same version don't overwrite each other, and each generation records the file it installed. A [rollback](/docs/concepts/generations/) reinstalls packages whose version differs from the generation it goes back to. Builds at the same version count as the same package, so a rollback across a same-version rebuild keeps the newer build; to get the older one back, revert the recipe and switch.
+Builds from local recipes are cached in `/var/cache/archix/pkg` under a file name prefixed with a hash of the recipe, so two builds of the same version don't overwrite each other, and each generation records the file it installed. That's what lets a [rollback](/docs/concepts/generations/) go back across a same-version change: when the generation it returns to used a different recipe, the rollback lists the same `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)` line and reinstalls that generation's cached build, without building anything.
 
 ## Patched packages
 
@@ -171,10 +169,10 @@ Only official packages can be patched, and only ones in the host's lock, declare
 
 ```console
 error: patches.hyprland: hyprland isn't among this config's packages or their dependencies
-error: patches.zen-browser-bin: zen-browser-bin comes from aur, but only packages from the official repos can be patched
+error: patches.zen-browser-bin: zen-browser-bin comes from aur, but only packages from Arch's official repos can be patched
 ```
 
-For an AUR package, copy its recipe into `pkgbuilds/` and change it there.
+The same goes for packages from third-party repos, such as `linux-cachyos` from `cachyos-core-v3`, and from your own recipes: archix only has Arch's recipes to patch. A package [pinned](/docs/concepts/lockfile/#pins) from the Arch Linux Archive counts as official. For an AUR package, copy its recipe into `pkgbuilds/` and change it there.
 
 When the patched package comes from a pkgbase that builds several packages, every package of that base in your lock is swapped for the patched build too, so they stay at the same version. Patching `mesa` also rebuilds the `vulkan-radeon` you have from the same recipe.
 
@@ -190,11 +188,18 @@ hyprland = { version = "0.51.1-2.1", repo = "local", file = "hyprland-0.51.1-2.1
 "patch:hyprland" = "c2e8a4f60b1d3e579a1c3e5f7b9d2f4a6c8e0b2d4f6a8c1e3b5d7f9a0c2e4b6d"
 ```
 
-Editing a patch, adding one or removing one makes the lock out of date, and the next switch rebuilds at the same version: `rebuild    hyprland 0.51.1-2.1 (its recipe changed)`. Take the package out of `patches` and the next switch goes back to Arch's build.
+Editing a patch, adding one or removing one makes the lock out of date, and the next switch rebuilds it at the same version: `reinstall  hyprland 0.51.1-2.1 (a build from a different recipe)`. Take the package out of `patches` and the next switch goes back to Arch's build.
 
 ### Updates
 
 The patches follow the package. When `archix update` moves the snapshot to a new version of hyprland, the lock gets the new version, archix clones Arch's recipe at that version's tag, applies your patches to it, and builds `0.52.0-1.1`. A patch upstream has merged, or that no longer fits the new source, stops the build; drop or refresh it and switch again.
+
+A plain `pacman -Syu` replaces your patched build whenever Arch has a newer version: pacman sees `0.52.0-1` as newer than `0.51.1-2.1`. The patches aren't lost. The next switch sees the system is newer than the lock and offers to [adopt](/docs/concepts/pacman-and-yay/#adopting) it:
+
+- **Yes** moves the lock to the transaction's snapshot, as for any adopted upgrade, then applies your patches to the new version. The switch upgrades from Arch's build to yours, `upgrade    hyprland 0.52.0-1 -> 0.52.0-1.1`.
+- **No** reverts to the lock, which puts your patched build of the locked version back, `downgrade  hyprland 0.52.0-1 -> 0.51.1-2.1`.
+
+Either way, the patched build is what ends up installed.
 
 ## When it fails
 

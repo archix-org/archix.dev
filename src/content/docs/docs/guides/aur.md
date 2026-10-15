@@ -29,7 +29,7 @@ The pacman-style aliases do the same:
 | `archix -Syu` | `archix upgrade`: `pacman -Syu`, adopt, newest AUR recipes, switch |
 | `archix` | `archix -Syu` |
 
-There's one `packages` list for everything. `install` looks a name up in your configured repos first, official and third-party, and only names they don't have are looked up in the AUR. A recipe of your own in `pkgbuilds/` beats both for the names it builds; see [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
+There's one `packages` list for everything. `install` looks a name up in your configured repos first, official and third-party, and only names they don't have are looked up in the AUR. A recipe of your own in `pkgbuilds/` beats both for a name you declare that it builds under exactly that name; see [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
 
 Search covers the locked snapshot's repos and the AUR's package list, most popular first, with votes, popularity and out-of-date flags. archix downloads that list (`packages-meta-v1.json.gz`) when it first needs it, refreshes it when it's more than an hour old and on `archix update`, and only loads it when a name isn't in the repos.
 

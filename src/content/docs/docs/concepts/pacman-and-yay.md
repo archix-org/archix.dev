@@ -52,6 +52,8 @@ wrote /etc/archix/archix.lock
 
 AUR packages upgraded by yay or paru are adopted too: archix finds the commit whose build recipe builds the installed version, and locks that.
 
+[Patched packages](/docs/guides/local-pkgbuilds-and-patches/#patched-packages) survive a plain `pacman -Syu` too. When pacman replaces your patched build with Arch's newer one, adopting moves the lock to that version and applies your patches to it, so the switch goes on to `upgrade    hyprland 0.52.0-1 -> 0.52.0-1.1`. Declining puts your patched build of the locked version back.
+
 Pins survive `archix lock` at the same date. `archix update` to a new snapshot drops them.
 
 ## The pacman-style commands

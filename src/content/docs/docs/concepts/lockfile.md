@@ -55,7 +55,7 @@ Each package is one inline table on one line, sorted by name, so a lock diff in 
 | `base`, `commit` | For AUR packages: the package base and the git commit of its build recipe. For `local` packages: `local:<dir>` or `patch:<pkgbase>`, and a hash of the recipe. See [Local recipes and patched packages](#local-recipes-and-patched-packages). |
 | `explicit` | Whether pacman marks it as explicitly installed or as a dependency. |
 | `build_only` | `true` for an AUR package that's only needed to build other AUR packages. It's built, but never installed. |
-| `recipes` | A hash of each recipe in `pkgbuilds/` and of each package's patches, from when the lock was written. Only present when there are any. |
+| `recipes` | A fingerprint of each recipe in `pkgbuilds/` and of each package's patches, from when the lock was written. Only present when there are any. See [Local recipes and patched packages](#local-recipes-and-patched-packages). |
 | `flatpak` | One inline table per Flatpak app, with its remote, ref and commit. Only present when the host declares apps. See [Flatpak apps](#flatpak-apps-commits). |
 
 Every host can sit on a different date. The laptop doesn't have to update just because the desktop did.
@@ -112,13 +112,20 @@ hyprland = { version = "0.51.1-2.1", repo = "local", file = "hyprland-0.51.1-2.1
 
 [hosts.desktop.recipes]
 "local:backup-scripts" = "7f3c9a1e5b2d8046c1e9f7a3b5d2c8e0a4f6b1d3c5e7a9f2b4d6c8e0a1f3b5d7"
+"local:wifi-firmware" = "builds:5d0b8e2f4a6c1e3b7d9f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1b3d5f7a9c0e2b"
 "patch:hyprland" = "c2e8a4f60b1d3e579a1c3e5f7b9d2f4a6c8e0b2d4f6a8c1e3b5d7f9a0c2e4b6d"
 ```
 
-- **`local:<dir>`** is a recipe in `pkgbuilds/<dir>/`. Its `commit` is a hash of the directory's files, by path, contents and executable bit, leaving out makepkg's output (`src/`, `pkg/`, `.git`, `.SRCINFO`, `*.pkg.tar*` and `*.log`).
+- **`local:<dir>`** is a recipe in `pkgbuilds/<dir>/`. Its `commit` is a hash of the directory's files, by path, contents and executable bit, leaving out makepkg's output at the top of the directory (`src/`, `pkg/`, `.SRCINFO`, `*.pkg.tar*` and `*.log`) and `.git` anywhere.
 - **`patch:<pkgbase>`** is Arch's recipe for that pkgbase with the config's [`patches`](/docs/reference/options/#patches). Its `commit` is the commit of Arch's recipe, `+`, and the start of a hash of the patches. The version carries a pkgrel sub-release, `2.1` on top of Arch's `2`.
 
-The `recipes` table follows the host's packages. It holds the hash of every recipe in `pkgbuilds/`, keyed `local:<dir>`, and the hash of each patched package's patches, keyed `patch:<package>`. archix compares it with the config the way it compares `declared`, so editing a recipe or a patch makes the lock out of date: `archix status` says ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``, and the next `lock` or `switch` resolves again. When the version stayed the same, the switch rebuilds the package anyway: `rebuild    backup-scripts 1.2.0-1 (its recipe changed)`.
+The `recipes` table follows the host's packages. It has an entry for every recipe in `pkgbuilds/`, keyed `local:<dir>`, and one for each patched package, keyed `patch:<package>`:
+
+- A recipe the lock builds from is recorded by its content hash, the same as its packages' `commit`.
+- Any other recipe is recorded as `builds:` and a hash of the package names it builds and `provides`, like `local:wifi-firmware` above. Editing such a recipe's contents doesn't touch the lock; adding a recipe, or changing what one builds, does, because it can change where a name resolves.
+- A patched package is recorded by the full hash of its patches.
+
+archix compares the table with the config the way it compares `declared`, so editing a recipe the host uses or a patch makes the lock out of date: `archix status` says ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``, and the next `lock` or `switch` resolves again. When the version stayed the same, the switch rebuilds the package anyway: `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`.
 
 `archix update` moves a patched package with the snapshot and rebuilds it for the new version. Local recipes only change when you change them.
 

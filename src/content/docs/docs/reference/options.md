@@ -60,7 +60,7 @@ List only what you want; dependencies are resolved and locked for you, and marke
 
 AUR package names go in the same list. archix looks each name up in your configured repos first, third-party repos included, and only then in the AUR. See [AUR packages](/docs/guides/aur/).
 
-So do packages built from the config's own recipes. A recipe in `pkgbuilds/<dir>/` needs no option: declare a package it builds, and that recipe wins over the repos and the AUR for that name. A name found nowhere is an error: `` `foo` is in none of the configured repos, pkgbuilds/ or the AUR ``. See [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
+So do packages built from the config's own recipes. A recipe in `pkgbuilds/<dir>/` needs no option: declare a package it builds, by its exact name, and that recipe wins over the repos and the AUR. A recipe that only `provides` a name doesn't beat the repos for it. Dependencies resolve from the repos first, then `pkgbuilds/`, then the AUR. A name found nowhere is an error: `` `foo` is in none of the configured repos, pkgbuilds/ or the AUR ``. See [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
 
 Like every list, `packages` concatenates across modules in definition order. Duplicates are harmless. Program modules add their own packages here, so `programs.kitty.enable = true` is enough to install kitty.
 
@@ -88,7 +88,7 @@ Patch files for official packages, keyed by package name and relative to the con
 
 archix clones Arch's recipe from gitlab.archlinux.org at the tag for the locked version, and applies each patch, in list order, in whichever top-level directory of `$srcdir` it fits. The patched build's pkgrel is a sub-release, `2` becoming `2.1`, so it sorts after Arch's. Other packages of the same pkgbase in the lock are swapped for the patched build too. It's locked with `repo = "local"` and `base = "patch:<pkgbase>"`, and `archix update` rebuilds it for each new version.
 
-The package has to come from the official repos and be in the host's lock, declared or as a dependency; otherwise `diff`, `lock` and `switch` stop with `patches.<name>: <name> isn't among this config's packages or their dependencies`, or `patches.<name>: <name> comes from aur, but only packages from the official repos can be patched`. A path can't leave the config directory. A patch that applies nowhere fails the build before the system changes.
+The package has to come from Arch's official repos, a [pin](/docs/concepts/lockfile/#pins) from the Arch Linux Archive included, and be in the host's lock, declared or as a dependency. Otherwise `diff`, `lock` and `switch` stop with `patches.<name>: <name> isn't among this config's packages or their dependencies`, or `patches.<name>: <name> comes from <repo>, but only packages from Arch's official repos can be patched`, which also covers third-party repos and the AUR. A path can't leave the config directory. A patch that applies nowhere fails the build before the system changes.
 
 ```lua title="lua/hosts/desktop/init.lua"
 return {

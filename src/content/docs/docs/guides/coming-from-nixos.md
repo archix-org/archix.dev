@@ -100,14 +100,14 @@ systemd-boot only. GRUB and Limine are not supported. Each generation gets a UKI
 
 `hooks` are archix's activation scripts. Like `system.activationScripts`, they run on every switch, including one that changes nothing, so they have to be idempotent, and `after` orders them like `deps`. Each one is a bash script that runs as root, or as a `user` you name, which also covers what Home Manager's `home.activation` does. `on_change` on a `files` or `home.files` entry is Home Manager's `onChange`: it runs only when that file changed.
 
-The difference from Home Manager is what a failure does. Home Manager stops activation when a script fails. archix runs the rest, finishes the switch, makes the new generation current, then lists the failure and exits non-zero, as it does for a service that won't start, and as NixOS does when an activation script snippet fails:
+The difference from Home Manager is what a failure does. Home Manager stops activation when a script fails. archix runs the rest of the hooks, undoes nothing, since the switch was already complete, then lists the failure and exits non-zero, as it does for a service that won't start, and as NixOS does when an activation script snippet fails:
 
 ```console
 failed: hook tailscale: exited with exit status: 1
 error: the new generation is current, but 1 step failed (listed above)
 ```
 
-The timing differs too. NixOS runs activation scripts before it starts and restarts units; archix runs hooks after files are written and services started, so a hook can use a service the same switch started. There's no `entryAfter "writeBoundary"` to get right. See [Activation hooks](/docs/guides/hooks/).
+The timing differs too. NixOS runs activation scripts before it starts and restarts units; archix runs hooks last, once the new generation is current and Flatpak apps are installed, so a hook can use a service or an app the same switch added. There's no `entryAfter "writeBoundary"` to get right. See [Activation hooks](/docs/guides/hooks/).
 
 ### No store, so rollback reinstalls
 

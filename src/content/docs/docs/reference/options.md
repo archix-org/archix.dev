@@ -297,7 +297,7 @@ Files archix writes, keyed by absolute path; give one of `text`, `source`, `link
 
 Give exactly one of `text`, `source`, `link` and `url`. `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
 
-`on_change` runs when the file's entry differs from the one in the generation the system is leaving: on the first switch that manages it, when its contents, mode, owner, group or link target change, and on a rollback to a generation where it was different. A failing script is a soft failure, listed as `failed: on_change of <path>: ...`. See [Activation hooks](/docs/guides/hooks/#on_change).
+`on_change` runs when the switch or rollback changed the file: when its entry differs from the one in the generation the system is leaving (the first switch that manages it, new contents, mode, owner, group or link target, a rollback to a generation where it was different), or when the file on disk didn't match and archix wrote it again, such as a hand-edited file put back or a deleted one recreated. It doesn't run when only the script changes, or when the file leaves the config. A failing script is a soft failure, listed as `failed: on_change of <path>: ...`. See [Activation hooks](/docs/guides/hooks/#on_change).
 
 A `url` needs a `sha256` of 64 hex digits; without one, `diff` and `switch` stop with `files.<path>: url needs sha256`. The hash is what's locked: `diff` compares the file on disk against it without downloading anything, and `switch` downloads the file after you confirm, before it changes anything. A download whose hash differs stops the switch: `<url> has sha256 <actual>, but the config says <sha256>`. The contents go into the same store as every other managed file, so rollback restores them even after the URL is gone.
 
@@ -548,11 +548,11 @@ Scripts run at the end of every switch and rollback, after files are written and
 | `user` | `null or str` | `null` | Run as this user, in their home with their session bus when they're logged in; root by default. |
 | `after` | `list of str` | `[]` | Hooks that must run before this one. |
 
-Hooks run in the `:: running activation hooks` step, after the [`on_change`](#files) scripts and before the result is verified and the new generation becomes current. They also run on a switch that has nothing to change. The order is by `after`, then by name, and the switch preview shows it on a `run hooks` line. An `after` that names no hook is an error, `hooks.<name>.after names "<hook>", which isn't a hook`, and so is a cycle, `hooks <names> wait on each other in a cycle`.
+Hooks run last, under `:: running activation hooks`, after the [`on_change`](#files) scripts: once the switch is complete, the new generation is current and Flatpak apps are installed. They run on every switch, including one that has nothing to change, and every rollback, including one to the current generation; a rollback from the boot menu skips them and prints ``archix: hooks don't run at boot; run `sudo archix rollback N` once you're online``. The order is by `after`, then by name, and the switch preview shows it on a `run hooks` line. An `after` that names no hook is an error, `hooks.<name>.after names "<hook>", which isn't a hook`, and so is a cycle, which names the hooks in it, such as `hooks b -> c -> b wait on each other in a cycle`, or `hook a lists itself in after`.
 
-Each script runs as `bash -e -o pipefail -c` in a clean environment: `PATH=/usr/local/sbin:/usr/local/bin:/usr/bin`, `HOME`, `USER` and `LOGNAME`, and `LANG` if archix has one. Root hooks run in `/`. With `user`, the hook runs as that user without opening a login session, in their home, with `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` set while they're logged in, so `systemctl --user` reaches their session.
+Each script runs as `bash -e -o pipefail -c` in a clean environment: `PATH=/usr/local/sbin:/usr/local/bin:/usr/bin`, `HOME`, `USER` and `LOGNAME`, and `LANG` if archix has one. Root hooks run in `/`. With `user`, the hook runs as that user without opening a login session, in their home (or `/` if it doesn't exist), with `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` set while they're logged in, so `systemctl --user` reaches their session.
 
-A failing hook is a soft failure: the switch finishes, the new generation becomes current, and archix lists `failed: hook <name>: exited with exit status: 1` and exits non-zero.
+A failing hook is a soft failure: nothing is undone, archix lists `failed: hook <name>: exited with exit status: 1` and exits non-zero.
 
 ```lua
 users = { alice = { groups = { "wheel" } } },
@@ -817,7 +817,7 @@ Give exactly one of `text`, `source`, `link` and `url`. A `source` is copied, an
 
 When a path is a directory archix didn't manage before, such as an existing `~/.config/nvim` you now link into the config, it's moved to `/var/lib/archix/backups` and comes back when the entry leaves the config. See [Dotfiles and apps](/docs/guides/dotfiles-and-apps/).
 
-`on_change` runs when the file changed between generations, as in [`files`](#files), but as `home.user`, in the environment of a [user hook](/docs/guides/hooks/#user-hooks). A `live` entry is a link, so editing the file behind it never runs `on_change`.
+`on_change` runs when the switch or rollback changed the file, as in [`files`](#files), but as `home.user`, in the environment of a [user hook](/docs/guides/hooks/#user-hooks). A `live` entry is a link, and archix never writes what's behind it, so editing that file never runs `on_change`.
 
 ```lua
 home = {

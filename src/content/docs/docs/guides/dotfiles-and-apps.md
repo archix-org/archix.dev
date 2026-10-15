@@ -78,7 +78,7 @@ return {
 
 A file a `programs.*` module writes is a `home.files` entry too, so `on_change` works on `kitty.conf` above without repeating its contents. The script runs with `set -e`, so `|| true` keeps an app that isn't running from failing it.
 
-"Changed" means the file's entry differs from the previous generation's: its contents, mode or link target. So it runs on the first switch that writes the file, but not when a switch only puts back a file you edited by hand, and never for edits behind a [live link](#live-links-for-app-written-configs), since the link itself stays the same. A failing script doesn't undo the switch; it's listed and archix exits non-zero. For scripts that should run on every switch, such as `systemctl --user` commands, see [Activation hooks](/docs/guides/hooks/).
+"Changed" means the file's entry differs from the previous generation's, such as new contents, mode or link target, or that archix had to write it again because the file on disk didn't match, such as putting back a file you edited by hand. So it runs on the first switch that writes the file, but never for edits behind a [live link](#live-links-for-app-written-configs): archix doesn't write what's behind the link. A failing script doesn't undo the switch; it's listed and archix exits non-zero. For scripts that should run on every switch, such as `systemctl --user` commands, see [Activation hooks](/docs/guides/hooks/).
 
 ## Files from a URL
 

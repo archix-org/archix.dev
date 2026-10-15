@@ -46,14 +46,15 @@ apply 3 changes? [Y/n]
 :: writing managed files
 :: reloading systemd, sysctl, udev and locales
 :: enabling and starting services
-:: running activation hooks
 :: verifying the result
 :: writing the boot entry
 :: making the new generation current
 switched to generation 42 (snapshot 2026-10-15)
 ```
 
-Services are stopped and disabled while their unit files still exist, and enabled and started only after `systemctl daemon-reload` has seen the new ones. [Activation hooks](/docs/guides/hooks/) run once the new files and services are in place: first the `on_change` scripts of files the switch changed, then every hook. With hooks declared, the preview before the prompt lists them on a `run hooks` line.
+Services are stopped and disabled while their unit files still exist, and enabled and started only after `systemctl daemon-reload` has seen the new ones.
+
+[Activation hooks](/docs/guides/hooks/) aren't one of these steps. They run after the switch is complete, once the new generation is current and Flatpak apps are installed, under `:: running activation hooks`: first the `on_change` scripts of files the switch changed, then every hook. A hook can't leave a switch unfinished, so the journal doesn't track them. With hooks declared, the preview before the prompt lists them on a `run hooks` line.
 
 archix also checks pacman before it starts. If pacman is running, or a `db.lck` is left over with no pacman running, `switch` refuses and tells you why, rather than fight another package manager.
 
@@ -132,7 +133,6 @@ error: installing packages failed; the switch is unfinished, run `archix recover
 
 ```console
 :: enabling and starting services
-:: running activation hooks
 :: verifying the result
 :: writing the boot entry
 :: making the new generation current
@@ -141,7 +141,7 @@ failed: systemctl enable --now nginx.service: Job for nginx.service failed becau
 error: the new generation is current, but 1 step failed (listed above)
 ```
 
-A failed hook is listed the same way, `failed: hook tailscale: exited with exit status: 1`, and so is an `on_change` script, by its file: `failed: on_change of /etc/foo.conf: exited with exit status: 1`.
+A failed hook is listed the same way, `failed: hook tailscale: exited with exit status: 1`, and so is an `on_change` script, by its file: `failed: on_change of /etc/foo.conf: exited with exit status: 1`. Hooks also run on a switch that changes nothing, where a failure ends with `error: nothing was changed, but 1 step failed (listed above)`, and on rollbacks, where it's `error: generation 41 (snapshot 2026-10-09) is current, but 1 step failed (listed above)`.
 
 ## Unfinished switches
 

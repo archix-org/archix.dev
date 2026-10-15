@@ -43,7 +43,7 @@ roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n]
 rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-This makes the system match the previous generation: its exact package versions are reinstalled, from the cache when they're there and from the Arch Linux Archive otherwise, and its files, users, groups and services are applied again. Files come from the store, so a file declared with a `url` comes back even when the URL is gone. Then its [hooks](/docs/guides/hooks/) run, after the `on_change` scripts of files the rollback changed, in the same `:: running activation hooks` step as on a switch. It goes through the same journal as a switch, so an interrupted rollback is as recoverable as an interrupted switch. See [Safety](/docs/concepts/safety/).
+This makes the system match the previous generation: its exact package versions are reinstalled, from the cache when they're there and from the Arch Linux Archive otherwise, and its files, users, groups and services are applied again. Files come from the store, so a file declared with a `url` comes back even when the URL is gone. Its [hooks](/docs/guides/hooks/) run last, once it's current and its Flatpak apps are pinned, after the `on_change` scripts of files the rollback changed, under `:: running activation hooks` as on a switch. It goes through the same journal as a switch, so an interrupted rollback is as recoverable as an interrupted switch. See [Safety](/docs/concepts/safety/).
 
 Flatpak apps follow last, once the generation is current. Each app is pinned back to the commit the generation recorded, and apps the newer generation added are uninstalled:
 
@@ -61,7 +61,7 @@ $ sudo archix rollback 40
 $ sudo archix rollback 42
 ```
 
-Naming the current generation repairs it. `archix rollback 42` with 42 current prints `generation 42 is current; putting back whatever differs from it`, then reinstalls drifted packages and rewrites changed files, users and services. That's also how you finish after [rescue mode](/docs/concepts/safety/#rescue-mode).
+Naming the current generation repairs it. `archix rollback 42` with 42 current prints `generation 42 is current; putting back whatever differs from it`, then reinstalls drifted packages, rewrites changed files, users and services, and reruns its hooks. That's also how you finish after [rescue mode](/docs/concepts/safety/#rescue-mode).
 
 `rollback` doesn't evaluate your config, so it works even when the config is broken. It refuses while a switch is unfinished; `archix recover --rollback` is the way back from that.
 
@@ -85,7 +85,7 @@ The entry starts generation 41's kernel with `archix.generation=41` on its comma
 archix: booted generation 41, but 42 is current; rolling back to 41
 ```
 
-You land in generation 41, and it stays current until your next switch. This works the same on every filesystem. Generation 41's [hooks](/docs/guides/hooks/#when-they-run) run too, this early, before the network and most services are up, so a hook that needs them fails there as a soft failure.
+You land in generation 41, and it stays current until your next switch. This works the same on every filesystem.
 
 Flatpak commits come from their remote, and the network isn't up that early in boot, so the boot service leaves Flatpak apps as they are and says so:
 
@@ -93,7 +93,13 @@ Flatpak commits come from their remote, and the network isn't up that early in b
 archix: Flatpak apps aren't pinned at boot; run `sudo archix rollback 41` once you're online
 ```
 
-Naming the current generation puts back whatever still differs, Flatpak apps included.
+[Hooks](/docs/guides/hooks/#when-they-run) are skipped too, since nobody is logged in yet:
+
+```
+archix: hooks don't run at boot; run `sudo archix rollback 41` once you're online
+```
+
+Naming the current generation puts back whatever still differs, Flatpak apps included, and runs its hooks.
 
 ### Older kernels keep booting
 

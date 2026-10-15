@@ -182,8 +182,8 @@ return {
       [".config/qt6ct/qt6ct.conf"] = {
         merge = { format = "ini", values = { Appearance = { icon_theme = "Papirus-Dark" } } },
       },
-      [".config/discord/settings.json"] = {
-        merge = { format = "json", values = { SKIP_HOST_UPDATE = true } },
+      [".config/Code/User/settings.json"] = {
+        merge = { format = "json", values = { ["editor.fontSize"] = 14, ["workbench.colorTheme"] = "Default Dark Modern" } },
       },
     },
   },
@@ -194,7 +194,7 @@ return {
 
 - **`kconfig`**, KDE's format: `values` holds groups of keys, and groups nest, so `{ Containments = { ["1"] = { General = { ... } } } }` writes under `[Containments][1][General]`.
 - **`ini`**: keys at the top come before any section, then one level of sections. Deeper nesting is an error.
-- **`json`**: `values` is deep-merged into the file's object.
+- **`json`**: `values` is deep-merged into the file's object. JSONC works too, as in VS Code's settings and waybar's config: `//` and `/* */` comments and trailing commas are accepted, and `//` inside a string is left alone.
 
 ini and kconfig files are edited line by line. A declared key is replaced where it is, keeping `key = value` spacing if the file uses it; a missing key is added at the end of its group, and a missing group at the end of the file. Every other line, comments included, stays as it was. With an existing `kdeglobals` like this:
 
@@ -218,7 +218,7 @@ font=Noto Sans,10,-1,5,50,0,0,0,0,0
 SingleClick=false
 ```
 
-A JSON file is compared by value, so an app that reformats it or reorders its keys hasn't changed anything as far as archix is concerned. When a declared key does differ, archix writes the merged object back, pretty-printed. The file has to be plain JSON: one with comments or trailing commas can't be read, and the switch stops at the managed-files step with `the file isn't valid JSON`.
+A JSON file is compared by value, so an app that reformats it or reorders its keys hasn't changed anything as far as archix is concerned. When a declared key does differ, archix writes the merged object back, pretty-printed. That rewrite drops the file's comments. A file that can't be read even as JSONC stops the switch before anything changes, `/home/me/.config/Code/User/settings.json can't take its merged keys; nothing was changed: the file isn't valid JSON or JSONC`. ini and kconfig files are checked the same way.
 
 What the app writes is its own business. Its keys never show up in `archix diff`; a declared key it changed does, as `update     /home/me/.config/kdeglobals`, and the next switch sets it back. archix creates a missing file with mode `0644`, owned by `home.user`, and leaves an existing file's mode and owner as they are. When the entry leaves your config, the file keeps whatever keys it has, and archix neither restores nor deletes it.
 

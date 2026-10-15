@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-This page documents every option archix ships: packages and repositories, the AUR, third-party repos, generations, the system (files, users, services and more), activation hooks, booting, AppImages, Flatpak apps, your home directory and the `programs.*` modules. Your installed archix is still the authoritative list, because `archix options` is generated from the declarations themselves, and it includes options your own modules declare.
+This page documents every option archix ships: packages and repositories, the AUR, third-party repos, generations, the system (files, users, services and more), the environment, the firewall, activation hooks, booting, AppImages, Flatpak apps, your home directory and the `programs.*` modules. Your installed archix is still the authoritative list, because `archix options` is generated from the declarations themselves, and it includes options your own modules declare.
 
 All of these modules are built in and loaded before your `init.lua`. You never import them.
 
@@ -324,7 +324,7 @@ Every setting in this section renders to files archix manages. Their contents ar
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Files archix writes, keyed by absolute path; give one of `text`, `source`, `link` or `url`. Files archix replaces are backed up and restored when they leave the config.
+Files archix writes, keyed by absolute path; give one of `text`, `source`, `link`, `url` or `merge`. Files archix replaces are backed up and restored when they leave the config.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -348,7 +348,7 @@ A `url` needs a `sha256` of 64 hex digits; without one, `diff` and `switch` stop
 
 With `mutable = false`, or [`mutable_files = false`](#mutable_files), the file is written without its write bits, so `"0644"` becomes `0444` and `"0755"` becomes `0555`. Links aren't affected.
 
-`merge` sets keys in a file archix doesn't own, such as one an app writes too: archix edits only the declared keys and leaves the app's own. The app's keys never show up in `archix diff`; a declared key that changed does, and the next switch sets it back. A new file gets `0644` and `owner`/`group`; an existing one keeps its mode and owner. When the entry leaves the config, the file keeps its keys and is neither restored nor deleted. See [Setting single keys](/docs/guides/dotfiles-and-apps/#setting-single-keys).
+`merge` sets keys in a file archix doesn't own, such as one an app writes too: archix edits only the declared keys and leaves the app's own. The app's keys never show up in `archix diff`; a declared key that changed does, and the next switch sets it back. JSON files may be JSONC, with comments and trailing commas, but archix drops the comments when it writes the file back; a file that can't take its keys stops the switch before anything changes. A new file gets `0644` and `owner`/`group`; an existing one keeps its mode and owner. When the entry leaves the config, the file keeps its keys and is neither restored nor deleted. See [Setting single keys](/docs/guides/dotfiles-and-apps/#setting-single-keys).
 
 archix doesn't write under `/usr` (except `/usr/local`), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`. Files in a home directory go in [`home.files`](#homefiles).
 
@@ -609,6 +609,176 @@ udev_rules = {
   ["60-ioschedulers"] = [[ACTION=="add|change", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/scheduler}="none"]],
 },
 ```
+
+## Environment
+
+See [Environment and firewall](/docs/guides/environment-and-firewall/) for a walkthrough.
+
+### `environment.variables`
+
+| | |
+| --- | --- |
+| Type | `attrs of any` |
+| Default | `{}` |
+| Declared in | `<archix>/environment.lua` |
+
+Environment variables for every user: login shells get them from `/etc/profile.d/archix-environment.sh`, and systemd user services and graphical sessions from `/etc/environment.d/90-archix.conf`. Lists are joined with `:`.
+
+The shell file has `export NAME='value'` lines, quoted, and `environment.d` has `NAME=value` lines; numbers and other values are written as text.
+
+```lua
+environment = {
+  variables = { EDITOR = "nvim", XDG_DATA_DIRS = { "/usr/local/share", "/usr/share" } },
+},
+```
+
+### `environment.shell_aliases`
+
+| | |
+| --- | --- |
+| Type | `attrs of str` |
+| Default | `{}` |
+| Declared in | `<archix>/environment.lua` |
+
+Shell aliases for every user's login shells, from `/etc/profile.d/archix-aliases.sh`; [`programs.zsh.shell_aliases`](#programszsh) covers every interactive zsh.
+
+Each one is written as `alias ll='ls -l'`.
+
+```lua
+environment = { shell_aliases = { ll = "ls -l" } },
+```
+
+## Firewall
+
+An nftables firewall in its own table. See [Environment and firewall](/docs/guides/environment-and-firewall/#firewall) for a walkthrough and the rules it writes.
+
+### `firewall.enable`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/firewall.lua` |
+
+An nftables firewall in its own `inet archix` table, loaded by `archix-firewall.service`. Incoming traffic is dropped unless it answers outgoing traffic or something below allows it; other tables (Docker's, Tailscale's) are left alone.
+
+With `true`, archix declares the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network starts. Rule changes reload the service; turning it off stops it, which deletes only the `archix` table. archix doesn't use `nftables.service`, whose stop flushes every table.
+
+The input chain has policy drop and accepts, in order: established and related traffic, loopback, `trusted_interfaces`, all ICMPv6, DHCPv6 replies from `fe80::/10`, ping when `allow_ping` is on, the allowed ports and ranges, then `extra_input_rules`.
+
+```lua
+firewall = {
+  enable = true,
+  allowed_tcp_ports = { 22, 80, 443 },
+  trusted_interfaces = { "tailscale0" },
+},
+```
+
+### `firewall.allowed_tcp_ports`
+
+| | |
+| --- | --- |
+| Type | `list of int` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+TCP ports open to everyone.
+
+Ports must be 1 to 65535: `firewall ports must be 1-65535, not 70000`.
+
+### `firewall.allowed_udp_ports`
+
+| | |
+| --- | --- |
+| Type | `list of int` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+UDP ports open to everyone.
+
+### `firewall.allowed_tcp_port_ranges`
+
+| | |
+| --- | --- |
+| Type | `list of submodule` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+TCP port ranges open to everyone, as `{ from, to }`.
+
+Both `from` and `to` (`int`, *required*) are 1 to 65535, with `from` no greater than `to`: otherwise `firewall port ranges need from <= to, both 1-65535`.
+
+```lua
+firewall = { allowed_tcp_port_ranges = { { from = 8000, to = 8010 } } },
+```
+
+### `firewall.allowed_udp_port_ranges`
+
+| | |
+| --- | --- |
+| Type | `list of submodule` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+UDP port ranges open to everyone, as `{ from, to }`.
+
+```lua
+firewall = { allowed_udp_port_ranges = { { from = 60000, to = 61000 } } },
+```
+
+### `firewall.trusted_interfaces`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+Interfaces whose incoming traffic is always accepted, such as a VPN's.
+
+### `firewall.allow_ping`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `true` |
+| Declared in | `<archix>/firewall.lua` |
+
+Answer ICMP echo requests. ICMPv6, which IPv6 needs to work, is always accepted.
+
+### `firewall.check_reverse_path`
+
+| | |
+| --- | --- |
+| Type | `one of "strict", "loose", "off"` |
+| Default | `"strict"` |
+| Declared in | `<archix>/firewall.lua` |
+
+Drop packets whose source address wouldn't be routed back out the interface they came in on (strict), out of any interface (loose), or don't check (off). VPNs that route asymmetrically may need loose.
+
+The check runs in an `rpfilter` chain that lets DHCPv4 through. `"off"` leaves that chain out.
+
+### `firewall.extra_input_rules`
+
+| | |
+| --- | --- |
+| Type | `lines` |
+| Default | `""` |
+| Declared in | `<archix>/firewall.lua` |
+
+nftables rules added to the end of the input chain, such as `ip saddr 192.168.0.0/24 tcp dport 8080 accept`.
+
+### `firewall.extra_rules`
+
+| | |
+| --- | --- |
+| Type | `lines` |
+| Default | `""` |
+| Declared in | `<archix>/firewall.lua` |
+
+More nftables chains or sets inside the archix table.
+
+archix doesn't check the syntax of either; `nft` reports a mistake when the service loads the file, as a soft failure.
 
 ## Hooks
 

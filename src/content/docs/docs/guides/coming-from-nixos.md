@@ -2,7 +2,7 @@
 title: Coming from NixOS
 description: Map NixOS concepts to archix, understand what works differently, and port an existing NixOS and Home Manager config.
 sidebar:
-  order: 8
+  order: 9
 ---
 
 You already know the ideas behind archix: a declarative config, a lockfile, generations and rollback, a typed module system with priorities. This page maps what you know onto archix, then covers what's different and how to port a config.
@@ -43,6 +43,15 @@ You already know the ideas behind archix: a declarative config, a lockfile, gene
 | `environment.etc` | `files` |
 | `systemd.services`, `systemd.user.services` | `units`, `services`, `home.systemd` |
 | `users.users` | `users` |
+| `environment.variables`, `environment.sessionVariables` | `environment.variables` |
+| `environment.shellAliases` | `environment.shell_aliases` |
+| `networking.firewall.enable` | `firewall.enable` |
+| `networking.firewall.allowedTCPPorts`, `allowedUDPPorts` | `firewall.allowed_tcp_ports`, `allowed_udp_ports` |
+| `networking.firewall.allowedTCPPortRanges`, `allowedUDPPortRanges` | `firewall.allowed_tcp_port_ranges`, `allowed_udp_port_ranges` |
+| `networking.firewall.trustedInterfaces` | `firewall.trusted_interfaces` |
+| `networking.firewall.allowPing` | `firewall.allow_ping` |
+| `networking.firewall.checkReversePath` | `firewall.check_reverse_path` |
+| `networking.firewall.extraInputRules` | `firewall.extra_input_rules` |
 | `restartIfChanged`, `stopIfChanged` on a service | `restart_if_changed.<unit>` |
 | `system.activationScripts`, Home Manager's `home.activation` | `hooks` |
 | Home Manager's `home.file.<path>.onChange` | `home.files.<path>.on_change`, and `on_change` on `files` |
@@ -84,6 +93,12 @@ end,
 There's no `mkIf`, `mkMerge`, `mkBefore` or `mkAfter`. Use plain `if`, return a table, and rely on definition order: a module's own config, then its imports in order. Lists concatenate in that order. See [Configuration](/docs/concepts/configuration/#function-config-and-fixpoint-rounds).
 
 Evaluation is still pure. The sandbox has no `io` or `os`, `pairs` iterates in sorted order, and the only escape hatches are `archix.hostname` and `archix.read_file`.
+
+### A firewall in nft syntax
+
+`firewall` follows `networking.firewall` with the nftables backend: the same options in snake_case, ranges as `{ from = 60000, to = 61000 }`, and `check_reverse_path` as `"strict"`, `"loose"` or `"off"`. It lives in its own `inet archix` table and leaves other tables alone. There's no iptables backend, so `extraCommands` and `extraStopCommands` written for iptables have to be rewritten as nft rules, in `extra_input_rules` for the input chain or `extra_rules` for chains and sets of your own. See [Environment and firewall](/docs/guides/environment-and-firewall/#firewall).
+
+`environment.variables` reaches login shells and systemd user sessions, which covers both `environment.variables` and `environment.sessionVariables`. `environment.shell_aliases` reaches login shells; for every interactive zsh, use `programs.zsh.shell_aliases`.
 
 ### Writable files by default
 

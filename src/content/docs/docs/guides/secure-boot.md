@@ -2,7 +2,7 @@
 title: Secure Boot
 description: Enroll your own Secure Boot keys with archix, keep every boot entry signed, check what the firmware and anti-cheat software see, and add a protected boot entry.
 sidebar:
-  order: 7
+  order: 8
 ---
 
 When archix manages booting, every generation gets a unified kernel image on the ESP. With Secure Boot, the firmware only starts images signed by a key it trusts. archix signs every entry, and systemd-boot itself, with your own keys through `sbctl`, and it won't make an entry the default if the firmware would refuse it.

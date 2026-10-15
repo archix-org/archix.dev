@@ -194,6 +194,8 @@ archix only replaces a directory it has never managed, and only once. It refuses
 
 Users and groups archix created are removed when they leave the config, and their home directories are kept. archix never touches passwords: a new user gets a hint instead, ``created user me; set a password with `passwd me` ``.
 
+The same goes for the [firewall](/docs/guides/environment-and-firewall/#firewall): it lives in its own `inet archix` table, and turning it off deletes only that table, never the ones Docker, Tailscale or libvirt manage.
+
 archix is strict about what *it* manages, and only that. It doesn't revert changes to `/etc` files it never managed, and it doesn't disable services it never managed. Doing that blindly could, for example, delete users that packages create. `archix init` captures the files and services you'd changed, which makes them managed.
 
 Files archix takes over unchanged are backed up even when a switch has nothing else to do, as with the first switch after `archix init`, which usually prints only `switched to generation 1 (snapshot 2026-10-09); no package changes were needed`. Every switch that records a generation, that one included, also stores the contents of every file the generation manages in `/var/lib/archix/blobs`, so a later rollback to it never finds them missing.

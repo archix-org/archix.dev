@@ -766,7 +766,7 @@ The check runs in an `rpfilter` chain that lets DHCPv4 through. `"off"` leaves t
 | Default | `""` |
 | Declared in | `<archix>/firewall.lua` |
 
-nftables rules added to the end of the input chain, such as `ip saddr 192.168.0.0/24 tcp dport 8080 accept`.
+nftables rules added to the end of the input chain, such as `ip saddr 192.168.1.0/24 tcp dport 8080 accept`.
 
 ### `firewall.extra_rules`
 

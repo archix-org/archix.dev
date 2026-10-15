@@ -1,6 +1,6 @@
 # archix.dev
 
-The archix website and documentation, built with [Astro](https://astro.build) and [Starlight](https://starlight.astro.build).
+The website and documentation for [archix](https://github.com/archix-org/archix), built with [Astro](https://astro.build) and [Starlight](https://starlight.astro.build).
 
 ```sh
 npm ci
@@ -9,7 +9,7 @@ npm run build    # static output in dist/
 ```
 
 - Landing page: `src/pages/index.astro` and `src/components/`.
-- Docs: `src/content/docs/docs/`, served under `/docs/`. Any change to archix's behaviour, CLI, config syntax or options should update the matching page in the same PR.
+- Docs: `src/content/docs/docs/`, served under `/docs/`. They describe archix as it behaves in `archix-org/archix`: a change there to behaviour, the CLI, config syntax or options needs a matching PR here.
 - Brand assets come from the archix logo set; colours and fonts are defined in `src/styles/site.css` (landing) and `src/styles/starlight.css` (docs).
 
-Merges to `main` that touch `site/` build `ghcr.io/archix-org/site` and deploy it automatically.
+Merges to `main` build `ghcr.io/archix-org/site` and deploy it automatically.

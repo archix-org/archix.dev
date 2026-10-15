@@ -1,3 +1,10 @@
+## Project
+
+- The docs under `src/content/docs/docs/` describe the archix CLI in `archix-org/archix`. Quote its output, options and flags exactly as the code prints them, and keep them in step with it.
+- The site is written as if archix v1 is released; the only pre-alpha notice is the banner in `src/components/Header.astro`.
+- Lua examples must evaluate: a module with `imports`, `options` or `config` can't have other fields, `programs.*` needs `home.user` and a `users` entry, and host files are `lua/hosts/<host>/init.lua`.
+- Never put personal or machine-specific details in committed files.
+
 ## Development
 
 When starting the dev server, use background mode:

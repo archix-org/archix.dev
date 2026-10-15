@@ -28,7 +28,7 @@ export default defineConfig({
 				{ icon: 'github', label: 'GitHub', href: 'https://github.com/archix-org/archix' },
 				{ icon: 'discord', label: 'Discord', href: 'https://discord.gg/dejSeEHzpV' },
 			],
-			editLink: { baseUrl: 'https://github.com/archix-org/archix/edit/main/site/' },
+			editLink: { baseUrl: 'https://github.com/archix-org/archix.dev/edit/main/' },
 			head: [
 				{ tag: 'meta', attrs: { property: 'og:image', content: 'https://archix.dev/og.png' } },
 				{ tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },

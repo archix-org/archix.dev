@@ -204,7 +204,7 @@ $ sudo archix switch
 use the nearest newer version, foo-git 0.5.1-1? [Y/n]
 ```
 
-Whatever you accept is written back to the lock, after review, so the next machine gets the same answer without being asked. If you accept neither, the switch stops before anything changes.
+Whatever you accept is reviewed, then written back to the lock once it has actually built, so the next machine gets the same answer without being asked. If the version you accepted fails to build too, `archix.lock` stays as it was. If you accept neither, the switch stops before anything changes.
 
 ### Policies
 

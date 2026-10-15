@@ -40,6 +40,23 @@ Commands always win over terms: `archix status` runs `status`, and a typo such a
 
 `ax` is a short alias for `archix`. The AUR packages install it as a symlink, `/usr/bin/ax`, and it takes every command and flag below: `sudo ax switch`, `ax diff`, `sudo ax -Syu`. Help and usage errors use the name you typed, such as `Usage: ax [OPTIONS] [COMMAND]`, while archix's own messages, `--version` included, still say `archix`. See [Installation](/docs/installation/#ax-the-short-name).
 
+## Root
+
+Commands that change the system need root: `install`, `remove`, `switch`, `upgrade` (and `-Syu` and bare `archix`), `rollback`, `recover`, `gc`, `init` and `secure-boot setup`. Run as your user, they stop before touching anything, `installed.lua` included, and give you the line to run, the way you typed it:
+
+```console
+$ archix -S htop
+error: `archix install` changes the system, so it needs root; run it with sudo: sudo archix -S htop
+```
+
+Any other error that comes from a missing permission gets the same hint, such as `archix lock` on a root-owned `/etc/archix`: `hint: that needs root; run it with sudo: sudo archix lock`. Reading doesn't need root: `archix <terms>`, `search`, `diff`, `status`, `eval`, `options`, `generations` and `secure-boot check` work as your user, and so do `lock` and `update` on a config you own. `archix <terms>` asks sudo for the install itself.
+
+Every command except `init`, `rollback`, `recover`, `gc`, `generations`, `prefetch`, `rescue` and `secure-boot` reads the config. With no `init.lua` in the config directory, they stop with:
+
+```console
+error: there's no archix config at /etc/archix yet; run `sudo archix init` to write one that describes this machine, or point --config at yours
+```
+
 ## Global flags
 
 These work with every command.
@@ -62,7 +79,7 @@ $ ARCHIX_CONFIG=~/archix archix eval
 
 ### `init`
 
-Write a config that describes this machine as it is, and a lock pinned to exactly the package versions that are installed. Needs root.
+Write a config that describes this machine as it is, and a lock pinned to exactly the package versions that are installed. Needs root. A config written into a directory you own, such as `sudo archix init` with `~/archix-config` as the location, ends up owned by you, the whole tree including the `.git` init creates, so you can edit and commit without `sudo`.
 
 ```console
 $ sudo archix init
@@ -117,7 +134,7 @@ System-wide Flatpak apps are declared too, each locked to the commit it's instal
 
 ## Commands that change the system
 
-These need root. Run without it, they stop with `` `archix switch` changes the system; run it as root (sudo archix switch) `` (with the command's own name).
+These need root. Run without it, they stop before touching anything, with the command's name and your exact command line: `` `archix switch` changes the system, so it needs root; run it with sudo: sudo archix switch --noconfirm ``. See [Root](#root).
 
 ### `switch`
 

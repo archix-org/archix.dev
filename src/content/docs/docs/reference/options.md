@@ -696,6 +696,8 @@ Microcode images on the ESP loaded before the initramfs, such as `amd-ucode.img`
 
 How many of the newest generations keep a boot entry; fewer if the ESP runs out of room.
 
+Older entries are removed to make room for new ones. If even removing every older archix entry wouldn't free enough, a switch stops before changing anything: `the ESP at /boot has 38 MiB free (112 MiB more after removing every older archix entry), but this switch's boot entries need about 196 MiB; nothing was changed. Free up space on it, or set boot.entries lower`. Lowering `boot.entries` keeps fewer entries around, so the ESP fills up more slowly.
+
 ### `boot.secure_boot`
 
 | | |

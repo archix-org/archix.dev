@@ -72,11 +72,11 @@ As a backstop, in the `:: writing the boot entry` step, archix checks every entr
 error: writing the boot entry failed; the switch is unfinished, run `archix recover`: Secure Boot is on, but archix-43.efi isn't signed, so the firmware would refuse it; nothing was moved. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)
 ```
 
-By then the packages and files are in place, but the old generation is still current and still the default boot entry. Fix the keys, then finish with `sudo archix recover`, or go back with `sudo archix recover --rollback`. See [Safety](/docs/concepts/safety/#secure-boot).
+The entry is built from the kernel the switch installs, so it can't be checked earlier, and the check before the switch already refuses every case where archix knows it won't sign. By then the packages and files are in place, but the old generation is still current and still the default boot entry. Fix the keys, then finish with `sudo archix recover`, or go back with `sudo archix recover --rollback`. See [Safety](/docs/concepts/safety/#secure-boot).
 
 ### In a chroot
 
-Inside a chroot, such as `arch-chroot` from a live USB, the firmware belongs to the machine running the live system, not to the system you're setting up. So the first check only warns, `warning: this host's Secure Boot is on and the boot entry won't be signed; ignored, since this runs in a chroot`, and the backstop is skipped.
+Inside a chroot, such as `arch-chroot` from a live USB, the firmware belongs to the machine running the live system, not to the system you're setting up. So both checks only warn: `warning: this host's Secure Boot is on and the boot entry won't be signed; ignored, since this runs in a chroot` before the switch, and `warning: not checking the new boot entry's signature against this host's Secure Boot, since this runs in a chroot` when the entry is written.
 
 ## Check the state
 
@@ -98,7 +98,7 @@ Some games' anti-cheat, Easy Anti-Cheat's Linux v2 among them, only runs on a bo
 $ archix secure-boot check --anticheat
   ok  Secure Boot is on
   ok  the firmware isn't in setup mode (keys are enrolled)
-  no  the kernel is signed with a well-known key (archix signs with your own key; Arch has no well-known-signed kernel yet)
+  no  the kernel is signed with a well-known key (archix signs with your own key, and Arch has no well-known-signed kernel)
   ok  kernel lockdown is in integrity mode
   ok  kexec is disabled
   ok  the BPF LSM is active

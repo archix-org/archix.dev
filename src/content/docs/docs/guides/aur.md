@@ -123,7 +123,7 @@ aur = { build_on_host = { "some-driver-dkms" } },
 
 Built packages are cached in `/var/cache/archix/pkg`, keyed by recipe commit and snapshot date. If neither changed, archix reuses the built package instead of building again. Each generation records the sha256 of the file it installed, so rollback puts back that exact file.
 
-When a locked commit can't be built any more, because it's gone from the package's history or the build fails, archix offers the nearest newer version, then the nearest older one, and the lock follows. Set [`missing_versions`](/docs/reference/options/) or pass `--accept-nearest newer|older` to decide without asking. See [Missing versions](/docs/concepts/lockfile/#missing-versions).
+When a locked commit can't be built any more, because it's gone from the package's history or the build fails, archix offers the nearest newer version, then the nearest older one, and the lock follows once the version you accepted has built; if it fails too, `archix.lock` is left unchanged. Set [`missing_versions`](/docs/reference/options/) or pass `--accept-nearest newer|older` to decide without asking. See [Missing versions](/docs/concepts/lockfile/#missing-versions).
 
 ## How installs run
 

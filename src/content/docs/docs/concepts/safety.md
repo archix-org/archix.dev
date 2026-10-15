@@ -17,6 +17,7 @@ The goal is simple: no failure during a switch, including pulling the power cord
 - resolves the lock with pacman itself, so dependencies are consistent, and shows new AUR build recipes for review,
 - offers to adopt packages that are newer than the lock,
 - checks that every managed file can replace what's on disk now, keeping a backup ([below](#managed-files-backups-and-hand-edits)),
+- when archix manages booting, checks that the ESP can hold the new boot entries, and with Secure Boot on, that they'll be signed ([below](#secure-boot)),
 - lists the changes and asks you to confirm,
 - stores every managed file's contents, and downloads files declared with a `url`, checking each against its `sha256`,
 - builds every AUR package in a clean chroot,
@@ -124,7 +125,7 @@ With Secure Boot enforcing, an unsigned boot entry would be refused by the firmw
 error: Secure Boot is on, but this switch's boot entry wouldn't be signed (sbctl has no keys), so the firmware would refuse it; nothing was changed. Run `sudo archix secure-boot setup`, or set boot.secure_boot = true if sbctl already has keys
 ```
 
-As a backstop, in `:: writing the boot entry`, it checks every built entry and the systemd-boot loader for a signature before copying the entry to the ESP. An unsigned one is a hard failure there, ``Secure Boot is on, but archix-43.efi isn't signed, so the firmware would refuse it; nothing was moved. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)``: the previous generation stays current and the default, and `archix recover` finishes or rolls back. Inside a chroot, where the firmware is the host's, the first check only warns and the backstop is skipped. See [Secure Boot](/docs/guides/secure-boot/).
+As a backstop, in `:: writing the boot entry`, it checks every built entry and the systemd-boot loader for a signature before copying the entry to the ESP. An unsigned one is a hard failure there, ``Secure Boot is on, but archix-43.efi isn't signed, so the firmware would refuse it; nothing was moved. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)``: the previous generation stays current and the default, and `archix recover` finishes or rolls back. The entry is built from the kernel the switch installs, so this can't be checked in prepare. Inside a chroot, where the firmware is the host's, both checks only warn. See [Secure Boot](/docs/guides/secure-boot/).
 
 ## Unsafe downgrades
 
@@ -199,7 +200,7 @@ Files archix takes over unchanged are backed up even when a switch has nothing e
 
 `archix init` looks for the `/etc` files you changed: package config files edited since they were installed (it compares them with the checksums in pacman's database), and files nobody owns in well-known directories such as `/etc/systemd/system`, `/etc/sudoers.d`, `/etc/sysctl.d`, `/etc/modprobe.d`, `/etc/udev/rules.d`, `/etc/X11/xorg.conf.d`, `/etc/pacman.d/hooks` and `/etc/polkit-1/rules.d`. It sorts what it finds into three groups:
 
-- **Secrets** are never shown or copied, only counted: `· 3 files that hold secrets stay out of the config and aren't listed`. That covers SSH host keys, NetworkManager connections, wpa_supplicant, iwd, WireGuard, OpenVPN and PPP configs, `/etc/ssl/private`, `/etc/cryptsetup-keys.d`, `krb5.keytab`, `smbpasswd`, `ipsec.secrets`, and any path containing `secret`, `password`, `passwd`, `token`, `credential`, `keyfile`, `.key`, `.pem`, `.p12` or `.pfx`.
+- **Secrets** are never shown or copied, only counted: `· 3 files that hold secrets stay out of the config and aren't listed`. That covers SSH host keys, NetworkManager connections, wpa_supplicant, iwd, WireGuard, OpenVPN and PPP configs, `/etc/ssl/private`, `/etc/cryptsetup-keys.d`, `krb5.keytab`, `smbpasswd`, `ipsec.secrets`, and any path containing `secret`, `password`, `passwd`, `token`, `credential`, `keyfile`, `.key`, `.pem`, `.p12` or `.pfx`. A file also counts as a secret by what's in it: private keys, including PGP private key blocks, GitHub, GitLab, Slack and Anthropic access tokens, AWS secret keys, OAuth refresh tokens, and `psk=` or `password=` lines. The full list is `secret_content` in `src/capture.json`. Files over 1 MiB aren't read, and neither is a directory past its first 200 files.
 - **Worth managing** files are pre-selected: `/etc/fstab`, `/etc/crypttab`, `/etc/mkinitcpio.conf`, `/etc/sudoers`, `/etc/pacman.d/mirrorlist`, `/etc/makepkg.conf`, `/etc/hosts`, `sshd_config`, the systemd, NetworkManager, bluetooth and display manager configs, and everything hand-written in the directories above.
 - **The rest**, mostly files that package install scripts change, such as `/etc/shells`, are off by default.
 

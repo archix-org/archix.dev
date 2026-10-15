@@ -188,6 +188,8 @@ Pick continue if the interruption was something outside archix, like a power cut
 
 A recovery rollback is journaled too. If it gets interrupted in turn, `archix recover` picks it up the same way.
 
+Continue and rollback both finish like a switch. They run the [hooks](/docs/guides/hooks/) of the state they end in, and every `on_change` script of it, since archix can't tell which files the interrupted switch had already rewritten; that's why those scripts must be idempotent. Soft failures are reported as on a switch, ending with `error: generation 43 (snapshot 2026-10-15) is current, but 1 step failed (listed above)` or `error: the rollback finished, but 1 step failed (listed above)`, and a non-zero exit.
+
 ## Interrupted pacman transactions
 
 Power loss in the middle of a pacman transaction is the classic way to break Arch: a stale lock file, half-extracted packages, a local database that disagrees with the disk.

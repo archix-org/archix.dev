@@ -231,10 +231,13 @@ Put back the packages, files, users, groups, services and Flatpak apps of an ear
 $ sudo archix rollback
 downgrade  mesa 1:25.3.1-1 -> 1:25.3.0-1
 downgrade  vulkan-radeon 1:25.3.1-1 -> 1:25.3.0-1
+run hooks  tailscale
 roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n]
 :: installing packages
 ...
 :: making the new generation current
+:: running activation hooks
+   hook tailscale
 rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
@@ -273,14 +276,16 @@ The flags skip the question. Only one can be given.
 
 | Flag | Description |
 | --- | --- |
-| `--continue` | Finish the interrupted switch by rerunning the steps that hadn't completed, then run the hooks of the generation it switched to. |
-| `--rollback` | Return to the packages, files, users and services from before the interrupted switch, and run that generation's hooks. |
+| `--continue` | Finish the interrupted switch by rerunning the steps that hadn't completed, then run the hooks and every `on_change` script of the generation it switched to. |
+| `--rollback` | Return to the packages, files, users and services from before the interrupted switch, then run the hooks and every `on_change` script of that state. |
 | `--abandon` | Close the journal without changing anything, after showing what state the system is in: the differences from the switch's target, and `pacman -Qk` on the packages it touched. |
 
 ```console
 $ sudo archix recover --continue
 finished the interrupted switch to generation 43 (snapshot 2026-10-15)
 ```
+
+Both `--continue` and `--rollback` end like a switch: they run the [hooks](/docs/guides/hooks/) of the state they finish in, and every `on_change` script of it, because archix can't tell which files the interrupted switch had already rewritten. That's one reason `on_change` scripts must be idempotent. Soft failures, such as a service that doesn't start or a failed hook, are listed as `failed: ...` lines, and `recover` exits non-zero with `error: generation 43 (snapshot 2026-10-15) is current, but 1 step failed (listed above)`, or `error: the rollback finished, but 1 step failed (listed above)`.
 
 ### `rescue`
 

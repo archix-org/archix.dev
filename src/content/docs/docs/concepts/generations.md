@@ -93,11 +93,13 @@ Flatpak commits come from their remote, and the network isn't up that early in b
 archix: Flatpak apps aren't pinned at boot; run `sudo archix rollback 41` once you're online
 ```
 
-[Hooks](/docs/guides/hooks/#when-they-run) are skipped too, since nobody is logged in yet:
+[Hooks](/docs/guides/hooks/#when-they-run) and `on_change` scripts are skipped too, since nobody is logged in yet:
 
 ```
-archix: hooks don't run at boot; run `sudo archix rollback 41` once you're online
+archix: hooks don't run at boot; the next switch or `sudo archix rollback 41` runs them once you're online
 ```
+
+The `on_change` scripts it skipped are recorded in `/var/lib/archix/pending-on-change`, and the next switch, rollback or recovery runs them.
 
 Naming the current generation puts back whatever still differs, Flatpak apps included, and runs its hooks.
 

@@ -75,19 +75,19 @@ run hooks  tailscale
 
 Every rollback runs the hooks of the generation it goes back to, not the ones of the generation it leaves, and its preview has the same `run hooks` line. That includes a rollback with nothing to put back, which prints `generation 41 (snapshot 2026-10-09) is current; no package changes were needed` and then runs them. So rolling back to the current generation, `sudo archix rollback 45` with 45 current, reruns its hooks.
 
-`archix recover` runs hooks too, since the interrupted switch never got to them. `--continue` runs the hooks of the generation it finishes the switch to, and `--rollback` the hooks of the state from before the switch.
+`archix recover` runs hooks too, since the interrupted switch never got to them. `--continue` runs the hooks of the generation it finishes the switch to, and `--rollback` the hooks of the state from before the switch. archix can't tell which files the interrupted switch had already rewritten, so a recovery runs every `on_change` script of the state it finishes in, not only those of files that changed.
 
-A rollback from the [boot menu](/docs/concepts/generations/#rolling-back-from-the-boot-menu) happens early in boot, before the network is up or anyone has logged in, so it skips hooks, the way it skips pinning Flatpak apps, and says so:
+A rollback from the [boot menu](/docs/concepts/generations/#rolling-back-from-the-boot-menu) happens early in boot, before the network is up or anyone has logged in, so it skips hooks and `on_change` scripts, the way it skips pinning Flatpak apps, and says so:
 
 ```
-archix: hooks don't run at boot; run `sudo archix rollback 41` once you're online
+archix: hooks don't run at boot; the next switch or `sudo archix rollback 41` runs them once you're online
 ```
 
-Once you're logged in, that command finds nothing else to put back, so it only runs generation 41's hooks, and pins its Flatpak apps.
+The `on_change` scripts it was due to run aren't lost. archix records their files in `/var/lib/archix/pending-on-change`, and the next switch, rollback or recovery runs them together with its own, before the hooks. `sudo archix rollback 41` once you're logged in runs generation 41's hooks, those `on_change` scripts, and pins its Flatpak apps.
 
 ## Make them idempotent
 
-Because hooks run on every switch, a hook has to be safe to run again and again. Write it as "make it so", not "do this once":
+Because hooks run on every switch, a hook has to be safe to run again and again. The same goes for `on_change` scripts: they usually run only when their file changed, but a [recovery](#when-they-run) runs all of them. Write it as "make it so", not "do this once":
 
 | Instead of | Write |
 | --- | --- |
@@ -185,7 +185,7 @@ When `alice` is logged in, her user manager picks up the new units and restarts 
 
 ## `on_change`
 
-`on_change` belongs to one file. It runs only when a switch or rollback changed that file:
+`on_change` belongs to one file. It runs when a switch or rollback changed that file:
 
 ```lua title="lua/hosts/server/init.lua"
 return {
@@ -223,6 +223,13 @@ waybar and kitty reload their config on those signals. `pkill` exits non-zero wh
 
 - **Its entry changed.** The file's entry in the new generation differs from the one in the generation the system is leaving: its contents, mode, owner and group, or its link target. That covers the first switch that manages the file, a new `text`, an edited `source` or a new `url`, and a rollback to a generation where the file was different. The script that runs is the one from the generation you end up in.
 - **archix rewrote it on disk.** The entry is the same, but the file on disk didn't match it, so the switch or rollback wrote it again: a file [edited outside archix](/docs/concepts/safety/#managed-files-backups-and-hand-edits) that it put back, or a file someone deleted that it recreated.
+
+Two more cases run it:
+
+- **After a boot-menu rollback.** That rollback runs no scripts, but records the files whose `on_change` was due. The next switch, rollback or recovery runs those scripts along with its own.
+- **On `archix recover`.** `--continue` and `--rollback` can't know which files the interrupted switch had already rewritten, so they run every `on_change` script of the state they finish in.
+
+So write `on_change` scripts to be idempotent, like hooks. `systemctl try-restart` and reload signals are.
 
 It doesn't run:
 

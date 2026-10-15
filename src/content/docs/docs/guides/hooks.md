@@ -83,7 +83,7 @@ A rollback from the [boot menu](/docs/concepts/generations/#rolling-back-from-th
 archix: hooks don't run at boot; the next switch or `sudo archix rollback 41` runs them once you're online
 ```
 
-The `on_change` scripts it was due to run aren't lost. archix records their files in `/var/lib/archix/pending-on-change`, and the next switch, rollback or recovery runs them together with its own, before the hooks. `sudo archix rollback 41` once you're logged in runs generation 41's hooks, those `on_change` scripts, and pins its Flatpak apps.
+The `on_change` scripts it was due to run aren't lost. archix records each script, exactly as that generation had it, in `/var/lib/archix/pending-on-change`, and the next switch, rollback or recovery runs them together with its own, before the hooks, even if its own config no longer has an `on_change` for that file. When that switch is due to run an `on_change` for the same file itself, only its own, newer script runs, once. After several boot rollbacks in a row, the latest one's script is kept for each file. `sudo archix rollback 41` once you're logged in runs generation 41's hooks, those `on_change` scripts, and pins its Flatpak apps.
 
 ## Make them idempotent
 

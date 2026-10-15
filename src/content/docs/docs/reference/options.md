@@ -337,12 +337,18 @@ Files archix writes, keyed by absolute path; give one of `text`, `source`, `link
 | `owner` | `str` | `"root"` | |
 | `group` | `str` | `"root"` | |
 | `on_change` | `null or lines` | `null` | A bash script run as root after a switch or rollback that changed this file, before the [hooks](#hooks). |
+| `mutable` | `null or bool` | `null` | Write the file read-only (`false`) or writable (`true`); by default as [`mutable_files`](#mutable_files) says. |
+| `merge` | `null or submodule` | `null` | Set only these keys in a file the app also writes, keeping the rest of it, like plasma-manager. Leaving the config leaves the keys as they are. `format` is one of `"ini"`, `"kconfig"` or `"json"`, *required*; `values` (`attrs of any`, default `{}`) holds the keys: sections (kconfig groups nest) of keys, or a JSON object deep-merged into the file. |
 
-Give exactly one of `text`, `source`, `link` and `url`. `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
+Give exactly one of `text`, `source`, `link`, `url` and `merge`; otherwise it's an error, `files.<path>: give exactly one of text, source, link, url or merge`. `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
 
 `on_change` runs when the switch or rollback changed the file: when its entry differs from the one in the generation the system is leaving (the first switch that manages it, new contents, mode, owner, group or link target, a rollback to a generation where it was different), or when the file on disk didn't match and archix wrote it again, such as a hand-edited file put back or a deleted one recreated. It doesn't run when only the script changes, or when the file leaves the config. A boot-menu rollback skips it and records the file in `/var/lib/archix/pending-on-change`, so the next switch, rollback or recovery runs it, and `archix recover` runs every `on_change` script, since it can't tell which files the interrupted switch rewrote. Make the script idempotent. A failing script is a soft failure, listed as `failed: on_change of <path>: ...`. See [Activation hooks](/docs/guides/hooks/#on_change).
 
 A `url` needs a `sha256` of 64 hex digits; without one, `diff` and `switch` stop with `files.<path>: url needs sha256`. The hash is what's locked: `diff` compares the file on disk against it without downloading anything, and `switch` downloads the file after you confirm, before it changes anything. A download whose hash differs stops the switch: `<url> has sha256 <actual>, but the config says <sha256>`. The contents go into the same store as every other managed file, so rollback restores them even after the URL is gone.
+
+With `mutable = false`, or [`mutable_files = false`](#mutable_files), the file is written without its write bits, so `"0644"` becomes `0444` and `"0755"` becomes `0555`. Links aren't affected.
+
+`merge` sets keys in a file archix doesn't own, such as one an app writes too: archix edits only the declared keys and leaves the app's own. The app's keys never show up in `archix diff`; a declared key that changed does, and the next switch sets it back. A new file gets `0644` and `owner`/`group`; an existing one keeps its mode and owner. When the entry leaves the config, the file keeps its keys and is neither restored nor deleted. See [Setting single keys](/docs/guides/dotfiles-and-apps/#setting-single-keys).
 
 archix doesn't write under `/usr` (except `/usr/local`), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`. Files in a home directory go in [`home.files`](#homefiles).
 
@@ -353,12 +359,29 @@ files = {
   ["/etc/X11/xorg.conf.d/30-touchpad.conf"] = { source = "files/30-touchpad.conf" },
   ["/etc/resolv.conf"] = { link = "/run/systemd/resolve/stub-resolv.conf" },
   ["/etc/foo.conf"] = { text = "port = 8080", on_change = "systemctl try-restart foo" },
+  ["/etc/xdg/kdeglobals"] = { merge = { format = "kconfig", values = { General = { ColorScheme = "BreezeDark" } } } },
   ["/usr/local/bin/hello"] = archix.fetchurl {
     url = "https://downloads.example.org/hello/1.2.0/hello-x86_64",
     sha256 = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
     mode = "0755",
   },
 },
+```
+
+### `mutable_files`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `true` |
+| Declared in | `<archix>/system.lua` |
+
+Whether files archix writes stay writable. false writes them read-only like the Nix store, restores them on every switch, and marks merged kconfig keys [$i]; each file's mutable overrides it.
+
+With `false`, files from `text`, `source` and `url` in [`files`](#files) and [`home.files`](#homefiles) lose their write bits, `0644` becoming `0444`. A file's own `mutable` wins either way. Links and live links aren't affected: a live link points into your config repo, which stays writable. Merged ini and JSON files stay writable for their app, since those keys can't be locked; merged kconfig keys get KDE's lock marker, `ColorScheme[$i]=BreezeDark`, so KDE won't change them. It's called `mutable_files` because `files` is already the option for system files. See [Read-only files](/docs/guides/dotfiles-and-apps/#read-only-files).
+
+```lua
+mutable_files = false,
 ```
 
 ### `units`
@@ -696,7 +719,7 @@ Microcode images on the ESP loaded before the initramfs, such as `amd-ucode.img`
 
 How many of the newest generations keep a boot entry; fewer if the ESP runs out of room.
 
-Older entries are removed to make room for new ones. If even removing every older archix entry wouldn't free enough, a switch stops before changing anything: `the ESP at /boot has 38 MiB free (112 MiB more after removing every older archix entry), but this switch's boot entries need about 196 MiB; nothing was changed. Free up space on it, or set boot.entries lower`. Lowering `boot.entries` keeps fewer entries around, so the ESP fills up more slowly.
+Older entries are removed to make room for new ones, the current generation's included, oldest first. If even removing every older archix entry wouldn't free enough, a switch stops before changing anything: `the ESP at /boot has 38 MiB free (112 MiB more after removing every older archix entry), but this switch's boot entries need about 196 MiB; nothing was changed. Free up space on it, or set boot.entries lower`. Lowering `boot.entries` keeps fewer entries around, so the ESP fills up more slowly.
 
 ### `boot.secure_boot`
 
@@ -887,8 +910,12 @@ Files in the user's home, keyed by path relative to it (a leading `~/` is allowe
 | `sha256` | `null or str` | `null` | The sha256 the download from `url` must have; `archix prefetch <url>` prints it. |
 | `executable` | `bool` | `false` | Write the file with mode `0755` instead of `0644`. |
 | `on_change` | `null or lines` | `null` | A bash script run as `home.user` after a switch or rollback that changed this file, before the [hooks](#hooks). |
+| `mutable` | `null or bool` | `null` | Write the file read-only (`false`) or writable (`true`); by default as [`mutable_files`](#mutable_files) says. |
+| `merge` | `null or submodule` | `null` | Set only these keys in a file the app also writes, keeping the rest of it, like plasma-manager. Leaving the config leaves the keys as they are. `format` is one of `"ini"`, `"kconfig"` or `"json"`, *required*; `values` (`attrs of any`, default `{}`) holds the keys: sections (kconfig groups nest) of keys, or a JSON object deep-merged into the file. |
 
-Give exactly one of `text`, `source`, `link` and `url`. A `source` is copied, and a directory `source` needs `live = true`. `live` only works with `source`; with `text`, `link` or `url` it's an error: `home.files.<path>: live = true needs source, the file in the config to link to`. A `url` works as it does in [`files`](#files): the hash is locked, and the download happens at switch. Paths can't leave the home or the config directory.
+Give exactly one of `text`, `source`, `link`, `url` and `merge`. A `source` is copied, and a directory `source` needs `live = true`. `live` only works with `source`; with `text`, `link` or `url` it's an error: `home.files.<path>: live = true needs source, the file in the config to link to`. A `url` works as it does in [`files`](#files): the hash is locked, and the download happens at switch. Paths can't leave the home or the config directory.
+
+`mutable` and `merge` work as in [`files`](#files): a read-only file is written `0444`, or `0555` with `executable`, and a merged file is owned by `home.user`. A `live` link stays writable, since it points into your config.
 
 When a path is a directory archix didn't manage before, such as an existing `~/.config/nvim` you now link into the config, it's moved to `/var/lib/archix/backups` and comes back when the entry leaves the config. See [Dotfiles and apps](/docs/guides/dotfiles-and-apps/).
 
@@ -901,6 +928,7 @@ home = {
     [".config/nvim"] = { source = "home/.config/nvim", live = true },
     ["bin/hello"] = { text = "#!/bin/sh\necho hi\n", executable = true },
     [".config/user-dirs.dirs"] = { source = "home/user-dirs.dirs" },
+    [".config/kdeglobals"] = { merge = { format = "kconfig", values = { General = { ColorScheme = "BreezeDark" } } } },
     [".config/waybar/config.jsonc"] = { source = "home/waybar/config.jsonc", on_change = "pkill -SIGUSR2 -x waybar || true" },
     [".local/share/fonts/Inter.ttf"] = archix.fetchurl {
       url = "https://downloads.example.org/fonts/Inter-4.1.ttf",

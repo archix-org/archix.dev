@@ -36,6 +36,10 @@ You already know the ideas behind archix: a declarative config, a lockfile, gene
 | `networking.hostName` per host | `archix.hostname`, from the machine |
 | Home Manager `programs.*` | `programs.*`, ported from Home Manager |
 | `home.file` | `home.files` |
+| `home.file` being read-only in the Nix store | `mutable_files = false` |
+| `config.lib.file.mkOutOfStoreSymlink` | `home.files.<path> = { source = ..., live = true }` |
+| plasma-manager's `programs.plasma.configFile` | `home.files.<path>.merge` with `format = "kconfig"` |
+| plasma-manager's `immutable = true` | `mutable_files = false`, which writes merged kconfig keys as `Key[$i]` |
 | `environment.etc` | `files` |
 | `systemd.services`, `systemd.user.services` | `units`, `services`, `home.systemd` |
 | `users.users` | `users` |
@@ -80,6 +84,10 @@ end,
 There's no `mkIf`, `mkMerge`, `mkBefore` or `mkAfter`. Use plain `if`, return a table, and rely on definition order: a module's own config, then its imports in order. Lists concatenate in that order. See [Configuration](/docs/concepts/configuration/#function-config-and-fixpoint-rounds).
 
 Evaluation is still pure. The sandbox has no `io` or `os`, `pairs` iterates in sorted order, and the only escape hatches are `archix.hostname` and `archix.read_file`.
+
+### Writable files by default
+
+Home Manager's files are symlinks into the read-only Nix store. archix writes real files, writable by default, so apps that save their settings keep working. Set [`mutable_files = false`](/docs/reference/options/#mutable_files) to get the NixOS behaviour: files lose their write bits, and every switch puts them back. For a file you want to keep editing in place, like `mkOutOfStoreSymlink`, use a [live link](/docs/guides/dotfiles-and-apps/#live-links-for-app-written-configs). For KDE and other apps that write their own config, [`merge`](/docs/guides/dotfiles-and-apps/#setting-single-keys) sets single keys the way plasma-manager does, and with `mutable_files = false` it locks kconfig keys with `[$i]`, like plasma-manager's `immutable`.
 
 ### Mutable passwords
 

@@ -51,7 +51,7 @@ error: `archix install` changes the system, so it needs root; run it with sudo: 
 
 Any other error that comes from a missing permission gets the same hint, such as `archix lock` on a root-owned `/etc/archix`: `hint: that needs root; run it with sudo: sudo archix lock`. Reading doesn't need root: `archix <terms>`, `search`, `diff`, `status`, `eval`, `options`, `generations` and `secure-boot check` work as your user, and so do `lock` and `update` on a config you own. `archix <terms>` asks sudo for the install itself.
 
-Every command except `init`, `rollback`, `recover`, `gc`, `generations`, `prefetch`, `rescue` and `secure-boot` reads the config. With no `init.lua` in the config directory, they stop with:
+Every command except `init`, `options`, `rollback`, `recover`, `gc`, `generations`, `prefetch`, `rescue` and `secure-boot` reads the config. `options` works without one, listing every option against an empty config. With no `init.lua` in the config directory, the others stop with:
 
 ```console
 error: there's no archix config at /etc/archix yet; run `sudo archix init` to write one that describes this machine, or point --config at yours
@@ -79,7 +79,7 @@ $ ARCHIX_CONFIG=~/archix archix eval
 
 ### `init`
 
-Write a config that describes this machine as it is, and a lock pinned to exactly the package versions that are installed. Needs root. A config written into a directory you own, such as `sudo archix init` with `~/archix-config` as the location, ends up owned by you, the whole tree including the `.git` init creates, so you can edit and commit without `sudo`.
+Write a config that describes this machine as it is, and a lock pinned to exactly the package versions that are installed. Needs root. A config written inside your home, such as `sudo archix init` with `~/archix-config` as the location, ends up owned by you, the whole tree including the `.git` init creates, so you can edit and commit without `sudo`. Exactly: init hands the tree to the owner of the config directory's parent, when that isn't root. The Config step also has `Write files read-only, like the Nix store (apps can't change them; a switch puts them back)`, off by default and with `--defaults`; on, init writes `mutable_files = false` (see [Read-only files](/docs/guides/dotfiles-and-apps/#read-only-files)). Picked dotfiles are imported as live links, or as copies for files their app replaces on save; see [Bringing your existing dotfiles in](/docs/guides/dotfiles-and-apps/#bringing-your-existing-dotfiles-in).
 
 ```console
 $ sudo archix init

@@ -187,6 +187,8 @@ Backups and restores are renames. When the backup and the original are on differ
   ```
 
 - **A file archix created** is deleted when it leaves your config, but only if it still has the contents archix wrote.
+- **A read-only file**, with [`mutable_files = false`](/docs/reference/options/#mutable_files) or `mutable = false`, is written without write bits, and like every managed file, a switch puts its contents and mode back if they changed.
+- **A merged file**, declared with [`merge`](/docs/guides/dotfiles-and-apps/#setting-single-keys), is never backed up, saved as edited, restored or deleted. archix only sets its declared keys, and when the entry leaves the config, the file keeps them.
 
 archix only replaces a directory it has never managed, and only once. It refuses when an earlier backup of that path still exists, `/home/me/.config/nvim is a directory and an earlier backup of it exists; move one of them away`, and when archix managed a file at that path in the current generation: `/home/me/.config/nvim exists and is not a file or symlink; archix won't replace it`. Both `switch` and `rollback` check this before they change anything, so a refusal is a plain error. Move the directory or the old backup aside and run the command again.
 

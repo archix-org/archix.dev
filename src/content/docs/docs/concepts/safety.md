@@ -15,6 +15,7 @@ The goal is simple: no failure during a switch, including pulling the power cord
 
 - evaluates the config and renders every managed file,
 - resolves the lock with pacman itself, so dependencies are consistent, and shows new AUR build recipes for review,
+- checks that no locked package is built for a newer x86-64 level than this CPU runs, which happens when another machine locked the host; such a lock is resolved again for this CPU, and a switch refuses one that still has them ([CPU levels](/docs/guides/third-party-repos/#cpu-levels)),
 - offers to adopt packages that are newer than the lock,
 - checks that every managed file can replace what's on disk now, keeping a backup ([below](#managed-files-backups-and-hand-edits)),
 - when archix manages booting, checks that the ESP can hold the new boot entries, and with Secure Boot on, that they'll be signed ([below](#secure-boot)),
@@ -36,7 +37,7 @@ error: pacman would refuse these packages, which ship the same files; nothing wa
   usr/lib/udev/rules.d/70-wooting.rules is in both wooting-udev and wootility
 ```
 
-Packages that are leaving don't count, and that includes the ones pacman swaps out. An incoming package's `conflicts` and `replaces` name packages that go when it arrives, and an installed package whose `conflicts` or `replaces` names an incoming one goes too, as when CachyOS's `zlib-ng-compat` and Arch's `zlib` replace each other. `rollback` runs the same check.
+Packages that are leaving don't count, and that includes the ones pacman swaps out. An incoming package's `conflicts` and `replaces` name packages that go when it arrives, and an installed package whose `conflicts` or `replaces` names an incoming one goes too, as when CachyOS's `zlib-ng-compat` and Arch's `zlib` replace each other. `rollback` runs the same check. A rollback from the boot menu doesn't: it goes back to a generation that was installed once already, and at boot it's better to let pacman decide than to refuse.
 
 ### One archix at a time
 

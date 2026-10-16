@@ -499,7 +499,7 @@ resolving 87 declared packages against the 2026-10-09 snapshot
 wrote /etc/archix/archix.lock
 ```
 
-If the lock already matches, it prints `archix.lock is up to date for desktop (snapshot 2026-10-09)` and changes nothing. New AUR build recipes are shown for review before they're locked.
+If the lock already matches, it prints `archix.lock is up to date for desktop (snapshot 2026-10-09)` and changes nothing, unless it has packages built for a newer x86-64 level than this CPU supports, as when another machine locked the host: then `lock` resolves it again for this machine, config change or not, and `switch` does the same before applying. A switch that still finds such packages stops with ``archix.lock for laptop has packages built for a newer CPU level than this machine runs, so it was locked elsewhere: zlib (x86_64_v4), bash (x86_64_v4). Run `archix lock` on this machine; nothing was changed``; see [CPU levels](/docs/guides/third-party-repos/#cpu-levels). New AUR build recipes are shown for review before they're locked.
 
 Flatpak apps keep their locked commits. A newly declared app is locked to its remote's current commit, `flatpak org.mozilla.firefox at 0bb3a9e40c1f`. `lock` never adds Flatpak remotes, so if flatpak isn't installed yet, or the app's remote hasn't been added, the app is locked by the next switch instead, and `lock` says so: ``note: org.mozilla.firefox: flatpak isn't installed yet; the next `archix switch` locks it``.
 

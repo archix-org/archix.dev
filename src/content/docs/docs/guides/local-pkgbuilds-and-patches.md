@@ -71,7 +71,7 @@ A recipe beats the repos only for a name you declare that it builds under exactl
 
 A recipe that only `provides` a name doesn't take it from the repos. If the repos have that name, they win; to get the recipe's package, declare its real package name instead.
 
-Everything else, dependencies included, resolves in the same order as for AUR packages: the repos first, official and third-party, then your recipes in `pkgbuilds/`, by name or by what they `provides`, then the AUR. So a recipe can supply a dependency the repos don't have, for another recipe or for an AUR package. A name none of them have stops `lock`, `diff` and `switch`:
+Everything else, dependencies included, resolves in the same order as for AUR packages: the repos first, official and third-party, then your recipes in `pkgbuilds/`, by name or by what they `provides`, then the AUR. Version constraints count the same way for recipes as for AUR packages: a recipe meets `foo>=2.0` only if its version, or a versioned `provides=('foo=2.1')`, does, a wanted version without a pkgrel compares the pkgver alone, and an unversioned provide meets only an unversioned dependency. So a recipe can supply a dependency the repos don't have, for another recipe or for an AUR package. A name none of them have stops `lock`, `diff` and `switch`:
 
 ```console
 error: `backup-scriptz` is in none of the configured repos, pkgbuilds/ or the AUR

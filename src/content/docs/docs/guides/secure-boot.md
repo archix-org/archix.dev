@@ -78,6 +78,14 @@ The entry is built from the kernel the switch installs, so it can't be checked e
 
 Inside a chroot, such as `arch-chroot` from a live USB, the firmware belongs to the machine running the live system, not to the system you're setting up. So both checks only warn: `warning: this host's Secure Boot is on and the boot entry won't be signed; ignored, since this runs in a chroot` before the switch, and `warning: not checking the new boot entry's signature against this host's Secure Boot, since this runs in a chroot` when the entry is written.
 
+### Other boot entries
+
+[`boot.extra_entries`](/docs/reference/options/#bootextra_entries) adds systemd-boot entries archix doesn't build, such as memtest86+. archix writes the entry file but doesn't sign what it starts, and the firmware refuses an unsigned image like any other. Sign it with `sbctl`; `-s` also adds it to the files `sbctl` re-signs:
+
+```console
+$ sudo sbctl sign -s /boot/memtest86+/memtest.efi
+```
+
 ## Check the state
 
 `archix secure-boot check` reports on the boot you're running, one line per requirement, and exits non-zero if any isn't met. It doesn't need root or a config.

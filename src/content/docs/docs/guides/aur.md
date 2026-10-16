@@ -69,6 +69,18 @@ zen-browser-bin = { version = "1.16.3b-1", repo = "aur", file = "zen-browser-bin
 
 Dependencies the repos can satisfy, versioned ones included, are resolved from the repos at the lock's snapshot. The rest come from the AUR. An AUR package needed only to build another one is locked with `build_only = true`: it's built, and never installed.
 
+AUR dependencies honour version constraints, `=`, `>=`, `<=`, `>` and `<`, the way pacman does. A package of that name, or one that provides it, only counts if its version meets the constraint. A wanted version without a pkgrel, such as `java-environment>=21`, compares against the pkgver alone, and a provide without a version, such as plain `java-environment`, only meets a dependency without one. A dependency nothing meets stops `lock`, `diff` and `switch` before any build: `` `java-environment=26` is in none of the configured repos, pkgbuilds/ or the AUR ``.
+
+### VCS packages
+
+A VCS package, usually named `-git`, sets its own version while it builds: its `pkgver()` asks the source repository. The locked version comes from `.SRCINFO` and is usually older. archix installs the package at the version the build gave it, and records that version in `archix.lock` and the generation:
+
+```console
+recorded the versions these packages gave themselves while building: archix-git 0.1.0.r35.g76a7920-1
+```
+
+The commit in the lock is still the recipe's, so the sources a VCS package builds from aren't pinned: a later rebuild of the same commit can produce a newer version. See [Limitations](/docs/concepts/limitations/).
+
 `archix lock` and `archix switch` keep the locked commits. `archix update` and `archix -Syu` move AUR packages to the newest commit. See [The lockfile](/docs/concepts/lockfile/#aur-packages-commits).
 
 ## Build recipe review

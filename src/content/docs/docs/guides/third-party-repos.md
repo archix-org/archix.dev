@@ -35,7 +35,7 @@ return {
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `name` | | The repo's name, as in `pacman.conf`. It can't clash with an official repo. |
-| `servers` | | Server URLs, tried in order. `$repo` and `$arch` are expanded as pacman does. |
+| `servers` | | Server URLs, tried in order. `$repo` and `$arch` are expanded as pacman does; `$arch_v3` and `$arch_v4` become `x86_64_v3` and `x86_64_v4`. |
 | `keys` | `{}` | Fingerprints of the repo's signing keys. archix imports and locally signs any that pacman's keyring doesn't have yet, at switch. |
 | `keyserver` | `"hkps://keyserver.ubuntu.com"` | Where those keys are fetched from. |
 | `sig_level` | `"Required DatabaseOptional"` | The repo's `SigLevel`. |
@@ -48,6 +48,12 @@ You rarely write the declaration yourself. `archix init` imports every third-par
 `init` doesn't know which keys belong to which repo, so their signing keys stay in pacman's keyring, where they already are, and the declaration has no `keys`. That works on this machine. List the fingerprints under `keys` if you want archix to import them on other machines too.
 
 The official repos are a separate, simpler option: [`repos`](/docs/reference/options/) picks which of `core`, `extra`, `multilib` and the testing repos you use. Those are always locked against the Arch Linux Archive, on CachyOS too. Repos resolve in `pacman.conf` order: the official ones at the lock's snapshot date, third-party ones at their live state.
+
+### CPU levels
+
+CachyOS builds its packages for x86-64 microarchitecture levels, and labels them `x86_64_v3` or `x86_64_v4` instead of `x86_64`. When archix resolves, it accepts `x86_64` plus every level your CPU supports, as reported by `/lib/ld-linux-x86-64.so.2 --help`, so those repos resolve, and a CPU without v4 never gets v4 packages. Server URLs may use `$arch_v3` or `$arch_v4`, as CachyOS's mirrorlists do: `$arch` is replaced by `x86_64`, so they become `x86_64_v3` and `x86_64_v4`.
+
+The levels come from the CPU of the machine that resolves the lock, not the host it's for, so lock a host on itself, or on a machine with the same CPU level.
 
 ## Three kinds of repo, three ways to lock
 
@@ -115,4 +121,5 @@ The setting lives in your config, so it applies to every machine that uses the c
 - **Add `keys` before you use the config on a second machine.** On the first one, the keys are already in pacman's keyring.
 - **Switch the second machine soon after locking.** Third-party versions are most likely to still exist right after the lock was made. The longer you wait, the more packages hit the fallback chain.
 - **Keep the default prompt at first.** Watching what falls back where tells you how much of your system depends on CachyOS-only builds.
+- **Expect conflicting packages to swap.** CachyOS replaces some core packages with its own, such as `zlib-ng-compat` for `zlib`, which declares `conflicts=zlib`. Before anything changes, a switch checks that no two packages ship the same file, and it counts a package another one conflicts with or replaces as leaving, in either direction, the way pacman swaps them. So moving between `zlib` and `zlib-ng-compat` works, and a real clash stops the switch with nothing changed; see [Safety](/docs/concepts/safety/#prepare-then-apply).
 - **Commit the lock after a fallback.** The chosen versions are written back, and committing them saves your other machines from the same question.

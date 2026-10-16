@@ -97,7 +97,7 @@ nodejs-lts-iron = { version = "20.19.5-1", repo = "aur", file = "nodejs-lts-iron
 zen-browser-bin = { version = "1.16.3b-1", repo = "aur", file = "zen-browser-bin-1.16.3b-1-x86_64.pkg.tar.zst", base = "zen-browser-bin", commit = "cd6266c6847e61c71facdd7dbf869b5cf64359be", explicit = true }
 ```
 
-`version` comes from that commit's `.SRCINFO`. There's no `sha256`: AUR builds aren't bit-for-bit reproducible, so the commit is what's locked. Each generation records the sha256 of the file it actually built, so rollback reuses that exact file.
+`version` comes from that commit's `.SRCINFO`, except for a VCS package such as a `-git` one, which sets its own version while building: the switch then writes the version the build produced into the lock and the generation, and says `recorded the versions these packages gave themselves while building: ...`. There's no `sha256`: AUR builds aren't bit-for-bit reproducible, so the commit is what's locked. Each generation records the sha256 of the file it actually built, so rollback reuses that exact file.
 
 Dependencies the repos can satisfy are resolved from the repos; the rest come from the AUR. An AUR package needed only to build another one is `build_only`. Every recipe is shown for review before it enters the lock. See [The AUR](/docs/guides/aur/).
 

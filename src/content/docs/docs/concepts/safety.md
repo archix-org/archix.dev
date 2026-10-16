@@ -5,7 +5,7 @@ sidebar:
   order: 5
 ---
 
-The goal is simple: no failure during a switch, including pulling the power cord halfway through, should ever need a live USB. This page explains how archix gets there.
+The goal is simple: no failure during a switch, including pulling the power cord halfway through, should ever need a live USB. This page explains how archix gets there. [Limitations and failure modes](/docs/concepts/limitations/) covers what it doesn't guarantee.
 
 ## Prepare, then apply
 
@@ -22,9 +22,31 @@ The goal is simple: no failure during a switch, including pulling the power cord
 - lists the changes and asks you to confirm,
 - stores every managed file's contents, and downloads files declared with a `url`, checking each against its `sha256`,
 - builds every AUR package in a clean chroot,
-- downloads every package and checks it against the lock.
+- downloads every package and checks it against the lock,
+- checks that no two packages ship the same file ([below](#packages-that-ship-the-same-file)).
 
 If anything fails here, a typo, a network error, an AUR build that won't compile, a declined prompt, archix stops and the packages, files and services are exactly as they were. Most problems surface in this phase.
+
+### Packages that ship the same file
+
+pacman only finds out that two packages own the same file once it's installing them, halfway through a switch. archix checks first. Once every package is downloaded or built, it reads each incoming package's file list and compares it with the other incoming packages and with the installed packages the switch keeps:
+
+```console
+error: pacman would refuse these packages, which ship the same files; nothing was changed. Drop one of each pair from the config:
+  usr/lib/udev/rules.d/70-wooting.rules is in both wooting-udev and wootility
+```
+
+Packages that are leaving don't count, and that includes the ones pacman swaps out. An incoming package's `conflicts` and `replaces` name packages that go when it arrives, and an installed package whose `conflicts` or `replaces` names an incoming one goes too, as when CachyOS's `zlib-ng-compat` and Arch's `zlib` replace each other. `rollback` runs the same check.
+
+### One archix at a time
+
+Only one archix changes the system at a time. `switch`, `install`, `remove`, `upgrade` and bare `archix`, `rollback`, `recover`, `gc`, `init`, `secure-boot setup` and the boot-time check take an exclusive lock on `/var/lib/archix/running`, and a second one stops at once:
+
+```console
+error: another archix is already running (pid 4242, `archix switch`); wait for it to finish
+```
+
+Commands that only read or write the config, `status`, `diff`, `search`, `eval`, `options`, `lock` and `update`, don't take it.
 
 Packages are downloaded to `/var/cache/archix/pkg`, and every file is checked against the `sha256` in the lock before it's used. Files already in pacman's own cache are reused. A file that doesn't match its checksum stops the switch here. The same goes for files declared with [`archix.fetchurl`](/docs/reference/lua-api/#archixfetchurl):
 
@@ -188,6 +210,7 @@ Backups and restores are renames. When the backup and the original are on differ
   ```
 
 - **A file archix created** is deleted when it leaves your config, but only if it still has the contents archix wrote.
+- **A managed symlink over a mount point**, such as the `/etc/resolv.conf` Docker and `arch-chroot` bind-mount, can't be replaced, so archix leaves it and warns, `warning: /etc/resolv.conf is mounted over here (a container or arch-chroot does that), so it's left alone; the next switch outside replaces it`. Files with contents are still written through the mount.
 - **A read-only file**, with [`mutable_files = false`](/docs/reference/options/#mutable_files) or `mutable = false`, is written without write bits, and like every managed file, a switch puts its contents and mode back if they changed.
 - **A merged file**, declared with [`merge`](/docs/guides/dotfiles-and-apps/#setting-single-keys), is never backed up, saved as edited, restored or deleted. archix only sets its declared keys, and when the entry leaves the config, the file keeps them.
 
@@ -307,11 +330,13 @@ For that, when archix manages booting, the initramfs carries a static archix, an
   Arch Linux (archix rescue, generation 42)
 ```
 
-Booting it adds `archix.rescue` to the kernel command line. Before switching to the real root, the initramfs runs `archix rescue`, which unpacks the current generation's core packages straight from the cache, without pacman: glibc, pacman and its libraries, systemd, bash, coreutils, the kernel, archix itself and the rest of the core set. It keeps config files you edited, saving the package's version as `.pacnew`, and rewrites the packages' entries in pacman's database. Then the system boots, and rescue's last line tells you how to finish with the regular tools:
+Booting it adds `archix.rescue` to the kernel command line. Before switching to the real root, the initramfs runs `archix rescue`, which unpacks that entry's generation's core packages straight from the cache, read from `archix.generation` on the command line, without pacman: glibc, pacman and its libraries, systemd, bash, coreutils, the kernel, archix itself and the rest of the core set. It keeps config files you edited, saving the package's version as `.pacnew`, and rewrites the packages' entries in pacman's database. Then the system boots, and rescue's last line tells you how to finish with the regular tools:
 
 ```
 36 packages restored; boot normally, then run `sudo archix rollback 43` to put everything else back
 ```
+
+It also records what it did in `/var/lib/archix/last-rescue`, such as `generation 43, 36 packages restored, at unix time 1792051200`.
 
 Rolling back to the current generation puts back whatever differs from it, packages, files and services alike. If a switch was interrupted, run `sudo archix recover` instead.
 
@@ -334,4 +359,4 @@ If the machine can't boot any of its own entries, the same static binary works f
 # /mnt/usr/lib/archix/archix-static rescue --root /mnt
 ```
 
-`--generation N` restores another generation's core packages, and `--package NAME` adds packages beyond the core set. You shouldn't need it often. It's a fallback for accidents the built-in boot entries can't cover, not a normal recovery path.
+Without `--generation`, rescue restores the generation on the kernel command line, and with none there, as from a live USB, the current one. `--generation N` restores another generation's core packages, and `--package NAME` adds packages beyond the core set. You shouldn't need it often. It's a fallback for accidents the built-in boot entries can't cover, not a normal recovery path.

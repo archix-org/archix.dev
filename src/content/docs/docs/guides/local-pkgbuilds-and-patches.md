@@ -151,7 +151,7 @@ Paths are relative to the config directory, and can't leave it: `patches.hyprlan
 
 ### What archix does
 
-1. It takes the version the lock has for the package, and clones Arch's recipe for it from `https://gitlab.archlinux.org/archlinux/packaging/packages`, at the tag for that version: the version with `:` replaced by `-` and `~` by `.`.
+1. It takes the version the lock has for the package, or Arch's version at the locked snapshot if a third-party repo supplies it, and clones Arch's recipe for it from `https://gitlab.archlinux.org/archlinux/packaging/packages`, at the tag for that version: the version with `:` replaced by `-` and `~` by `.`.
 2. It adds your patches to the recipe's sources, and applies them with `patch -p1` before the recipe's own `prepare()` runs. Each patch goes into whichever top-level directory of `$srcdir` it applies to, so a patch made in the upstream source tree, such as `git format-patch` output, works as it is.
 3. It bumps the pkgrel to a sub-release, `0.51.1-2` to `0.51.1-2.1`, so the patched build sorts after Arch's build of the same version.
 
@@ -165,14 +165,14 @@ apply 1 change? [Y/n]
 ...
 ```
 
-Only official packages can be patched, and only ones in the host's lock, declared or pulled in as a dependency:
+Only packages in the host's lock can be patched, declared or pulled in as a dependency, and only ones Arch's official repos have, since archix only has Arch's recipes to patch:
 
 ```console
 error: patches.hyprland: hyprland isn't among this config's packages or their dependencies
-error: patches.zen-browser-bin: zen-browser-bin comes from aur, but only packages from Arch's official repos can be patched
+error: patches.zen-browser-bin: zen-browser-bin isn't in Arch's official repos, and only Arch's recipes can be patched
 ```
 
-The same goes for packages from third-party repos, such as `linux-cachyos` from `cachyos-core-v3`, and from your own recipes: archix only has Arch's recipes to patch. A package [pinned](/docs/concepts/lockfile/#pins) from the Arch Linux Archive counts as official. For an AUR package, copy its recipe into `pkgbuilds/` and change it there.
+What matters is that Arch has the package, not where your lock gets it. A package [pinned](/docs/concepts/lockfile/#pins) from the Arch Linux Archive is patched at its pinned version. When a third-party repo supplies it, such as `hyprland` from CachyOS's `cachyos-extra-znver4`, the patched build replaces that one, built from Arch's recipe at Arch's version at the locked snapshot; you trade CachyOS's build for Arch's plus your patches. Packages only a third-party repo has, such as `linux-cachyos`, can't be patched. For an AUR package, copy its recipe into `pkgbuilds/` and change it there.
 
 When the patched package comes from a pkgbase that builds several packages, every package of that base in your lock is swapped for the patched build too, so they stay at the same version. Patching `mesa` also rebuilds the `vulkan-radeon` you have from the same recipe.
 

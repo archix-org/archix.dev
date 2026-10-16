@@ -88,7 +88,7 @@ Patch files for official packages, keyed by package name and relative to the con
 
 archix clones Arch's recipe from gitlab.archlinux.org at the tag for the locked version, and applies each patch, in list order, in whichever top-level directory of `$srcdir` it fits. The patched build's pkgrel is a sub-release, `2` becoming `2.1`, so it sorts after Arch's. Other packages of the same pkgbase in the lock are swapped for the patched build too. It's locked with `repo = "local"` and `base = "patch:<pkgbase>"`, and `archix update` rebuilds it for each new version.
 
-The package has to come from Arch's official repos, a [pin](/docs/concepts/lockfile/#pins) from the Arch Linux Archive included, and be in the host's lock, declared or as a dependency. Otherwise `diff`, `lock` and `switch` stop with `patches.<name>: <name> isn't among this config's packages or their dependencies`, or `patches.<name>: <name> comes from <repo>, but only packages from Arch's official repos can be patched`, which also covers third-party repos and the AUR. A path can't leave the config directory. A patch that applies nowhere fails the build before the system changes.
+The package has to be in the host's lock, declared or as a dependency, and in Arch's official repos. A package your lock takes from a third-party repo, such as CachyOS's `hyprland`, is replaced by the patched build of Arch's recipe at Arch's version at the locked snapshot; an official or pinned package keeps its version. Otherwise `diff`, `lock` and `switch` stop with `patches.<name>: <name> isn't among this config's packages or their dependencies`, or `patches.<name>: <name> isn't in Arch's official repos, and only Arch's recipes can be patched`. A path can't leave the config directory. A patch that applies nowhere fails the build before the system changes.
 
 ```lua title="lua/hosts/desktop/init.lua"
 return {
@@ -254,13 +254,13 @@ Each entry has these fields:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `name` | `str` | *required* | Repository name, as in `pacman.conf`. |
-| `servers` | `list of str` | *required* | Server URLs, tried in order; `$repo` and `$arch` are expanded like pacman does. |
+| `servers` | `list of str` | *required* | Server URLs, tried in order; `$repo` and `$arch` are expanded like pacman does. `$arch` becomes `x86_64`, so CachyOS's `$arch_v3` and `$arch_v4` become `x86_64_v3` and `x86_64_v4`. |
 | `keys` | `list of str` | `[]` | Fingerprints of the repository's signing keys; archix imports and locally signs them. |
 | `keyserver` | `str` | `"hkps://keyserver.ubuntu.com"` | Where the `keys` are fetched from. |
 | `sig_level` | `str` | `"Required DatabaseOptional"` | The repository's `SigLevel` in `pacman.conf`. |
 | `before_official` | `bool` | `false` | List the repository before core and extra, so its packages win (CachyOS's repos need this). |
 
-A name that clashes with an official repo or another custom repo is an error. archix writes a block for each repo into `/etc/pacman.conf`, so plain pacman sees the same repos, and removes the block when the repo leaves the config.
+A name that clashes with an official repo or another custom repo is an error. When resolving, archix accepts packages for `x86_64` and every x86-64 level the CPU supports, so CachyOS's `x86_64_v3` and `x86_64_v4` repos resolve, and a CPU without v4 never gets v4 packages; see [CPU levels](/docs/guides/third-party-repos/#cpu-levels). archix writes a block for each repo into `/etc/pacman.conf`, so plain pacman sees the same repos, and removes the block when the repo leaves the config.
 
 ```lua
 custom_repos = {
@@ -350,7 +350,7 @@ With `mutable = false`, or [`mutable_files = false`](#mutable_files), the file i
 
 `merge` sets keys in a file archix doesn't own, such as one an app writes too: archix edits only the declared keys and leaves the app's own. The app's keys never show up in `archix diff`; a declared key that changed does, and the next switch sets it back. JSON files may be JSONC, with comments and trailing commas, but archix drops the comments when it writes the file back; a file that can't take its keys stops the switch before anything changes. A new file gets `0644` and `owner`/`group`; an existing one keeps its mode and owner. When the entry leaves the config, the file keeps its keys and is neither restored nor deleted. See [Setting single keys](/docs/guides/dotfiles-and-apps/#setting-single-keys).
 
-archix doesn't write under `/usr` (except `/usr/local`), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`. Files in a home directory go in [`home.files`](#homefiles).
+archix doesn't write under `/usr` (except `/usr/local`), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`: `files: <path> is in a directory archix doesn't write to; home files go in home.files, and boot entries in boot.extra_entries`. Files in a home directory go in [`home.files`](#homefiles), and systemd-boot entries in [`boot.extra_entries`](#bootextra_entries).
 
 ```lua
 files = {
@@ -904,6 +904,30 @@ Sign boot entries with sbctl; by default, whenever sbctl has keys.
 `true` also declares the `sbctl` package. When signing, archix also signs systemd-boot's own binary. Changing this records a new generation, so turning Secure Boot on re-signs. `sudo archix secure-boot setup` creates and enrolls the keys.
 
 With Secure Boot enforcing, a switch whose entry wouldn't be signed, because this is `false` or `sbctl` has no keys, is refused before anything changes. See [Secure Boot](/docs/guides/secure-boot/).
+
+### `boot.extra_entries`
+
+| | |
+| --- | --- |
+| Type | `attrs of lines` |
+| Default | `{}` |
+| Declared in | `<archix>/boot.lua` |
+
+More systemd-boot entries archix writes to the ESP's loader/entries, keyed by file name, such as `["memtest86+.conf"] = "title Memtest86+\nefi /memtest86+/memtest.efi"`. With Secure Boot on, whatever they start must be signed too.
+
+Each one becomes `<boot.esp>/loader/entries/<name>`, a managed file like any other, so it's removed when it leaves the config. Names must end in `.conf`, since systemd-boot reads only those: `boot.extra_entries: "memtest" must end in .conf, as systemd-boot reads only those`. archix doesn't sign what an entry starts; with Secure Boot on, sign it yourself, for example with `sbctl sign -s /boot/memtest86+/memtest.efi`.
+
+```lua title="lua/hosts/desktop/init.lua"
+return {
+  packages = { "memtest86+-efi" },
+  boot = {
+    loader = "systemd-boot",
+    extra_entries = {
+      ["memtest86+.conf"] = "title Memtest86+\nefi /memtest86+/memtest.efi",
+    },
+  },
+}
+```
 
 ### `boot.protected_entry`
 

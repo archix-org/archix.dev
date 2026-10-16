@@ -49,7 +49,7 @@ $ archix -S htop
 error: `archix install` changes the system, so it needs root; run it with sudo: sudo archix -S htop
 ```
 
-Any other error that comes from a missing permission gets the same hint, such as `archix lock` on a root-owned `/etc/archix`: `hint: that needs root; run it with sudo: sudo archix lock`. Reading doesn't need root: `archix <terms>`, `search`, `diff`, `status`, `eval`, `options`, `generations` and `secure-boot check` work as your user, and so do `lock` and `update` on a config you own. `archix <terms>` asks sudo for the install itself.
+Only one of these runs at a time; see [Commands that change the system](#commands-that-change-the-system). Any other error that comes from a missing permission gets the same hint, such as `archix lock` on a root-owned `/etc/archix`: `hint: that needs root; run it with sudo: sudo archix lock`. Reading doesn't need root: `archix <terms>`, `search`, `diff`, `status`, `eval`, `options`, `generations` and `secure-boot check` work as your user, and so do `lock` and `update` on a config you own. `archix <terms>` asks sudo for the install itself.
 
 Every command except `init`, `options`, `rollback`, `recover`, `gc`, `generations`, `prefetch`, `rescue` and `secure-boot` reads the config. `options` works without one, listing every option against an empty config. With no `init.lua` in the config directory, the others stop with:
 
@@ -133,6 +133,8 @@ System-wide Flatpak apps are declared too, each locked to the commit it's instal
 `init` refuses to run if the config directory already has an `init.lua`.
 
 ## Commands that change the system
+
+Only one of these runs at a time: each takes an exclusive lock on `/var/lib/archix/running`, and a second one stops with `` another archix is already running (pid 4242, `archix switch`); wait for it to finish ``. See [Safety](/docs/concepts/safety/#one-archix-at-a-time).
 
 These need root. Run without it, they stop before touching anything, with the command's name and your exact command line: `` `archix switch` changes the system, so it needs root; run it with sudo: sudo archix switch --noconfirm ``. See [Root](#root).
 
@@ -362,14 +364,14 @@ restored pacman 7.0.0.r7.g1f38429-1
 36 packages restored; boot normally, then run `sudo archix rollback 42` to put everything else back
 ```
 
-It unpacks glibc, pacman, systemd, the kernel, archix itself and the rest of the core set straight from the cache, keeps edited config files (the package's version is saved as `.pacnew`) and rewrites their entries in pacman's database. Then `sudo archix rollback 42`, as the last line says, repairs everything else.
+It unpacks glibc, pacman, systemd, the kernel, archix itself and the rest of the core set straight from the cache, keeps edited config files (the package's version is saved as `.pacnew`) and rewrites their entries in pacman's database. Then `sudo archix rollback 42`, as the last line says, repairs everything else. It records what it restored in `/var/lib/archix/last-rescue` under the root, such as `generation 42, 36 packages restored, at unix time 1792051200`.
 
 `/usr/lib/archix/archix-static` is the static binary the `archix`, `archix-bin` and `archix-git` AUR packages install, and the one rescue boot entries carry. See [Safety](/docs/concepts/safety/#rescue-mode).
 
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--root <dir>` | `/` | The mounted system to repair, such as `/mnt`. |
-| `--generation <n>` | the current one | The generation whose packages to restore. |
+| `--generation <n>` | `archix.generation` from the kernel command line, else the current one | The generation whose packages to restore. A rescue entry carries its own generation, so it restores that one. |
 | `--package <name>` | | Also restore this package, beyond the core set. Repeat it for more. |
 
 ### `secure-boot`

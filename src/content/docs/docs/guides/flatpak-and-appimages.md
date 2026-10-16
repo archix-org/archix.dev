@@ -2,7 +2,7 @@
 title: Flatpak and AppImages
 description: Declare Flatpak apps locked to exact commits and AppImages locked by hash, then update them, roll them back and remove them like the rest of the system.
 sidebar:
-  order: 4
+  order: 5
 ---
 
 Some apps are easiest to get outside the repos and the AUR: as a Flatpak from Flathub, or as an AppImage from the developer's releases page. archix manages both the same way it manages packages. You declare them, they're locked, and every generation records them, so `archix rollback` takes them back too.

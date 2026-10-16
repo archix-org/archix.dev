@@ -2,7 +2,7 @@
 title: Activation hooks
 description: Run scripts at the end of every switch and rollback with hooks, and react to a changed file with on_change, like NixOS activation scripts and Home Manager's onChange.
 sidebar:
-  order: 5
+  order: 6
 ---
 
 Most of a system fits in files, units and services. Some of it doesn't: a daemon keeps settings you can only change with its own CLI, a service has to restart to read a new config file, a running app has to be told to reload. archix has two ways to do those things as part of a switch:
@@ -49,6 +49,7 @@ apply 3 changes? [Y/n]
 :: writing managed files
 :: reloading systemd, sysctl, udev and locales
 :: enabling and starting services
+:: restarting what uses replaced files
 :: verifying the result
 :: writing the boot entry
 :: making the new generation current
@@ -59,7 +60,7 @@ switched to generation 45 (snapshot 2026-10-15)
 
 ## When they run
 
-Hooks run last, once the switch itself is done: after files are written and services started, after the result is verified, the boot entry written and the new generation made current, and after Flatpak apps are installed and pinned. A hook sees the finished system, Flatpak apps the same switch added included. Hooks aren't a step of the [journal](/docs/concepts/safety/#the-journal); by the time they run, the switch is complete, and nothing a hook does can leave it unfinished.
+Hooks run last, once the switch itself is done: after files are written, services started and units using replaced files [restarted](/docs/concepts/safety/#restarting-what-uses-replaced-files), after the result is verified, the boot entry written and the new generation made current, and after Flatpak apps are installed and pinned. A hook sees the finished system, Flatpak apps the same switch added included. Hooks aren't a step of the [journal](/docs/concepts/safety/#the-journal); by the time they run, the switch is complete, and nothing a hook does can leave it unfinished.
 
 They run on every switch, including one that has nothing to change, exactly like NixOS runs its activation scripts on every `nixos-rebuild switch`:
 
@@ -246,6 +247,7 @@ A failing hook or `on_change` script is a [soft failure](/docs/concepts/safety/#
 
 ```console
 :: enabling and starting services
+:: restarting what uses replaced files
 :: verifying the result
 :: writing the boot entry
 :: making the new generation current

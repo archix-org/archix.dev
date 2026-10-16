@@ -11,10 +11,10 @@ archix replaces yay and paru. It searches and installs from the official repos, 
 
 ```console
 $ archix search zen browser
-aur/zen-browser-bin 1.16.3b-1 (+412 18.53)
-    Zen Browser, a Firefox-based browser focused on privacy
 aur/zen-browser 1.16.3b-1 (+38 2.10)
     Zen Browser, built from source
+aur/zen-browser-bin 1.16.3b-1 (+412 18.53)
+    Zen Browser, a Firefox-based browser focused on privacy
 $ sudo archix install zen-browser-bin
 $ sudo archix remove zen-browser-bin
 ```
@@ -28,10 +28,11 @@ The pacman-style aliases do the same:
 | `archix -R <pkg>` | `archix remove <pkg>` |
 | `archix -Syu` | `archix upgrade`: `pacman -Syu`, adopt, newest AUR recipes, switch |
 | `archix` | `archix -Syu` |
+| `archix <terms>` | Search, pick from a numbered list, and install, like `yay <terms>` |
 
-There's one `packages` list for everything. `install` looks a name up in your configured repos first, official and third-party, and only names they don't have are looked up in the AUR.
+There's one `packages` list for everything. `install` looks a name up in your configured repos first, official and third-party, and only names they don't have are looked up in the AUR. A recipe of your own in `pkgbuilds/` beats both for a name you declare that it builds under exactly that name; see [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
 
-Search covers the locked snapshot's repos and the AUR's package list, most popular first, with votes, popularity and out-of-date flags. archix downloads that list (`packages-meta-v1.json.gz`) when it first needs it, refreshes it when it's more than an hour old and on `archix update`, and only loads it when a name isn't in the repos.
+Search covers the locked snapshot's repos and the AUR's package list, with votes, popularity and out-of-date flags. Exact names rank first, then names starting with your first term, then names containing a term, then description matches, and repo packages come before AUR ones. `archix zen browser`, without `search`, numbers the results and installs the ones you pick; see [`archix <terms>`](/docs/reference/cli/#search-and-install-archix-terms). archix downloads that list (`packages-meta-v1.json.gz`) when it first needs it, refreshes it when it's more than an hour old and on `archix update`, and only loads it when a name isn't in the repos.
 
 ## Where `archix install` writes
 
@@ -67,6 +68,18 @@ zen-browser-bin = { version = "1.16.3b-1", repo = "aur", file = "zen-browser-bin
 ```
 
 Dependencies the repos can satisfy, versioned ones included, are resolved from the repos at the lock's snapshot. The rest come from the AUR. An AUR package needed only to build another one is locked with `build_only = true`: it's built, and never installed.
+
+AUR dependencies honour version constraints, `=`, `>=`, `<=`, `>` and `<`, the way pacman does. A package of that name, or one that provides it, only counts if its version meets the constraint. A wanted version without a pkgrel, such as `java-environment>=21`, compares against the pkgver alone, and a provide without a version, such as plain `java-environment`, only meets a dependency without one. A dependency nothing meets stops `lock`, `diff` and `switch` before any build: `` `java-environment=26` is in none of the configured repos, pkgbuilds/ or the AUR ``.
+
+### VCS packages
+
+A VCS package, usually named `-git`, sets its own version while it builds: its `pkgver()` asks the source repository. The locked version comes from `.SRCINFO` and is usually older. archix installs the package at the version the build gave it, and records that version in `archix.lock` and the generation:
+
+```console
+recorded the versions these packages gave themselves while building: archix-git 0.1.0.r35.g76a7920-1
+```
+
+The commit in the lock is still the recipe's, so the sources a VCS package builds from aren't pinned: a later rebuild of the same commit can produce a newer version. See [Limitations](/docs/concepts/limitations/).
 
 `archix lock` and `archix switch` keep the locked commits. `archix update` and `archix -Syu` move AUR packages to the newest commit. See [The lockfile](/docs/concepts/lockfile/#aur-packages-commits).
 
@@ -106,6 +119,8 @@ This fixes two classic AUR problems:
 - **Missing dependencies.** A PKGBUILD that forgot a dependency fails in the chroot instead of quietly building against whatever you have installed.
 - **Unreproducible builds.** The same recipe commit at the same snapshot date builds against the same dependencies, on every machine.
 
+Packages from your config's own [`pkgbuilds/` and `patches`](/docs/guides/local-pkgbuilds-and-patches/) build in the same chroot, the same way, and `build_on_host` works for them too. They're never shown for review: the recipe is already in your config.
+
 The chroot only has the official repos. Your third-party repos stay out of it, since they'd also need their signing keys inside.
 
 ### `build_on_host`
@@ -120,7 +135,7 @@ aur = { build_on_host = { "some-driver-dkms" } },
 
 Built packages are cached in `/var/cache/archix/pkg`, keyed by recipe commit and snapshot date. If neither changed, archix reuses the built package instead of building again. Each generation records the sha256 of the file it installed, so rollback puts back that exact file.
 
-When a locked commit can't be built any more, because it's gone from the package's history or the build fails, archix offers the nearest newer version, then the nearest older one, and the lock follows. Set [`missing_versions`](/docs/reference/options/) or pass `--accept-nearest newer|older` to decide without asking. See [Missing versions](/docs/concepts/lockfile/#missing-versions).
+When a locked commit can't be built any more, because it's gone from the package's history or the build fails, archix offers the nearest newer version, then the nearest older one, and the lock follows once the version you accepted has built; if it fails too, `archix.lock` is left unchanged. Set [`missing_versions`](/docs/reference/options/) or pass `--accept-nearest newer|older` to decide without asking. See [Missing versions](/docs/concepts/lockfile/#missing-versions).
 
 ## How installs run
 

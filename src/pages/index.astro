@@ -11,6 +11,7 @@ const install = 'git clone https://aur.archlinux.org/archix.git && cd archix && 
 
 const flags = [
 	['archix', 'Full update, like running yay with no arguments'],
+	['archix <terms>', 'Search the repos and the AUR, pick from a numbered list, install and declare the picks'],
 	['archix -S <pkg>', 'Install from the repos or the AUR, and add it to your config'],
 	['archix -Ss <query>', 'Search the repos and the AUR'],
 	['archix -Syu', 'Update from live mirrors and adopt the result into the lock'],
@@ -18,9 +19,9 @@ const flags = [
 ];
 
 const manages = [
-	['Packages', 'Official repos, the AUR and third-party repos like CachyOS, with their pacman.conf blocks and keys'],
+	['Packages', 'Official repos, the AUR, third-party repos like CachyOS, your own PKGBUILDs, and official packages with your patches'],
 	['/etc', 'Any file under /etc, written atomically and tracked by hash'],
-	['systemd', 'System and user units, enabled and started on switch'],
+	['systemd', 'System and user units, enabled and started on switch, and restarted when the code they run was updated'],
 	['Kernel', 'Kernel parameters, sysctl, modprobe and udev rules'],
 	['Users', 'Users and groups. Passwords stay yours: archix never touches them'],
 	['Dotfiles', 'Real files with recorded hashes, so edits made outside archix show up in diff'],
@@ -148,6 +149,7 @@ adopt them into the lock? (no reverts them to the lock) [Y/n] <span class="w">y<
 					Keep the flags you already type. Every AUR build runs in a clean chroot at the locked snapshot date and gets
 					cached. You read the whole PKGBUILD on first install and only the diff on updates.
 				</p>
+				<p>Two letters is enough: <code>ax</code> is the same command, so <code>ax -Syu</code> works too.</p>
 			</div>
 			<table class="flags">
 				<caption class="visually-hidden">pacman-style commands</caption>

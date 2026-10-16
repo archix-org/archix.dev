@@ -50,11 +50,12 @@ Each package is one inline table on one line, sorted by name, so a lock diff in 
 | `pinned` | Packages held at a version other than the snapshot's. Only present when there are any. See [Pins](#pins). |
 | `packages` | One inline table per package, dependencies included, keyed by package name. |
 | `version`, `file` | The exact package version and its package file. |
-| `repo` | Where it comes from: an official repo such as `core`, a third-party repo by name, `archive` for a pin, or `aur`. |
+| `repo` | Where it comes from: an official repo such as `core`, a third-party repo by name, `archive` for a pin, `aur`, or `local` for a package built from the config's own recipes. |
 | `sha256` | The checksum of the package file. A file that doesn't match is never installed. AUR packages have none; see below. |
-| `base`, `commit` | For AUR packages: the package base and the git commit of its build recipe. |
+| `base`, `commit` | For AUR packages: the package base and the git commit of its build recipe. For `local` packages: `local:<dir>` or `patch:<pkgbase>`, and a hash of the recipe. See [Local recipes and patched packages](#local-recipes-and-patched-packages). |
 | `explicit` | Whether pacman marks it as explicitly installed or as a dependency. |
 | `build_only` | `true` for an AUR package that's only needed to build other AUR packages. It's built, but never installed. |
+| `recipes` | A fingerprint of each recipe in `pkgbuilds/` and of each package's patches, from when the lock was written. Only present when there are any. See [Local recipes and patched packages](#local-recipes-and-patched-packages). |
 | `flatpak` | One inline table per Flatpak app, with its remote, ref and commit. Only present when the host declares apps. See [Flatpak apps](#flatpak-apps-commits). |
 
 Every host can sit on a different date. The laptop doesn't have to update just because the desktop did.
@@ -96,9 +97,37 @@ nodejs-lts-iron = { version = "20.19.5-1", repo = "aur", file = "nodejs-lts-iron
 zen-browser-bin = { version = "1.16.3b-1", repo = "aur", file = "zen-browser-bin-1.16.3b-1-x86_64.pkg.tar.zst", base = "zen-browser-bin", commit = "cd6266c6847e61c71facdd7dbf869b5cf64359be", explicit = true }
 ```
 
-`version` comes from that commit's `.SRCINFO`. There's no `sha256`: AUR builds aren't bit-for-bit reproducible, so the commit is what's locked. Each generation records the sha256 of the file it actually built, so rollback reuses that exact file.
+`version` comes from that commit's `.SRCINFO`, except for a VCS package such as a `-git` one, which sets its own version while building: the switch then writes the version the build produced into the lock and the generation, and says `recorded the versions these packages gave themselves while building: ...`. There's no `sha256`: AUR builds aren't bit-for-bit reproducible, so the commit is what's locked. Each generation records the sha256 of the file it actually built, so rollback reuses that exact file.
 
 Dependencies the repos can satisfy are resolved from the repos; the rest come from the AUR. An AUR package needed only to build another one is `build_only`. Every recipe is shown for review before it enters the lock. See [The AUR](/docs/guides/aur/).
+
+## Local recipes and patched packages
+
+Packages built from [PKGBUILDs in the config](/docs/guides/local-pkgbuilds-and-patches/) have `repo = "local"`. There's no `sha256`, as with AUR packages, because the recipe is what's locked:
+
+```toml title="archix.lock"
+[hosts.desktop.packages]
+backup-scripts = { version = "1.2.0-1", repo = "local", file = "backup-scripts-1.2.0-1-any.pkg.tar.zst", base = "local:backup-scripts", commit = "7f3c9a1e5b2d8046c1e9f7a3b5d2c8e0a4f6b1d3c5e7a9f2b4d6c8e0a1f3b5d7", explicit = true }
+hyprland = { version = "0.51.1-2.1", repo = "local", file = "hyprland-0.51.1-2.1-x86_64.pkg.tar.zst", base = "patch:hyprland", commit = "3a9e1c7b5d2f8046e1c3a5b7d9f0e2c4a6b8d0f1+c2e8a4f60b1d3e57", explicit = true }
+
+[hosts.desktop.recipes]
+"local:backup-scripts" = "7f3c9a1e5b2d8046c1e9f7a3b5d2c8e0a4f6b1d3c5e7a9f2b4d6c8e0a1f3b5d7"
+"local:wifi-firmware" = "builds:5d0b8e2f4a6c1e3b7d9f0a2c4e6b8d1f3a5c7e9b0d2f4a6c8e1b3d5f7a9c0e2b"
+"patch:hyprland" = "c2e8a4f60b1d3e579a1c3e5f7b9d2f4a6c8e0b2d4f6a8c1e3b5d7f9a0c2e4b6d"
+```
+
+- **`local:<dir>`** is a recipe in `pkgbuilds/<dir>/`. Its `commit` is a hash of the directory's files, by path, contents and executable bit, leaving out makepkg's output at the top of the directory (`src/`, `pkg/`, `.SRCINFO`, `*.pkg.tar*` and `*.log`) and `.git` anywhere.
+- **`patch:<pkgbase>`** is Arch's recipe for that pkgbase with the config's [`patches`](/docs/reference/options/#patches). Its `commit` is the commit of Arch's recipe, `+`, and the start of a hash of the patches. The version carries a pkgrel sub-release, `2.1` on top of Arch's `2`.
+
+The `recipes` table follows the host's packages. It has an entry for every recipe in `pkgbuilds/`, keyed `local:<dir>`, and one for each patched package, keyed `patch:<package>`:
+
+- A recipe the lock builds from is recorded by its content hash, the same as its packages' `commit`.
+- Any other recipe is recorded as `builds:` and a hash of the package names it builds and `provides`, like `local:wifi-firmware` above. Editing such a recipe's contents doesn't touch the lock; adding a recipe, or changing what one builds, does, because it can change where a name resolves.
+- A patched package is recorded by the full hash of its patches.
+
+archix compares the table with the config the way it compares `declared`, so editing a recipe the host uses or a patch makes the lock out of date: `archix status` says ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``, and the next `lock` or `switch` resolves again. When the version stayed the same, the switch rebuilds the package anyway: `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`.
+
+`archix update` moves a patched package with the snapshot and rebuilds it for the new version. Local recipes only change when you change them.
 
 ## Third-party repos: cached copies
 
@@ -147,7 +176,7 @@ wrote /etc/archix/archix.lock
 
 `+` is a new package, `~` a changed version, `-` a package that's no longer needed. Changed AUR recipes are shown as a diff for review before the lock is written. The newest snapshot is the newest one the archive has published, so right after midnight it may still be yesterday's.
 
-To move to a specific day instead, pass `--to`. It works in both directions, which makes it a quick way to step a whole host back to a day you know was good:
+To move to a specific day instead, pass `--to`. It works in both directions, which makes it a quick way to step a whole host back to a day you know was good. If that takes a package such as PostgreSQL back across a major version, the next `switch` [asks first](/docs/concepts/generations/#downgrades-that-may-break-data):
 
 ```console
 $ archix update --to 2026-10-01
@@ -175,7 +204,7 @@ $ sudo archix switch
 use the nearest newer version, foo-git 0.5.1-1? [Y/n]
 ```
 
-Whatever you accept is written back to the lock, after review, so the next machine gets the same answer without being asked. If you accept neither, the switch stops before anything changes.
+Whatever you accept is reviewed, then written back to the lock once it has actually built, so the next machine gets the same answer without being asked. If the version you accepted fails to build too, `archix.lock` stays as it was. If you accept neither, the switch stops before anything changes.
 
 ### Policies
 

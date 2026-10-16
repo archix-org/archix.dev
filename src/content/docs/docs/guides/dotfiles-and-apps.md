@@ -2,7 +2,7 @@
 title: Dotfiles and apps
 description: Manage dotfiles and app configs with archix, from raw files and format writers to programs.* modules ported from Home Manager.
 sidebar:
-  order: 3
+  order: 4
 ---
 
 archix manages your home directory with the same switch that manages the system. Dotfiles become part of the generation, so a rollback takes your configs back too.
@@ -24,7 +24,7 @@ archix runs as root, but files it writes in the home, and the directories it cre
 
 ## Home files
 
-`home.files` is keyed by a path relative to the home; a leading `~/` is allowed. Each entry gives exactly one of `text`, `source`, `link` or `url`:
+`home.files` is keyed by a path relative to the home; a leading `~/` is allowed. Each entry gives exactly one of `text`, `source`, `link`, `url` or `merge`:
 
 ```lua
 home = {
@@ -45,6 +45,8 @@ home = {
 | `url`, `sha256` | Download the file, and refuse it unless it has this sha256. See [Files from a URL](#files-from-a-url). |
 | `executable` | Mode `0755` instead of `0644`. |
 | `on_change` | A bash script run as the user when a switch or rollback changed the file. See [Reload apps when a file changes](#reload-apps-when-a-file-changes). |
+| `mutable` | `false` writes the file read-only, `true` keeps it writable; by default as `mutable_files` says. See [Read-only files](#read-only-files). |
+| `merge` | Set only some keys in a file the app also writes. See [Setting single keys](#setting-single-keys). |
 
 Copies are real files, not links into a store, so apps see ordinary files they can read and watch. archix stores their contents with the generation and knows exactly what it wrote. If you, or an app, edit a managed file, `archix diff` flags it before the next switch:
 
@@ -139,6 +141,97 @@ A `source` that's a directory has to be live; archix only copies single files. `
 ```console
 error: home.files..config/nvim: live = true needs source, the file in the config to link to
 ```
+
+## Read-only files
+
+On NixOS, Home Manager's files live in the read-only Nix store, so nothing can change them behind your back. archix can work the same way. Set `mutable_files = false`, and every file archix writes from `text`, `source` or `url` loses its write bits: `0644` becomes `0444`, and an `executable` file `0555` instead of `0755`.
+
+```lua title="lua/modules/common.lua"
+return {
+  mutable_files = false,
+  users = { me = { groups = { "wheel" } } },
+  home = {
+    user = "me",
+    files = {
+      [".config/fuzzel/fuzzel.ini"] = { source = "home/fuzzel.ini" },
+      [".config/mimeapps.list"] = { source = "home/mimeapps.list", mutable = true },
+    },
+  },
+}
+```
+
+An app that tries to save over a read-only file gets an error instead of quietly changing it. If something changes it anyway, `archix diff` flags it and every switch puts the declared contents and mode back, saving the changed copy as for any [hand-edited file](/docs/concepts/safety/#managed-files-backups-and-hand-edits). A file's own `mutable` wins over `mutable_files` in either direction, so `mutable = true` keeps one file writable, as for `mimeapps.list` above, which desktop apps rewrite when you change a default app.
+
+Links aren't affected, and neither are [live links](#live-links-for-app-written-configs): they point into your config repo, which stays writable, so an app writing through one edits your repo as before. Merged files keep their own rules; see [below](#setting-single-keys). The option is called `mutable_files` because `files` is already the map of system files; it covers both `files` and `home.files`.
+
+`archix init` asks about this in its Config step, `Write files read-only, like the Nix store (apps can't change them; a switch puts them back)`, off by default.
+
+## Setting single keys
+
+Some files belong to an app that keeps writing to them: KDE's `kdeglobals` and `kwinrc`, a settings file a GUI saves, an ini file a tool rewrites. Owning the whole file would fight the app, and leaving it alone means your settings aren't in your config. `merge` does what plasma-manager does on NixOS: archix sets only the keys you declare and leaves everything else in the file to the app.
+
+```lua title="lua/modules/desktop.lua"
+return {
+  users = { me = { groups = { "wheel" } } },
+  home = {
+    user = "me",
+    files = {
+      [".config/kdeglobals"] = {
+        merge = { format = "kconfig", values = { General = { ColorScheme = "BreezeDark" }, KDE = { SingleClick = false } } },
+      },
+      [".config/qt6ct/qt6ct.conf"] = {
+        merge = { format = "ini", values = { Appearance = { icon_theme = "Papirus-Dark" } } },
+      },
+      [".config/Code/User/settings.json"] = {
+        merge = { format = "json", values = { ["editor.fontSize"] = 14, ["workbench.colorTheme"] = "Default Dark Modern" } },
+      },
+    },
+  },
+}
+```
+
+`merge` takes the place of `text`, `source`, `link` and `url`. `format` says how to read the file:
+
+- **`kconfig`**, KDE's format: `values` holds groups of keys, and groups nest, so `{ Containments = { ["1"] = { General = { ... } } } }` writes under `[Containments][1][General]`.
+- **`ini`**: keys at the top come before any section, then one level of sections. Deeper nesting is an error.
+- **`json`**: `values` is deep-merged into the file's object. JSONC works too, as in VS Code's settings and waybar's config: `//` and `/* */` comments and trailing commas are accepted, and `//` inside a string is left alone.
+
+ini and kconfig files are edited line by line. A declared key is replaced where it is, keeping `key = value` spacing if the file uses it; a missing key is added at the end of its group, and a missing group at the end of the file. Every other line, comments included, stays as it was. With an existing `kdeglobals` like this:
+
+```ini title="~/.config/kdeglobals"
+[General]
+ColorScheme=BreezeClassic
+font=Noto Sans,10,-1,5,50,0,0,0,0,0
+
+[KDE]
+SingleClick=true
+```
+
+the switch leaves:
+
+```ini title="~/.config/kdeglobals"
+[General]
+ColorScheme=BreezeDark
+font=Noto Sans,10,-1,5,50,0,0,0,0,0
+
+[KDE]
+SingleClick=false
+```
+
+A JSON file is compared by value, so an app that reformats it or reorders its keys hasn't changed anything as far as archix is concerned. When a declared key does differ, archix writes the merged object back, pretty-printed. That rewrite drops the file's comments. A file that can't be read even as JSONC stops the switch before anything changes, `/home/me/.config/Code/User/settings.json can't take its merged keys; nothing was changed: the file isn't valid JSON or JSONC`. ini and kconfig files are checked the same way.
+
+What the app writes is its own business. Its keys never show up in `archix diff`; a declared key it changed does, as `update     /home/me/.config/kdeglobals`, and the next switch sets it back. archix creates a missing file with mode `0644`, owned by `home.user`, and leaves an existing file's mode and owner as they are. When the entry leaves your config, the file keeps whatever keys it has, and archix neither restores nor deletes it.
+
+### Locked keys
+
+With read-only files, by `mutable_files = false` or the entry's `mutable = false`, archix can't make a merged file read-only, since the app still writes the rest of it. For kconfig, it does the next best thing: every declared key gets KDE's immutable marker, so KDE itself won't change it:
+
+```ini title="~/.config/kdeglobals"
+[General]
+ColorScheme[$i]=BreezeDark
+```
+
+ini and JSON have no such marker, so those keys can't be locked, and the files stay writable for their app.
 
 ## User units
 
@@ -289,11 +382,15 @@ A weekly job compares Home Manager's upstream modules and tests with the commit 
 - **Recommended** entries start ticked and are tagged `recommended`: shell rc files such as `.bashrc` and `.zshrc`, `.gitconfig` and `.config/git`, editors such as `nvim` and `helix`, terminals (`kitty`, `alacritty`, `foot`, `wezterm`, `ghostty`), window managers, bars and launchers (`hypr`, `sway`, `i3`, `niri`, `waybar`, `rofi` and similar), tools such as `btop` and `fastfetch`, and `mimeapps.list` and `user-dirs.dirs`.
 - **Everything else** is offered unticked, such as most KDE `*rc` files.
 - **Caches and app state** aren't offered: `.cache`, `.local`, toolchains such as `.cargo` and `.rustup`, browsers, IDEs, chat apps and shell histories.
-- **Credentials** are never offered, only counted: `.ssh`, `.gnupg`, `.aws`, `.kube`, `.docker`, `.cloudflared`, `.config/gh`, password stores, `.claude.json`, `.config/sunshine` and anything else that looks like a secret. The step says so: `· 1 entry that holds a secret stays out of the config and isn't listed`, or `· 4 entries that hold secrets stay out of the config and aren't listed`.
+- **Credentials** are never offered, only counted: `.ssh`, `.gnupg`, `.aws`, `.kube`, `.docker`, `.cloudflared`, `.config/gh`, password stores, `.claude.json`, `.config/sunshine` and anything else that looks like a secret, by its name or by what's in it. An entry whose files contain a private key, an access token from GitHub, GitLab, Slack or Anthropic, an AWS secret key, an OAuth refresh token, or a `psk=` or `password=` line counts too, such as a `~/.config` directory holding an app's login token. Files over 1 MiB aren't read, and a directory is only read up to 200 files. The step says so: `· 1 entry that holds a secret stays out of the config and isn't listed`, or `· 4 entries that hold secrets stay out of the config and aren't listed`.
 
 `space` or `enter` toggles an entry, `a` and `n` select all or none, and `r` goes back to the recommended ones. The full lists are in `src/capture.json` in the archix repository.
 
-Each one you pick is copied into the config's `home/` directory, owned by that user, and declared as a live link:
+Each one you pick is copied into the config's `home/` directory, owned by that user, and declared in one of three ways:
+
+- **Directories** become [live links](#live-links-for-app-written-configs).
+- **Files their app replaces on save**, such as KDE's `*rc` files, `kdeglobals`, `mimeapps.list`, `user-dirs.dirs` and `.gitconfig`, become writable copies with `mutable = true`. Such an app writes a new file and renames it over the old one, which would replace a link with a plain file, so a link wouldn't last. The full list is `replaced` in `src/capture.json`.
+- **Other files** become live links, or read-only copies if you turned on `Write files read-only, like the Nix store (apps can't change them; a switch puts them back)` in the Config step.
 
 ```lua title="lua/hosts/desktop/init.lua"
 return {
@@ -302,6 +399,7 @@ return {
     user = "me",
     files = {
       [".config/hypr"] = { source = "home/.config/hypr", live = true },
+      [".config/kdeglobals"] = { source = "home/.config/kdeglobals", mutable = true },
       [".config/nvim"] = { source = "home/.config/nvim", live = true },
       [".zshrc"] = { source = "home/.zshrc", live = true },
     },
@@ -309,7 +407,7 @@ return {
 }
 ```
 
-The first switch moves the originals, directories included, to `/var/lib/archix/backups` and replaces them with links into the config, so from then on editing a dotfile edits your repo. That makes imported dotfiles the one thing the first switch after `init` changes. init's Result section lists them:
+The first switch moves the originals, directories included, to `/var/lib/archix/backups` and replaces them with links into the config, so from then on editing a dotfile through a link edits your repo. A copy, like `kdeglobals` above, doesn't: what the app saves there is [flagged as edited](#home-files) by `archix diff`, and the next switch puts the declared version back. To keep only some of its settings, switch it to [`merge`](#setting-single-keys). That makes imported dotfiles the one thing the first switch after `init` changes. init's Result section lists them:
 
 ```
 ── Result ──────────────────────────────────────
@@ -323,5 +421,6 @@ The first switch moves the originals, directories included, to `/var/lib/archix/
 
 - One machine, one file, no logic: a format writer in `home.files`, or `source`.
 - A file an app rewrites itself: a live link.
+- A file an app writes, where you only care about some of its settings: `merge`.
 - The same app on several machines, with per-host tweaks: `archix.program`, or the shipped module if there is one.
 - An app archix ships a module for: use the module. It knows how the app's files fit together and renders them exactly as Home Manager would.

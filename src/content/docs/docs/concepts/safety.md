@@ -131,7 +131,12 @@ Some units are never restarted, because restarting them would end your session o
 - user units whose names start with `dbus`, `plasma-kwin`, `plasma-plasmashell`, `plasma-ksmserver`, `plasma-workspace`, `niri`, `gnome-shell`, `org.gnome.Shell`, `hyprland`, `sway` or `wayland-wm`: the desktop session itself;
 - programs in session and app scopes, your desktop apps, listed by process name.
 
-[`restart_if_changed`](/docs/reference/options/#restart_if_changed) changes that per unit: `true` restarts a unit even if it's on the list, `false` never restarts it and lists it instead.
+Two more kinds of unit are skipped without being listed:
+
+- the unit archix itself runs in, found from its own cgroup, such as a systemd service or timer that runs `archix switch`; restarting it would kill the switch halfway;
+- units that started at or after the moment the switch began, judged by their `ActiveEnterTimestamp`; they already run the newly installed files.
+
+[`restart_if_changed`](/docs/reference/options/#restart_if_changed) changes the list per unit: `true` restarts a unit even if it's on the list, `false` never restarts it and lists it instead. It doesn't override the two skips above.
 
 ```lua title="lua/hosts/server/init.lua"
 return {

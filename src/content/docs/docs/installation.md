@@ -26,35 +26,23 @@ You don't have an AUR helper yet, or you're about to replace the one you have. B
 
 ```console
 $ sudo pacman -S --needed base-devel git devtools
-$ git clone https://aur.archlinux.org/archix.git && cd archix && makepkg -si
+$ git clone https://aur.archlinux.org/archix-git.git && cd archix-git && makepkg -si
 ```
 
-For the prebuilt binary, clone `archix-bin` instead:
-
-```console
-$ git clone https://aur.archlinux.org/archix-bin.git && cd archix-bin && makepkg -si
-```
-
-If you already have yay or paru, `yay -S archix` works too. Once archix has made its first switch, it replaces them.
+`archix-git` builds the newest commit on `main`. If you already have yay or paru, `yay -S archix-git` works too. Once archix has made its first switch, it replaces them.
 
 Check that it runs:
 
 ```console
 $ archix --version
-archix 1.0.0
+archix 0.1.0
 ```
 
 Then run `sudo archix init` to capture your system into a config and a lock that match it exactly, so the first `archix diff` is empty. The [quick start](/docs/quick-start/) walks through it.
 
-## The latest commit: archix-git
+## About archix-git
 
-`archix-git` builds the newest commit on `main` instead of a release. It provides and conflicts with `archix`, so it replaces it:
-
-```console
-$ git clone https://aur.archlinux.org/archix-git.git && cd archix-git && makepkg -si
-```
-
-It installs the same two files as the release packages, `/usr/bin/archix` and `/usr/lib/archix/archix-static`, owned by pacman, with a version such as `0.1.0.r35.g76a7920`. `archix init` declares it like any AUR package. As with every `-git` package, a switch only rebuilds it when its recipe changes, not on every upstream commit; run `makepkg -si` in the clone again to pick up new commits sooner.
+`archix-git` provides and conflicts with `archix`. It installs the same two files as the release packages, `/usr/bin/archix` and `/usr/lib/archix/archix-static`, owned by pacman, with a version such as `0.1.0.r35.g76a7920`. `archix init` declares it like any AUR package. As with every `-git` package, a switch only rebuilds it when its recipe changes, not on every upstream commit; run `makepkg -si` in the clone again to pick up new commits sooner.
 
 The same PKGBUILD is in the archix repository, so you can also build from a checkout, or build another branch with `ARCHIX_BRANCH`:
 

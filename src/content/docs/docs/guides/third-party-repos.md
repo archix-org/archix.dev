@@ -53,13 +53,13 @@ The official repos are a separate, simpler option: [`repos`](/docs/reference/opt
 
 CachyOS builds its packages for x86-64 microarchitecture levels, and labels them `x86_64_v3` or `x86_64_v4` instead of `x86_64`. When archix resolves, it accepts `x86_64` plus every level your CPU supports, as reported by `/lib/ld-linux-x86-64.so.2 --help`, so those repos resolve, and a CPU without v4 never gets v4 packages. Server URLs may use `$arch_v3` or `$arch_v4`, as CachyOS's mirrorlists do: `$arch` is replaced by `x86_64`, so they become `x86_64_v3` and `x86_64_v4`.
 
-The levels come from the CPU of the machine that resolves the lock, not the host it's for. You can still lock several hosts on one machine, because each host checks its lock against its own CPU. A lock with packages built for a newer x86-64 level than the CPU runs counts as out of date, like one whose config changed: `archix lock`, `diff` and `switch` on that machine resolve it again for its own CPU, and a switch writes the result to `archix.lock` before changing anything. So a desktop with x86-64-v4 can lock a v3 laptop's host, and the laptop's first switch re-locks it for v3; commit the lock afterwards.
-
-As a backstop, a switch stops if the lock it's about to apply still has such packages:
+The levels come from the CPU of the machine that resolves the lock, not the host it's for. Locking several hosts on one machine is still fine, as long as each host's CPU can run what its lock holds, and archix checks that. Before changing anything, a switch looks at the architecture of every locked package, and if any is built for an x86-64 level this CPU doesn't support, it stops and leaves `archix.lock` as it is:
 
 ```console
 error: archix.lock for laptop has packages built for a newer CPU level than this machine runs, so it was locked elsewhere: zlib (x86_64_v4), bash (x86_64_v4). Run `archix lock` on this machine; nothing was changed
 ```
+
+The fix is `archix lock` on that machine. It treats such a lock as out of date even when the config hasn't changed, and resolves it again for its own CPU. So a desktop with x86-64-v4 can lock a v3 laptop's host; the laptop's switch refuses it, `archix lock` there re-locks it for v3, and you commit the result. A switch never rewrites the lock it's applying for this reason, and `diff` and `status` don't mention it.
 
 ## Three kinds of repo, three ways to lock
 

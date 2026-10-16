@@ -15,7 +15,7 @@ The goal is simple: no failure during a switch, including pulling the power cord
 
 - evaluates the config and renders every managed file,
 - resolves the lock with pacman itself, so dependencies are consistent, and shows new AUR build recipes for review,
-- checks that no locked package is built for a newer x86-64 level than this CPU runs, which happens when another machine locked the host; such a lock is resolved again for this CPU, and a switch refuses one that still has them ([CPU levels](/docs/guides/third-party-repos/#cpu-levels)),
+- checks that no locked package is built for a newer x86-64 level than this CPU runs, which happens when another machine locked the host, and stops if one is, leaving the lock for `archix lock` on this machine to fix ([CPU levels](/docs/guides/third-party-repos/#cpu-levels)),
 - offers to adopt packages that are newer than the lock,
 - checks that every managed file can replace what's on disk now, keeping a backup ([below](#managed-files-backups-and-hand-edits)),
 - when archix manages booting, checks that the ESP can hold the new boot entries, and with Secure Boot on, that they'll be signed ([below](#secure-boot)),

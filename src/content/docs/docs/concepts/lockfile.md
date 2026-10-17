@@ -142,7 +142,29 @@ Third-party repos like CachyOS and chaotic-aur have no dated archive. archix res
 linux-cachyos = { version = "6.17.2-2", repo = "cachyos-core-v3", file = "linux-cachyos-6.17.2-2-x86_64_v3.pkg.tar.zst", sha256 = "037c07941f32cbc6746bf10bda7f2f6dbd00a6035eb46ab98fa5c000baf2197b", explicit = true }
 ```
 
-On the machine that made the lock, that's as solid as an ALA snapshot. On a fresh machine it may not be, because the repo may no longer have that version. [Third-party repos](/docs/guides/third-party-repos/#the-fallback-chain) explains what happens then.
+On the machine that made the lock, that's as solid as an ALA snapshot. On a fresh machine it may not be, because the repo may no longer have that version, unless a [package cache](#package-caches) has it. [Third-party repos](/docs/guides/third-party-repos/#the-fallback-chain) explains what happens then.
+
+## Package caches
+
+Every machine keeps its own copies in `/var/cache/archix/pkg`. A package cache shares them: a directory or web server that other machines try before the archive and the repos' servers. `archix cache push` copies this machine's package files, their signatures and its build records into a directory, such as a NAS mount, skipping files that are already there:
+
+```console
+$ sudo archix cache push /mnt/nas/archix
+copied 214 files to /mnt/nas/archix
+```
+
+The other machines list it in [`package_caches`](/docs/reference/options/#package_caches), as a `file://` path or the URL of a web server that serves the directory:
+
+```lua
+package_caches = { "file:///mnt/nas/archix", "https://cache.example.org/archix" },
+```
+
+What a cache does depends on the package:
+
+- **Official and third-party packages** are looked for in each cache first, and checked against the lock's `sha256` like any download; a file that doesn't match is skipped for the next source. For a third-party package the repo no longer serves, that's what keeps the locked version restorable on a fresh machine.
+- **AUR packages and builds of the config's own recipes** are reused rather than built. archix looks for the cache's build record for the same recipe commit and snapshot, fetches the files it names, checked against the record's hashes, and installs those, `:: using zen-browser-bin's build from the package cache at ...`. One machine builds, the others don't, and they all run the same build. The lock has no `sha256` for these, so the record is trusted as it is: list only caches you control.
+
+A cache that's down or misbehaving only costs its speedup: archix says `warning: skipping the package cache at ...` and goes on to the archive or the repo. `switch` records the list, so `rollback`, `recover` and a rollback from the boot menu, which don't evaluate the config, try the same caches.
 
 ## `lock` and `update`
 
@@ -179,6 +201,12 @@ wrote /etc/archix/archix.lock
 ```
 
 `+` is a new package, `~` a changed version, `-` a package that's no longer needed. Changed AUR recipes are shown as a diff for review before the lock is written. The newest snapshot is the newest one the archive has published, so right after midnight it may still be yesterday's.
+
+A lock that's never updated never gets security fixes. Once its snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, `archix status` and `archix switch` say so:
+
+```console
+warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot
+```
 
 To move to a specific day instead, pass `--to`. It works in both directions, which makes it a quick way to step a whole host back to a day you know was good. If that takes a package such as PostgreSQL back across a major version, the next `switch` [asks first](/docs/concepts/generations/#downgrades-that-may-break-data):
 

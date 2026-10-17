@@ -51,7 +51,7 @@ error: `archix install` changes the system, so it needs root; run it with sudo: 
 
 Only one of these runs at a time; see [Commands that change the system](#commands-that-change-the-system). Any other error that comes from a missing permission gets the same hint, such as `archix lock` on a root-owned `/etc/archix`: `hint: that needs root; run it with sudo: sudo archix lock`. Reading doesn't need root: `archix <terms>`, `search`, `diff`, `status`, `eval`, `options`, `generations` and `secure-boot check` work as your user, and so do `lock` and `update` on a config you own. `archix <terms>` asks sudo for the install itself.
 
-Every command except `init`, `options`, `rollback`, `recover`, `gc`, `generations`, `prefetch`, `rescue` and `secure-boot` reads the config. `options` works without one, listing every option against an empty config. With no `init.lua` in the config directory, the others stop with:
+Every command except `init`, `options`, `rollback`, `recover`, `gc`, `generations`, `prefetch`, `cache push`, `rescue` and `secure-boot` reads the config. `options` works without one, listing every option against an empty config. With no `init.lua` in the config directory, the others stop with:
 
 ```console
 error: there's no archix config at /etc/archix yet; run `sudo archix init` to write one that describes this machine, or point --config at yours
@@ -455,9 +455,11 @@ no unfinished switch
 current generation: 41 (snapshot 2026-10-09)
 Secure Boot: on
 2 packages were changed outside archix in 1 transaction since the last switch
-desktop is locked to snapshot 2026-10-09 (212 packages)
+desktop is locked to snapshot 2026-10-09 (212 packages, 1 pinned off the snapshot)
 2 changes pending; see `archix diff`
 ```
+
+The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
 
 On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. When everything is in place, the last line is `the system matches the lock`. When a switch is unfinished, the first lines say which one and at which step, and tell you to run `archix recover`. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 
@@ -584,6 +586,17 @@ archix.fetchurl { url = "https://downloads.example.org/hello/1.2.0/hello-x86_64"
 Paste it as the value of a [`files`](/docs/reference/options/#files) or [`home.files`](/docs/reference/options/#homefiles) entry, or take the `url` and `sha256` for an [`appimages`](/docs/reference/options/#appimages) entry. `prefetch` doesn't evaluate the config. A URL that isn't there is an error: `https://... doesn't exist`.
 
 Run as root, it also keeps the download in archix's store, so the next switch doesn't fetch it again. As a normal user, it deletes the file once it has printed the hash.
+
+### `cache push`
+
+Copy this machine's package files, their signatures and its AUR build records into a directory that other machines list in [`package_caches`](/docs/reference/options/#package_caches).
+
+```console
+$ sudo archix cache push /mnt/nas/archix
+copied 214 files to /mnt/nas/archix
+```
+
+It copies everything in `/var/cache/archix/pkg`, the files archix downloaded and the packages it built, plus the build records under `aur-builds/`, and skips files the directory already has at the same size. Each file is written under a temporary name and renamed, so a machine reading the cache never sees half of one. Serve the directory over HTTP to share it beyond a network mount. `cache push` doesn't evaluate the config. See [Package caches](/docs/concepts/lockfile/#package-caches).
 
 ## Internal commands
 

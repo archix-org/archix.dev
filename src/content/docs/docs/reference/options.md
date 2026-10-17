@@ -155,6 +155,38 @@ Point it at a mirror you run, or a caching proxy in front of the archive, when t
 archive_url = "https://ala-mirror.example.org",
 ```
 
+### `package_caches`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/packages.lua` |
+
+Package caches tried before the archive: directories (`file:///mnt/nas/archix`) or HTTP servers holding what `archix cache push` copied. Repo packages are checked against the lock's sha256; AUR builds are taken as the cache's build records say, so list only caches you control.
+
+Caches are tried in order, before the archive and the third-party repos' servers, for every package file a lock, switch or temporary install needs. An AUR package, or a build of one of the config's recipes, is reused from a cache that has a build record for the same recipe commit and snapshot, instead of being built again. A cache that fails is skipped with a warning. `switch` records the list, so `rollback` and `recover` use it too. Fill a cache with [`archix cache push`](/docs/reference/cli/#cache-push); see [Package caches](/docs/concepts/lockfile/#package-caches).
+
+```lua
+package_caches = { "file:///mnt/nas/archix" },
+```
+
+### `lock_warn_after_days`
+
+| | |
+| --- | --- |
+| Type | `int` |
+| Default | `30` |
+| Declared in | `<archix>/packages.lua` |
+
+Warn when `archix.lock`'s snapshot is older than this many days, since fixes released after it aren't installed; `0` never warns.
+
+`archix status` and `archix switch` print the warning, ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``, and go on as usual. Raise it for a machine you keep on an old snapshot on purpose.
+
+```lua
+lock_warn_after_days = 90,
+```
+
 ### `undeclared_packages`
 
 | | |

@@ -69,8 +69,8 @@ archix locks each kind of package with the strongest guarantee its source can gi
 | --- | --- | --- | --- |
 | Examples | `core`, `extra`, `multilib` | any AUR package | `cachyos-v3`, `chaotic-aur`, `endeavouros` |
 | Locked by | Arch Linux Archive snapshot date, plus exact version and sha256 | Build recipe commit | Exact version and sha256 of the package file |
-| Where the file comes from | The ALA, for any date and any version | Built in a clean chroot from the locked commit | archix's own cached copy, or the repo's servers |
-| Restorable on a fresh machine | Always | As long as the commit is there and builds | Only while the repo still serves that version |
+| Where the file comes from | The ALA, for any date and any version | Built in a clean chroot from the locked commit, or a package cache's build of it | archix's own cached copy, a package cache, or the repo's servers |
+| Restorable on a fresh machine | Always | As long as the commit is there and builds | Only while the repo or a package cache still has that version |
 | When it can't be restored | Doesn't happen | The nearest-version prompt | The fallback chain |
 
 The official repos are the easy case. The Arch Linux Archive keeps every day of the repos and every package version ever published, so any lock can be restored anywhere.
@@ -86,6 +86,8 @@ Third-party repos have no dated archive. Most of them, CachyOS included, keep on
 So archix keeps its own copy. Every package file it installs from a third-party repo stays in `/var/cache/archix/pkg`, checked against the sha256 in the lock, and `gc` keeps it for as long as a kept generation needs it. On the machine that installed it, rollback and reinstalls work exactly as they do for official packages: the file is right there.
 
 The gap is a different machine, or the same machine after a reinstall. Its cache is empty. If the repo has moved on since you made the lock, the exact `linux-cachyos 6.17.2-2` in your lock doesn't exist anywhere archix can reach. No tool can fix that without an archive the repo doesn't provide. archix is upfront about it and gives you a predictable way forward.
+
+You can provide that archive yourself. Run `archix cache push` on the machine that has the files, into a directory your other machines list in [`package_caches`](/docs/reference/options/#package_caches), and they fetch the locked file from there, checked against the lock's `sha256`, before they ever ask the repo. See [Package caches](/docs/concepts/lockfile/#package-caches).
 
 ## The fallback chain
 
@@ -134,7 +136,7 @@ The setting lives in your config, so it applies to every machine that uses the c
 
 - **Let `archix init` import the repos.** On CachyOS, the third-party repos aren't extras. They supply the kernel and many core packages.
 - **Add `keys` before you use the config on a second machine.** On the first one, the keys are already in pacman's keyring.
-- **Switch the second machine soon after locking.** Third-party versions are most likely to still exist right after the lock was made. The longer you wait, the more packages hit the fallback chain.
+- **Switch the second machine soon after locking, or share a package cache.** Third-party versions are most likely to still exist right after the lock was made. The longer you wait, the more packages hit the fallback chain, unless the first machine pushed them to a [package cache](/docs/concepts/lockfile/#package-caches) the second one lists.
 - **Keep the default prompt at first.** Watching what falls back where tells you how much of your system depends on CachyOS-only builds.
 - **Expect conflicting packages to swap.** CachyOS replaces some core packages with its own, such as `zlib-ng-compat` for `zlib`, which declares `conflicts=zlib`. Before anything changes, a switch checks that no two packages ship the same file, and it counts a package another one conflicts with or replaces as leaving, in either direction, the way pacman swaps them. So moving between `zlib` and `zlib-ng-compat` works, and a real clash stops the switch with nothing changed; see [Safety](/docs/concepts/safety/#prepare-then-apply).
 - **Commit the lock after a fallback.** The chosen versions are written back, and committing them saves your other machines from the same question.

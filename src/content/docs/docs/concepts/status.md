@@ -5,7 +5,7 @@ sidebar:
   order: 7
 ---
 
-This page labels each feature by what archix's code and tests do today, as of archix commit `5ae1f7e`:
+This page labels each feature by what archix's code and tests do today, as of archix commit `2a5781d`:
 
 - **Shipped**: built, and covered by the test suites named next to it.
 - **Partial**: built, with a gap the line names.
@@ -26,7 +26,7 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Repair after a power cut](/docs/concepts/safety/#a-power-cut-inside-pacman) | **Shipped** | The initramfs restores what a switch cut off inside pacman was changing, so the machine boots. | VM |
 | [`archix recover`](/docs/concepts/safety/#archix-recover) | **Shipped** | Continues, rolls back or abandons an unfinished switch, repairing torn pacman database entries first. | VM, Arch suite |
 | [Rescue entries](/docs/concepts/safety/#rescue-mode) | **Shipped** | Restores a generation's core packages without pacman, from the initramfs or a live USB. | VM, Arch suite |
-| [Checks before a switch](/docs/concepts/safety/#signatures-and-disk-space) | **Shipped** | Signatures, free space on `/` and the ESP, and file conflicts are checked before anything changes. | VM (signatures, full disk), Arch suite (file conflicts) |
+| [Checks before a switch](/docs/concepts/safety/#signatures-and-disk-space) | **Shipped** | Signatures, free space on every mount a file lands on, and file conflicts are checked before anything changes. | VM (signatures, full disk), Arch suite (file conflicts) |
 | [AUR builds with review](/docs/guides/aur/) | **Shipped** | Recipes are locked by commit, shown for review, and built in a clean chroot. | Arch suite |
 | [Soname rebuilds](/docs/guides/local-pkgbuilds-and-patches/#rebuilds-at-the-same-version) | **Shipped** | A package archix built is rebuilt when a library it links disappears in a switch; a rollback reinstalls the generation's own build. | VM |
 | [Secure Boot signing](/docs/guides/secure-boot/) | **Shipped** | Boot entries and systemd-boot are signed with your keys, and a switch that wouldn't be signed is refused. | VM, Arch suite |
@@ -34,6 +34,7 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files) | **Shipped** | Units still running replaced binaries, libraries or interpreted code are restarted. | Arch suite |
 | [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/) | **Shipped** | Recipes in the config and patched official packages are locked by content and built in the chroot. | VM, Arch suite |
 | [Third-party repos](/docs/guides/third-party-repos/) | **Shipped** | Declared repos, CPU-level checks, and a fallback chain when a locked package is gone. | Arch suite |
+| [Package caches](/docs/concepts/lockfile/#package-caches) | **Shipped** | `archix cache push` fills a directory, shared as a mount or over HTTP, that other machines fetch package files and AUR builds from first. | Arch suite |
 | [Archive mirrors](/docs/reference/options/#archive_url) | **Shipped** | `archive_url` points locking, switches, rollbacks and recovery at a mirror of the archive. | VM, Arch suite |
 | [Flatpak apps](/docs/guides/flatpak-and-appimages/) | **Shipped** | System-wide apps are locked to commits and pinned back on rollback. | Arch suite |
 | [Dotfiles and home](/docs/guides/dotfiles-and-apps/) | **Shipped** | Home files, live links, merged keys and `programs.*` modules. | Arch suite |
@@ -43,8 +44,8 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 
 | Feature | Status | What's missing | Covered in |
 | --- | --- | --- | --- |
-| [Third-party repo exactness](/docs/concepts/limitations/#locking) | **Partial** | Locked versions are exact only while archix has the file cached; a fresh machine gets what the repo serves today. | [Third-party repos](/docs/guides/third-party-repos/#why-third-party-versions-can-go-missing) |
-| [AUR reproducibility](/docs/concepts/limitations/#locking) | **Partial** | Recipe commits are pinned, the sources they download aren't: `-git` and `SKIP`-checksum sources float. | [The AUR](/docs/guides/aur/#how-aur-packages-are-locked) |
+| [Third-party repo exactness](/docs/concepts/limitations/#locking) | **Partial** | Locked versions are exact only while archix or a package cache has the file; otherwise a fresh machine gets what the repo serves today. | [Third-party repos](/docs/guides/third-party-repos/#why-third-party-versions-can-go-missing) |
+| [AUR reproducibility](/docs/concepts/limitations/#locking) | **Partial** | Recipe commits are pinned, the sources they download aren't: `-git` and `SKIP`-checksum sources float unless a package cache holds the build. | [The AUR](/docs/guides/aur/#how-aur-packages-are-locked) |
 | [DKMS during a boot-time rollback](/docs/concepts/limitations/#not-yet-known) | **Partial** | Rolling a kernel back at boot works; whether DKMS modules build for it that early isn't verified. | [Limitations](/docs/concepts/limitations/) |
 
 ## Planned

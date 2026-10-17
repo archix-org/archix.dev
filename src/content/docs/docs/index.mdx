@@ -58,7 +58,7 @@ You move forward when you choose to, with `archix update`. Read more in [The loc
 
 ### Reversible
 
-A switch first prepares everything (the lock, AUR builds, downloads, rendered files) without touching the system. Only then does it apply, step by step from a journal, so an interrupted switch can always be continued or rolled back. The result is a generation: the exact package set, the managed files, users and services, and the git commit of your config. If a generation turns out bad, `archix rollback` takes you back. If it won't boot, pick the previous entry in systemd-boot, and archix rolls back to it early in boot. Read more in [Generations and rollback](/docs/concepts/generations/) and [Safety](/docs/concepts/safety/), and see [Limitations and failure modes](/docs/concepts/limitations/) for where the guarantees stop.
+A switch first prepares everything (the lock, AUR builds, downloads, rendered files) without touching the system. Only then does it apply, step by step from a journal, so an interrupted switch can always be continued or rolled back. The result is a generation: the exact package set, the managed files, users and services, and the git commit of your config. If a generation turns out bad, `archix rollback` takes you back. If it won't boot, pick the previous entry in systemd-boot, and archix rolls back to it early in boot. Read more in [Generations and rollback](/docs/concepts/generations/) and [Safety](/docs/concepts/safety/), and see [Limitations and failure modes](/docs/concepts/limitations/) for where the guarantees stop. [Feature status](/docs/concepts/status/) says which features are shipped, partial or planned, and what tests each.
 
 ## How it relates to pacman, yay and NixOS
 
@@ -75,4 +75,5 @@ A switch first prepares everything (the lock, AUR builds, downloads, rendered fi
 	<LinkCard title="Quick start" href="/docs/quick-start/" description="Capture your system with archix init and make your first switch." />
 	<LinkCard title="Third-party repos" href="/docs/guides/third-party-repos/" description="How archix locks CachyOS, chaotic-aur and other repos." />
 	<LinkCard title="CLI reference" href="/docs/reference/cli/" description="Every subcommand and flag." />
+	<LinkCard title="Feature status" href="/docs/concepts/status/" description="What's shipped, partial and planned, and what tests it." />
 </CardGrid>

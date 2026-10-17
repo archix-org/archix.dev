@@ -11,23 +11,25 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **A rollback is a repair, not an atomic switch.** There's no store to point at an older closure, so rolling back runs pacman to reinstall the older generation's packages on the system as it is. From the boot menu, it happens early in boot with the userspace of the generation you're leaving, before the rest of the system starts. It's journaled and can be [recovered](/docs/concepts/safety/#archix-recover) like a switch, but if pacman itself is broken, rollback can't run; [rescue mode](/docs/concepts/safety/#rescue-mode) is the way out then.
 
+**`/usr` isn't switched atomically.** A switch, like a rollback, has pacman replace files in place, package by package. A crash halfway leaves a mix of old and new files until the boot-time repair and `archix recover` sort it out; see [A power cut inside pacman](/docs/concepts/safety/#a-power-cut-inside-pacman). Nothing points the system at a complete, prebuilt `/usr` tree.
+
 **Package rollback doesn't roll back data.** A rollback reinstalls older packages and puts back managed files, but leaves everything else on disk as it is, databases included. A newer PostgreSQL or MariaDB may have migrated its data, and the older version can't read it. archix asks before going back across such versions, from a list it ships plus your [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades), but a rollback from the boot menu goes ahead anyway; see [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data). Back up data you can't lose.
 
 ## Locking
 
 **Third-party repo versions are exact only while archix has them cached.** Most third-party repos keep only the current build of each package. archix keeps a copy of everything it installs from them, but a fresh machine, or one whose cache was cleared, can only get what the repo serves today. Then the [fallback chain](/docs/guides/third-party-repos/#the-fallback-chain) picks a replacement and rewrites `archix.lock` with it, so the lock no longer says what the first machine had.
 
-**The AUR lock pins the recipe, not the sources.** An AUR package is locked to the commit of its build recipe. The sources the recipe downloads are pinned only by the checksums in it. VCS packages, such as `-git` ones, build from the newest upstream commit with no checksum, so rebuilding the same locked recipe can give different code; archix records the version the build gave itself, but can't bring an older one back except from its cache.
+**The AUR lock pins the recipe, not the sources.** An AUR package is locked to the commit of its build recipe, and the package file it built is recorded only by the generation that installed it, not by the lock. The sources the recipe downloads are pinned only by the checksums in it. VCS packages, such as `-git` ones, build from the newest upstream commit, and a source whose checksum is `SKIP` isn't checked at all, so rebuilding the same locked recipe can give different code; archix records the version the build gave itself, but can't bring an older one back except from its cache. Another machine building from your lock builds again, from whatever those sources serve that day.
 
-**The Arch Linux Archive is a single source.** Official packages are locked to a day of `archive.archlinux.org`, and fetched from it when they aren't cached. There's no mirror of it to fall back to: while the archive is down, packages that aren't cached can't be fetched, and `update` can't move to a new snapshot.
+**The Arch Linux Archive is the one source of old official packages.** Official packages are locked to a day of the archive, and fetched from it when they aren't cached. [`archive_url`](/docs/reference/options/#archive_url) points archix at a mirror with the same layout instead, and `switch` records it so rollback and `recover` use it too. It's still one URL with nothing behind it: while it's down, packages that aren't cached can't be fetched, and `update` can't move to a new snapshot.
 
 **init leaves foreign packages that aren't on the AUR alone.** A package you built by hand, or one that left the AUR, can't be locked, so [`archix init`](/docs/reference/cli/#init) puts it in `ignored_packages` instead of declaring it. archix never installs, removes or rolls it back. To manage it, put its recipe in [`pkgbuilds/`](/docs/guides/local-pkgbuilds-and-patches/).
 
 ## Trust and signatures
 
-**Install scriptlets run as root.** Once you approve an AUR recipe, its package is installed by pacman like any other, and its install scriptlet runs as root, outside the build chroot. Review is the safeguard: read what an `.install` file does before you trust a recipe.
+**Install scriptlets run as root.** Once you approve an AUR recipe, its package is installed by pacman like any other, and its install scriptlet runs as root, outside the build chroot. Review is the safeguard: a new package's review shows every file it ships, its `.install` file included, so read what that does before you trust a recipe.
 
-**pacman checks package signatures, at apply time.** In prepare, archix checks every package file against the sha256 in the lock, so a file that changed since locking never gets further. The packager's signature is checked by pacman when it installs the file, during apply. Packages archix built itself, from the AUR or your recipes, aren't signed; the lock and the build are what you trust.
+**Rollbacks trust the pinned sha256, not today's keyring.** In prepare, archix checks every package file against the sha256 in the lock, and has pacman check every incoming package's signature, so a bad signature or an unknown key stops a switch before anything changes. A rollback skips the signature: it installs packages that were verified when they were first installed, by the sha256 the generation pinned, so a packager key revoked since doesn't block going back. That also means a key revoked because it was compromised doesn't block it either. Packages archix built itself, from the AUR or your recipes, aren't signed; the lock and the build are what you trust.
 
 ## Secure Boot and the TPM
 
@@ -39,7 +41,7 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 ## Disk space
 
-**Free space is checked on the ESP only.** Before a switch, archix makes sure the ESP can hold the new boot entries. It doesn't check the root filesystem or the cache. A download that fills the disk stops in prepare, with nothing changed, but if the root filesystem runs out while pacman installs, the switch is left unfinished, and `archix recover` continues it once you've made room.
+**Free space is checked for the root filesystem as a whole.** Before a switch or rollback changes anything, archix checks that `/` has room for the incoming packages' installed size, less what the versions they replace take, plus 128 MiB, and that the ESP can hold the new boot entries; see [Signatures and disk space](/docs/concepts/safety/#signatures-and-disk-space). It's an estimate from the packages' metadata, and it only asks the filesystem `/` is on. A separate `/usr` or `/var` partition isn't checked on its own, and on btrfs the files the replaced versions free stay in the snapshot archix takes before applying, so the estimate can come out low there. A boot-menu rollback skips the check. If a filesystem runs out anyway while pacman installs, the switch is left unfinished, and `archix recover` continues it once you've made room.
 
 ## The boot-time rollback and initramfs hooks
 
@@ -48,3 +50,6 @@ When a rollback from the boot menu reinstalls a kernel, pacman runs mkinitcpio's
 ## Not yet known
 
 - **DKMS during a boot-time rollback.** Reinstalling an older kernel at boot makes DKMS build its modules for that kernel, which needs that kernel's headers. They come from the cache only if the generation you roll back to had them installed; whether the build then succeeds that early in boot isn't established yet.
+- **Weeks of use on real hardware.** The failure paths are exercised in VMs and containers: power cuts mid-update, killed runs, a full disk, a destroyed glibc, a revoked key. archix hasn't yet run for weeks on real machines, which is where the failures nobody thought to test turn up.
+
+[Feature status](/docs/concepts/status/) lists what's shipped, partial and planned, and what tests each.

@@ -24,20 +24,37 @@ The goal is simple: no failure during a switch, including pulling the power cord
 - stores every managed file's contents, and downloads files declared with a `url`, checking each against its `sha256`,
 - builds every AUR package in a clean chroot,
 - downloads every package and checks it against the lock,
-- checks that no two packages ship the same file ([below](#packages-that-ship-the-same-file)).
+- checks that no two packages ship the same file, and that no incoming file is already on disk without an owner ([below](#packages-that-ship-the-same-file)),
+- has pacman check every incoming package's signature, and checks that the root filesystem has room for the change ([below](#signatures-and-disk-space)),
+- flushes everything it downloaded, copied and built to disk, so a power cut later can't leave recovery with empty package files.
 
-If anything fails here, a typo, a network error, an AUR build that won't compile, a declined prompt, archix stops and the packages, files and services are exactly as they were. Most problems surface in this phase.
+If anything fails here, a typo, a network error, an AUR build that won't compile, a bad signature, a full disk, a declined prompt, archix stops and the packages, files and services are exactly as they were, with no journal. Most problems surface in this phase.
 
 ### Packages that ship the same file
 
 pacman only finds out that two packages own the same file once it's installing them, halfway through a switch. archix checks first. Once every package is downloaded or built, it reads each incoming package's file list and compares it with the other incoming packages and with the installed packages the switch keeps:
 
 ```console
-error: pacman would refuse these packages, which ship the same files; nothing was changed. Drop one of each pair from the config:
+error: pacman would refuse these packages over files that are already taken; nothing was changed. Drop one of each pair from the config, or move the stray files away:
   usr/lib/udev/rules.d/70-wooting.rules is in both wooting-udev and wootility
 ```
 
-Packages that are leaving don't count, and that includes the ones pacman swaps out. An incoming package's `conflicts` and `replaces` name packages that go when it arrives, and an installed package whose `conflicts` or `replaces` names an incoming one goes too, as when CachyOS's `zlib-ng-compat` and Arch's `zlib` replace each other. `rollback` runs the same check. A rollback from the boot menu doesn't: it goes back to a generation that was installed once already, and at boot it's better to let pacman decide than to refuse.
+Packages that are leaving don't count, and that includes the ones pacman swaps out. An incoming package's `conflicts` and `replaces` name packages that go when it arrives, and an installed package whose `conflicts` or `replaces` names an incoming one goes too, as when CachyOS's `zlib-ng-compat` and Arch's `zlib` replace each other.
+
+It also looks at the disk. An incoming file that already exists there, with no installed package owning it, is what pacman reports as "exists in filesystem", and archix refuses it the same way, as `usr/bin/foo from foo exists on disk, and no package owns it`. Move the stray file away, or drop the package. Files a package lists as `backup`, its config files, don't count, since pacman installs those as `.pacnew` instead, and neither do the copies of kernel modules archix keeps itself.
+
+`rollback` runs the same check. A rollback from the boot menu doesn't: it goes back to a generation that was installed once already, and at boot it's better to let pacman decide than to refuse.
+
+### Signatures and disk space
+
+pacman checks a package's signature only as it installs it, and finds out the disk is full only when a write fails. Both used to stop a switch halfway, after packages were already gone. archix asks first, once every package is downloaded or built:
+
+- **Signatures.** pacman loads every incoming package with `pacman -U --print`, which checks signatures and keys exactly as the install will, and installs nothing. A package it refuses, signed by an unknown or revoked key or with a bad signature, stops the switch with `pacman refuses these packages, so nothing was changed:` and pacman's own errors.
+- **Disk space.** The root filesystem needs room for the installed size of every incoming package, minus what the versions they replace take up now, plus 128 MiB to spare, since pacman extracts file by file and the boot step writes initramfs images. Packages that just leave the config don't count, because they're only removed after the install. Otherwise: ``/ has 96 MiB free, but this needs about 412 MiB; nothing was changed. Free some space (`archix gc`, `pacman -Sc`) and try again``.
+
+`switch`, `rollback` and `install --temp` run both checks; `recover --rollback` checks signatures. A rollback from the boot menu skips them, as it skips the file check. Either failure comes before the journal is written, so the system is untouched. The ESP has its own check, for the boot entries; see [Boot entries](/docs/concepts/generations/#boot-entries).
+
+A rollback reinstalls packages that were verified when they were first installed. It installs them by the sha256 the generation pinned, without their `.sig` file, so a packager key revoked since then doesn't block going back. `recover --rollback` does the same for the packages the current generation pinned, and pacman checks any other file against today's keyring.
 
 ### One archix at a time
 
@@ -78,7 +95,13 @@ apply 3 changes? [Y/n]
 switched to generation 42 (snapshot 2026-10-15)
 ```
 
-Services are stopped and disabled while their unit files still exist, and enabled and started only after `systemctl daemon-reload` has seen the new ones.
+Packages are installed before anything is removed. One pacman run installs every incoming package and, in the same transaction, removes the installed packages they conflict with or replace. Packages that are simply leaving the config go afterwards, in `:: removing packages`. So pacman and everything it needs are never missing in between. The one exception is an installed package whose files an incoming one takes over without declaring a conflict: pacman would refuse the install while it still owns them, so it goes first.
+
+Services are stopped and disabled while their unit files still exist, and enabled and started only after `systemctl daemon-reload` has seen the new ones. A service that stays enabled is restarted when its unit file or one of its drop-ins changed.
+
+`:: reloading systemd, sysctl, udev and locales` reloads whatever the changed files feed, so they apply at once: `systemctl daemon-reload`, `sysctl --system`, udev's rules, `locale-gen`, `systemd-tmpfiles --create` for `tmpfiles.d`, `systemd-sysusers` for `sysusers.d`, and `systemd-modules-load` for `modules-load.d`. A change to dbus's or logind's config reloads that service, never restarts it, since a restart would end every session. When user units change, the user manager of every logged-in user reloads too.
+
+Users and groups follow the services. A user that leaves the config is deleted after its services have stopped, since `userdel` refuses an account that's still in use. A user or group archix creates again gets back the uid or gid it had before, so files it owned on disk are still its own.
 
 ### The running kernel
 
@@ -105,7 +128,9 @@ archix records every kernel whose modules it kept in `/var/lib/archix/kept-modul
 
 [Activation hooks](/docs/guides/hooks/) aren't one of these steps. They run after the switch is complete, once the new generation is current and Flatpak apps are installed, under `:: running activation hooks`: first the `on_change` scripts of files the switch changed, then every hook. A hook can't leave a switch unfinished, so the journal doesn't track them. With hooks declared, the preview before the prompt lists them on a `run hooks` line.
 
-archix also checks pacman before it starts. If pacman is running, or a `db.lck` is left over with no pacman running, `switch` refuses and tells you why, rather than fight another package manager.
+archix also checks pacman before it starts. If any process holds pacman's lock open, pacman itself or another front end such as pamac or PackageKit, `switch` refuses with `pacman is running; wait for it to finish`. A `db.lck` that's left over with nothing holding it is refused too, and archix tells you why, rather than fight another package manager.
+
+The tools archix runs and reads the output of, pacman among them, run with `LC_MESSAGES=C`, so they answer in English whatever your locale.
 
 ## Restarting what uses replaced files
 
@@ -185,6 +210,12 @@ Before apply starts, archix writes `/var/lib/archix/journal.json`, fsynced and r
 
 Every step is idempotent. A step doesn't mean "upgrade mesa from A to B"; it means "make the system match the target". Running a step twice is harmless, which is what makes it safe to continue an interrupted switch from wherever it stopped.
 
+pacman doesn't fsync what it writes. So archix syncs the filesystem after every pacman step, before it marks the step done, and the journal never claims an install that is still only in memory. Generations, built packages, boot entries and the journal's own deletion are written durably too.
+
+While the journal runs, archix ignores Ctrl-C and the hangup a closed terminal or a dropped ssh session sends, and pacman runs in its own process group, so neither can stop pacman halfway through a transaction. If the switch is cut off anyway, by a power cut or `kill -9`, `archix recover` finishes it.
+
+The `on_change` scripts a switch owes are recorded before it changes any file, and cleared only once they've run, so a crash in between doesn't lose them.
+
 When every step is done, the journal is deleted. A journal on disk always means a switch is unfinished.
 
 ## Atomic writes
@@ -214,6 +245,8 @@ Backups and restores are renames. When the backup and the original are on differ
   ```console
   update     /etc/issue (edited outside archix; your version gets saved)
   ```
+
+  On FAT and exFAT, such as the ESP, only the content counts: those filesystems can't store a mode or owner, so every file reads back with the mount's, and archix doesn't take that for an edit.
 
 - **A file archix created** is deleted when it leaves your config, but only if it still has the contents archix wrote.
 - **A managed symlink over a mount point**, such as the `/etc/resolv.conf` Docker and `arch-chroot` bind-mount, can't be replaced, so archix leaves it and warns, `warning: /etc/resolv.conf is mounted over here (a container or arch-chroot does that), so it's left alone; the next switch outside replaces it`. Files with contents are still written through the mount.
@@ -272,7 +305,7 @@ A failed hook is listed the same way, `failed: hook tailscale: exited with exit 
 
 ## Unfinished switches
 
-archix never acts on an unfinished switch automatically. Guessing wrong after a crash could make things worse, so a human decides.
+archix never decides how an unfinished switch ends. Guessing wrong after a crash could make things worse, so a human decides. The one thing it does on its own is make the machine bootable again when the switch was cut off inside pacman; see [A power cut inside pacman](#a-power-cut-inside-pacman).
 
 - `archix-boot.service` reports the unfinished switch at boot and changes nothing.
 - `switch`, `upgrade`, `install`, `remove`, `rollback`, `lock`, `update` and `gc` refuse to run, and say which switch is unfinished. Read-only commands such as `diff` and `status` keep working, so you can look around first.
@@ -293,7 +326,7 @@ desktop is locked to snapshot 2026-10-15 (214 packages)
 `recover` shows what was interrupted and at which step, then offers three ways out:
 
 - **continue** reruns the steps that hadn't completed and finishes the switch.
-- **rollback** returns to the package set from before the switch, and undoes its changes to files, users and services. Packages come from pacman's cache or the Arch Linux Archive, and anything the transaction touched is reinstalled.
+- **rollback** returns to the package set from before the switch, and undoes its changes to files, users and services. Packages come from pacman's cache or the Arch Linux Archive, the one the switch used, mirror or not, and anything the transaction touched is reinstalled.
 - **abandon** changes nothing. It shows how the installed packages differ from the switch's target, runs `pacman -Qk` on the packages the switch touched, then closes the journal, so you see the real state of the system and fix it by hand.
 
 ```console
@@ -321,7 +354,27 @@ Continue and rollback both finish like a switch. They run the [hooks](/docs/guid
 
 Power loss in the middle of a pacman transaction is the classic way to break Arch: a stale lock file, half-extracted packages, a local database that disagrees with the disk.
 
-`recover` handles this before anything else. It first makes sure pacman isn't running; if it is, it stops and asks you to wait. Then it removes the stale `/var/lib/pacman/db.lck`. If the install step was the one interrupted, continuing reinstalls every package of the transaction, even ones pacman already reports as installed, so half-extracted ones are replaced. The verify step then checks the result. Prepare already downloaded everything to `/var/cache/archix/pkg`, so continuing needs no network.
+`recover` handles this before anything else. It first makes sure pacman isn't running; if it is, it stops and asks you to wait. Then it removes the stale `/var/lib/pacman/db.lck`.
+
+Next it repairs pacman's local database. A crash can tear an entry, leaving a package's directory without its name or version. archix rewrites such an entry from the package file the switch was installing, `pacman's database entry for glibc-2.44-1 was torn by the crash; rewrote it from /var/cache/archix/pkg/glibc-2.44-1-x86_64.pkg.tar.zst`, and an entry it can't rewrite is moved to `/var/lib/archix/torn-db` and its package reinstalled over its files.
+
+Then it clears the way for pacman. Files the cut-off pacman run had already extracted belong to no package yet, and pacman would refuse to install over them. archix moves them to `/var/lib/archix/crash-leftovers/<time>` instead of overwriting anything: `moved 214 files left behind by the interrupted pacman run to /var/lib/archix/crash-leftovers/1792051200`.
+
+If the install step was the one interrupted, continuing reinstalls every package of the transaction, even ones pacman already reports as installed, so half-extracted ones are replaced. The verify step then checks the result. Prepare already downloaded everything to `/var/cache/archix/pkg`, so continuing needs no network.
+
+### A power cut inside pacman
+
+pacman doesn't fsync. A power cut in the middle of a large update can leave the files it was writing half-written, systemd itself included, and the next boot can freeze before anything could run `archix recover`.
+
+So when archix manages booting, its initramfs checks for that. The rescue hook that carries the static archix is in every image archix builds, and on every boot, before switching to the real root, it looks for a journal there. If the switch stopped inside pacman, while installing or removing packages, it restores the booted generation's core packages from the cache, as [rescue mode](#rescue-mode) does, plus every package the switch was changing, and puts back the booted kernel's modules:
+
+```
+archix: the switch to generation 43 (snapshot 2026-10-15) (started at unix time 1792051200) was interrupted while installing packages, inside pacman; restoring the packages it was changing so the system can boot
+```
+
+It does this once per interrupted switch, and leaves the journal alone. The machine boots the generation it was running before, the switch shows as unfinished, and `archix recover` finishes or undoes it.
+
+A VM test suite does this to a real Arch install: it updates it from the 2026-06-01 snapshot to 2026-10-10, glibc 2.43 to 2.44 and linux 7.0 to 7.2, cuts the power halfway, and checks that the next boot repairs itself and `archix recover --continue` finishes the update with no file missing.
 
 ## Rescue mode
 
@@ -336,7 +389,7 @@ For that, when archix manages booting, the initramfs carries a static archix, an
   Arch Linux (archix rescue, generation 42)
 ```
 
-Booting it adds `archix.rescue` to the kernel command line. Before switching to the real root, the initramfs runs `archix rescue`, which unpacks that entry's generation's core packages straight from the cache, read from `archix.generation` on the command line, without pacman: glibc, pacman and its libraries, systemd, bash, coreutils, the kernel, archix itself and the rest of the core set. It keeps config files you edited, saving the package's version as `.pacnew`, and rewrites the packages' entries in pacman's database. Then the system boots, and rescue's last line tells you how to finish with the regular tools:
+Booting it adds `archix.rescue` to the kernel command line. Before switching to the real root, the initramfs runs `archix rescue`, which unpacks that entry's generation's core packages straight from the cache, read from `archix.generation` on the command line, without pacman. The core set is what systemd, pacman, archix and every installed kernel need to run, their whole dependency closure down to glibc, recorded when the generation was activated; a generation from an archix too old to record it gets a fixed list instead. If a switch is unfinished, rescue also restores every package that switch was changing. It keeps config files you edited, saving the package's version as `.pacnew`, and rewrites the packages' entries in pacman's database the way pacman writes them, with the packaged files' backup hashes, so the next upgrade still notices your edits. Then the system boots, and rescue's last line tells you how to finish with the regular tools:
 
 ```
 36 packages restored; boot normally, then run `sudo archix rollback 43` to put everything else back

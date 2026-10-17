@@ -182,11 +182,13 @@ flatpak    com.spotify.Client 5f8806197a2b -> 81c2d4e6f0a3
 flatpak    remove org.gimp.GIMP
 ```
 
-A Flatpak step that fails is a soft failure, like a service that doesn't start. Before it asks, `switch` also checks that no managed file would replace something it can't back up, and stops with a plain error if one would; see [Safety](/docs/concepts/safety/#managed-files-backups-and-hand-edits).
+A Flatpak step that fails is a soft failure, like a service that doesn't start. Before it asks, `switch` also checks that no managed file would replace something it can't back up, and stops with a plain error if one would; see [Safety](/docs/concepts/safety/#managed-files-backups-and-hand-edits). Once everything is downloaded and built, and before anything changes, it refuses packages that ship the same file or a file that's already on disk with no owner, packages pacman's signature check rejects, and a change the root filesystem has no room for; see [Signatures and disk space](/docs/concepts/safety/#signatures-and-disk-space).
+
+Packages are installed first, in one pacman run that also removes the packages they conflict with; packages leaving the config are removed afterwards. While the journal runs, Ctrl-C and a closed terminal or ssh session don't stop it.
 
 If the system already matches, it prints `nothing to do: the system matches generation 2 (snapshot 2026-10-09)`. If only settings changed, such as `ignored_packages`, and archix doesn't manage booting, it records a new generation without running the apply steps: `switched to generation 3 (snapshot 2026-10-09); no package changes were needed`. That's also what the first switch after `archix init` usually prints. Files archix takes over unchanged are backed up either way. Hooks run in both cases, like NixOS runs activation scripts on every switch: that line is followed by the `run hooks` line and `:: running activation hooks`.
 
-`switch` refuses to start while pacman is running, while a stale pacman lock (`/var/lib/pacman/db.lck`) exists, or while an earlier switch is unfinished. It also refuses a lock with packages built for a newer x86-64 level than this CPU runs, which another machine locked, and asks for `archix lock` here; see [`lock`](#lock). If installed packages are newer than the lock because of pacman or an AUR helper, it offers to adopt them first:
+`switch` refuses to start while pacman, pamac, PackageKit or anything else holds pacman's lock open, while a stale pacman lock (`/var/lib/pacman/db.lck`) exists, or while an earlier switch is unfinished. It also refuses a lock with packages built for a newer x86-64 level than this CPU runs, which another machine locked, and asks for `archix lock` here; see [`lock`](#lock). If installed packages are newer than the lock because of pacman or an AUR helper, it offers to adopt them first:
 
 ```console
 the system is newer than the lock for 3 packages (linux, mesa, vulkan-radeon), probably from pacman or an AUR helper
@@ -214,7 +216,7 @@ See [pacman and yay](/docs/concepts/pacman-and-yay/#adopting) and [Safety](/docs
 
 | Flag | Description |
 | --- | --- |
-| `--noconfirm` | Don't ask. Applies without the `apply N changes?` question, adopts newer packages, declares packages installed with pacman or yay, trusts new AUR build recipes without showing them, falls back when a third-party package is gone, and takes the nearest newer version when a locked AUR version can't be built. It refuses unsafe downgrades: ``refusing unsafe downgrades with --noconfirm; to go ahead, run `archix switch` or `archix rollback` with --allow-unsafe-downgrade``. |
+| `--noconfirm` | Don't ask. Applies without the `apply N changes?` question, adopts newer packages, declares packages installed with pacman or yay, trusts new AUR build recipes without showing them, and takes the nearest newer version when a locked AUR version can't be built. It refuses unsafe downgrades: ``refusing unsafe downgrades with --noconfirm; to go ahead, run `archix switch` or `archix rollback` with --allow-unsafe-downgrade``. With the default `third_party_fallback = "ask"`, a locked third-party package that's gone fails the switch rather than being swapped for another; see [The fallback chain](/docs/guides/third-party-repos/#the-fallback-chain). |
 | `--allow-unsafe-downgrade` | Go back across versions that may not read newer data (postgresql majors and the like) without asking. They're still listed. |
 | `--accept-nearest newer\|older` | When a locked AUR version can't be built, take the nearest newer or older one without asking. Overrides the `missing_versions` option. |
 
@@ -301,7 +303,7 @@ roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n]
 rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-Packages are reinstalled at the generation's exact versions, from the cache when they're there and from the Arch Linux Archive otherwise. Files, fetched ones included, come from the store, so they don't need their URL. Flatpak apps are pinned back to the generation's commits, which are downloaded from their remote, and apps the newer generation added are uninstalled. The prompt counts package, file and Flatpak changes. Like `switch`, it checks before changing anything that no file would replace something it can't back up. `rollback` doesn't evaluate the config, so it works even when the config is broken. `archix rollback 42` moves forward again. Downgrades that may break data are listed and asked about first, `downgrade anyway? [y/N]`, as on a switch. A package built from one of the config's recipes at the same version, but from a different recipe, is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and that generation's cached build goes back. Like `switch`, it restarts what uses replaced files, keeps the running kernel's modules loadable and says `the running kernel was replaced: reboot to finish (its modules stay loadable until then)` when it replaced that kernel. Naming the current generation repairs it: `generation 42 is current; putting back whatever differs from it`, which reinstalls drifted packages and rewrites changed files, users and services. The preview lists the generation's [hooks](/docs/guides/hooks/) on a `run hooks` line, and they run last, as on a switch, after the `on_change` scripts of files the rollback changed. That includes a rollback that finds nothing to put back, which prints `generation 41 (snapshot 2026-10-09) is current; no package changes were needed` and then runs them, so naming the current generation also reruns its hooks. It runs through the same journal as a switch, and refuses while a switch is unfinished; use `archix recover --rollback` for that. See [Generations and rollback](/docs/concepts/generations/).
+Packages are reinstalled at the generation's exact versions, from the cache when they're there and from the Arch Linux Archive otherwise. Files, fetched ones included, come from the store, so they don't need their URL. Flatpak apps are pinned back to the generation's commits, which are downloaded from their remote, and apps the newer generation added are uninstalled. The prompt counts package, file and Flatpak changes. Like `switch`, it checks before changing anything that no file would replace something it can't back up, that no two packages ship the same file, and that the disk has room. Packages go back by the sha256 the generation pinned, without checking their signatures against today's keyring again, so a key revoked since doesn't block the rollback. When archix manages booting, the generation becomes systemd-boot's default entry. `rollback` doesn't evaluate the config, so it works even when the config is broken. `archix rollback 42` moves forward again. Downgrades that may break data are listed and asked about first, `downgrade anyway? [y/N]`, as on a switch. A package built from one of the config's recipes at the same version, but from a different recipe, is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and that generation's cached build goes back. Like `switch`, it restarts what uses replaced files, keeps the running kernel's modules loadable and says `the running kernel was replaced: reboot to finish (its modules stay loadable until then)` when it replaced that kernel. Naming the current generation repairs it: `generation 42 is current; putting back whatever differs from it`, which reinstalls drifted packages and rewrites changed files, users and services. The preview lists the generation's [hooks](/docs/guides/hooks/) on a `run hooks` line, and they run last, as on a switch, after the `on_change` scripts of files the rollback changed. That includes a rollback that finds nothing to put back, which prints `generation 41 (snapshot 2026-10-09) is current; no package changes were needed` and then runs them, so naming the current generation also reruns its hooks. It runs through the same journal as a switch, and refuses while a switch is unfinished; use `archix recover --rollback` for that. See [Generations and rollback](/docs/concepts/generations/).
 
 | Argument or flag | Description |
 | --- | --- |
@@ -331,14 +333,14 @@ the switch to generation 43 (snapshot 2026-10-15) (started at unix time 17920512
 [c]ontinue it, [r]oll back, [a]bandon (close the journal without changes), or [q]uit?
 ```
 
-Before it does anything, `recover` checks that pacman isn't running and removes a stale pacman lock. With no unfinished switch, it prints `nothing to recover: no switch is unfinished`. It doesn't evaluate the config.
+Before it does anything, `recover` checks that pacman isn't running and removes a stale pacman lock. Unless you abandon, it then repairs what a crash left in pacman's way: database entries the crash tore are rewritten from the package file being installed, or moved to `/var/lib/archix/torn-db` and reinstalled, and files the cut-off pacman run left behind with no owner are moved to `/var/lib/archix/crash-leftovers` instead of being overwritten. See [Interrupted pacman transactions](/docs/concepts/safety/#interrupted-pacman-transactions). With no unfinished switch, it prints `nothing to recover: no switch is unfinished`. It doesn't evaluate the config.
 
 `--continue`, `--rollback` and `--abandon` skip the question; only one of them can be given.
 
 | Flag | Description |
 | --- | --- |
 | `--continue` | Finish the interrupted switch by rerunning the steps that hadn't completed, then run the hooks and every `on_change` script of the generation it switched to. |
-| `--rollback` | Return to the packages, files, users and services from before the interrupted switch, then run the hooks and every `on_change` script of that state. Downgrades that may break data are listed first, and it asks `downgrade anyway? [y/N]`. |
+| `--rollback` | Return to the packages, files, users and services from before the interrupted switch, then run the hooks and every `on_change` script of that state. Packages the current generation pinned go back by their sha256; pacman checks the signature of any other file first. Downgrades that may break data are listed first, and it asks `downgrade anyway? [y/N]`. |
 | `--allow-unsafe-downgrade` | With `--rollback`, go back across versions that may not read newer data without asking. |
 | `--abandon` | Close the journal without changing anything, after showing what state the system is in: the differences from the switch's target, and `pacman -Qk` on the packages it touched. |
 
@@ -364,7 +366,7 @@ restored pacman 7.0.0.r7.g1f38429-1
 36 packages restored; boot normally, then run `sudo archix rollback 42` to put everything else back
 ```
 
-It unpacks glibc, pacman, systemd, the kernel, archix itself and the rest of the core set straight from the cache, keeps edited config files (the package's version is saved as `.pacnew`) and rewrites their entries in pacman's database. Then `sudo archix rollback 42`, as the last line says, repairs everything else. It records what it restored in `/var/lib/archix/last-rescue` under the root, such as `generation 42, 36 packages restored, at unix time 1792051200`.
+It unpacks the core set straight from the cache: what systemd, pacman, archix and the installed kernels need to run, down to glibc, as recorded when the generation was activated, plus every package an unfinished switch was changing. It keeps edited config files (the package's version is saved as `.pacnew`) and rewrites their entries in pacman's database. Then `sudo archix rollback 42`, as the last line says, repairs everything else. It records what it restored in `/var/lib/archix/last-rescue` under the root, such as `generation 42, 36 packages restored, at unix time 1792051200`.
 
 `/usr/lib/archix/archix-static` is the static binary the `archix`, `archix-bin` and `archix-git` AUR packages install, and the one rescue boot entries carry. See [Safety](/docs/concepts/safety/#rescue-mode).
 
@@ -585,7 +587,7 @@ Run as root, it also keeps the download in archix's store, so the next switch do
 
 ## Internal commands
 
-Two hidden commands are run by files archix installs, not by you: `archix hook-record`, from the pacman hook, and `archix boot-check`, from `archix-boot.service` at boot.
+Two hidden commands are run by files archix installs, not by you: `archix hook-record`, from the pacman hook, and `archix boot-check`, from `archix-boot.service` at boot. The initramfs also runs `archix rescue --initrd` on every boot, which only puts back the booted kernel's modules unless a switch was [cut off inside pacman](/docs/concepts/safety/#a-power-cut-inside-pacman).
 
 ## Exit behaviour
 

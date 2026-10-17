@@ -76,6 +76,22 @@ To replace the list a shared module built up instead of adding to it, force it:
 packages = archix.force { "base", "linux", "linux-firmware" },
 ```
 
+### `prefer`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/packages.lua` |
+
+Packages to use when a dependency could be met by several, such as which font satisfies `ttf-font`. They're installed as dependencies, not declared.
+
+Every preferred package is locked and installed, marked as a dependency, and it wins over the provider pacman would pick and over the real package of the same name: `prefer = { "rustup" }` meets `rust` with rustup. See [The lockfile](/docs/concepts/lockfile/#official-repos-arch-linux-archive-snapshots).
+
+```lua
+prefer = { "rustup", "noto-fonts" },
+```
+
 ### `patches`
 
 | | |
@@ -122,6 +138,22 @@ return {
 If several modules set `repos`, their lists concatenate in definition order, and that order is the priority order. Duplicate entries are ignored, and an empty list is an error: packages need at least one repository.
 
 Third-party repos such as CachyOS's are declared with [`custom_repos`](#custom_repos).
+
+### `archive_url`
+
+| | |
+| --- | --- |
+| Type | `str` |
+| Default | `"https://archive.archlinux.org"` |
+| Declared in | `<archix>/packages.lua` |
+
+The Arch Linux Archive, or a mirror of it with the same layout (`repos/YYYY/MM/DD/...`), that locks resolve and download from.
+
+Point it at a mirror you run, or a caching proxy in front of the archive, when the archive is slow or far away. Every snapshot database and official package comes from there, including `/packages/` for pins. `switch` records the URL, so `rollback`, `recover` and the boot-time rollback, which don't evaluate the config, use the same one. There's no fallback to the public archive: while the URL is down, packages that aren't cached can't be fetched.
+
+```lua
+archive_url = "https://ala-mirror.example.org",
+```
 
 ### `undeclared_packages`
 
@@ -205,7 +237,7 @@ The AUR to look packages up in and clone build recipes from.
 
 Show each AUR build recipe entering the lock (the PKGBUILD, or a diff) and ask before trusting it.
 
-A commit already in the lock is never shown again. `--noconfirm` skips the review for one run; `aur.review = false` skips it always.
+A new package shows every file its recipe ships, PKGBUILD first, install scripts and patches included; an update shows the git diff, `.SRCINFO` included. A commit already in the lock is never shown again. `--noconfirm` skips the review for one run; `aur.review = false` skips it always.
 
 ### `aur.build_on_host`
 
@@ -221,6 +253,22 @@ Their build dependencies are installed from the locked snapshot for the build, t
 
 ```lua
 aur = { build_on_host = { "some-driver-dkms" } },
+```
+
+### `aur.skip_check`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/aur.lua` |
+
+AUR packages (by pkgbase) built without running their test suite (`makepkg --nocheck`), for recipes whose `check()` fails against the locked snapshot.
+
+It applies in the chroot and with `build_on_host` alike. Use it when the package builds but its own tests don't pass against the snapshot's toolchain, rather than skipping checks for one run. See [`skip_check`](/docs/guides/aur/#skip_check).
+
+```lua
+aur = { skip_check = { "helm-ls" } },
 ```
 
 ### `missing_versions`
@@ -280,9 +328,9 @@ custom_repos = {
 | Default | `"ask"` |
 | Declared in | `<archix>/packages.lua` |
 
-When a locked package from a custom repo is gone: ask (the answer defaults to falling back), fall back without asking, or fail. Falling back tries the repo's current version, then the AUR, then the official repos.
+When a locked package from a custom repo is gone: ask (with --noconfirm, fail), fall back without asking, or fail. Falling back tries the repo's current version, then the AUR, then the official repos.
 
-The lock follows whatever replaces the package, and an AUR replacement goes through review. With `"ask"`, `--noconfirm` falls back.
+The lock follows whatever replaces the package, and an AUR replacement goes through review. With `"ask"`, `--noconfirm` fails the switch instead, so an unattended run never swaps a package or rewrites the lock: `linux-cachyos 6.17.2-2 is gone from cachyos-core-v3; nothing was changed. Run without --noconfirm to choose a replacement, or set third_party_fallback = "fallback"`. See [The fallback chain](/docs/guides/third-party-repos/#the-fallback-chain).
 
 ## Generations
 
@@ -427,7 +475,7 @@ systemd user units for every user, keyed by file name. They're written to `/etc/
 
 System units to enable and start (`true`) or disable and stop (`false`).
 
-Units are stopped and disabled before their files go away, and enabled and started after `daemon-reload`. A unit that fails to start doesn't undo the switch: the generation still becomes current, the failures are listed, and archix exits non-zero.
+Units are stopped and disabled before their files go away, and enabled and started after `daemon-reload`. An enabled unit whose file, or a drop-in under `/etc/systemd/system/<unit>.d/`, the switch changed is restarted with `systemctl try-restart`. A unit that fails to start doesn't undo the switch: the generation still becomes current, the failures are listed, and archix exits non-zero.
 
 ```lua
 services = { ["sshd.service"] = true, ["bluetooth.service"] = true, ["cups.service"] = false },
@@ -483,7 +531,7 @@ Users archix creates and keeps in step; ones it created are removed (home kept) 
 | `description` | `str` | `""` | The GECOS field. |
 | `system` | `bool` | `false` | A system user: low uid, no home directory. |
 
-Declaring a user that already exists brings it in line with every field, defaults included: a declared user is authoritative, so `groups` is the complete list of supplementary groups, and `shell` falls back to `/bin/bash`. When you declare an existing user by hand, list all of its groups and its shell. `archix init` captures existing users with their real groups, shell, home and description, so declaring them changes nothing. Users that archix didn't create are never deleted.
+Declaring a user that already exists brings it in line with every field, defaults included: a declared user is authoritative, so `groups` is the complete list of supplementary groups, and `shell` falls back to `/bin/bash`. When you declare an existing user by hand, list all of its groups and its shell. `archix init` captures existing users with their real groups, shell, home and description, so declaring them changes nothing. Users that archix didn't create are never deleted. One it created is deleted only after its services have stopped, and if you declare it again later without a `uid`, it gets back the uid it had, so the files it owned are still its own. Groups work the same way.
 
 ```lua
 users = {

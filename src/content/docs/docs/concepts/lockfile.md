@@ -64,7 +64,11 @@ Every host can sit on a different date. The laptop doesn't have to update just b
 
 The [Arch Linux Archive](https://archive.archlinux.org) (ALA) keeps a full copy of the official repos for every day. archix locks your official packages to one of those days.
 
-To resolve, archix runs `pacman -Sp` against that day's sync databases and an empty local database, so the lock holds exactly the full set pacman would install on a fresh system. Providers you declare win: declare `pipewire-jack` and it replaces `jack2`. Your `/etc/pacman.conf` stays on your live mirrors, for when you run pacman yourself.
+To resolve, archix runs `pacman -Sp` against that day's sync databases and an empty local database, so the lock holds exactly the full set pacman would install on a fresh system. Providers you declare win: declare `pipewire-jack` and it replaces `jack2`. To pick a provider without declaring it, list it in [`prefer`](/docs/reference/options/#prefer), such as `rustup` for `rust`; it's installed as a dependency. Your `/etc/pacman.conf` stays on your live mirrors, for when you run pacman yourself.
+
+When a dependency names a real package, the lock includes that package, even where pacman met the dependency with another package's `provides`. pacman reuses a provider that's already in the transaction, and on a fresh resolve that can be the wrong one: `ca-certificates-utils` provides `ca-certificates` but ships no certificates, and a lock with only it would empty the CA bundle. A provider still wins when you declare it or list it in `prefer`, and when the real package would conflict with something else in the lock. An existing lock picks this up on the next `archix update`, or when the declared packages change.
+
+Official packages come from `https://archive.archlinux.org` unless [`archive_url`](/docs/reference/options/#archive_url) names a mirror of it with the same layout, such as a local caching proxy. `switch` records the URL it used, so `rollback` and `recover`, which don't evaluate the config, fetch from the same place.
 
 To install, archix downloads the exact files in the lock, checks each against its `sha256`, and hands them to `pacman -U`. It never mixes a snapshot with your live mirrors in one transaction, so you can't end up with the partial upgrade the Arch wiki warns about.
 

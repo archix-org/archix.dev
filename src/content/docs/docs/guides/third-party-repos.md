@@ -115,9 +115,18 @@ The [`third_party_fallback`](/docs/reference/options/) option sets the behaviour
 
 | Value | Behaviour |
 | --- | --- |
-| `"ask"` | Ask each time, defaulting to falling back. `--noconfirm` falls back. This is the default. |
-| `"fallback"` | Fall back without asking. |
+| `"ask"` | Ask each time, defaulting to falling back. With `--noconfirm`, there's no one to ask, so the switch fails. This is the default. |
+| `"fallback"` | Fall back without asking, `--noconfirm` or not. |
 | `"fail"` | Stop the switch: `linux-cachyos 6.17.2-2 is gone from cachyos-core-v3; third_party_fallback = "fail"`. |
+
+An unattended run never swaps what you run or rewrites the lock on its own. With `"ask"` and `--noconfirm`, a timer or script running `archix switch --noconfirm` stops before anything changes:
+
+```console
+linux-cachyos 6.17.2-2 is gone from cachyos-core-v3
+error: linux-cachyos 6.17.2-2 is gone from cachyos-core-v3; nothing was changed. Run without --noconfirm to choose a replacement, or set third_party_fallback = "fallback"
+```
+
+Set `"fallback"` if unattended runs should fall back too.
 
 The setting lives in your config, so it applies to every machine that uses the config.
 

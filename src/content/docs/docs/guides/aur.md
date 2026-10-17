@@ -87,14 +87,21 @@ The commit in the lock is still the recipe's, so the sources a VCS package build
 
 AUR packages are code from strangers that runs on your machine. archix shows it to you before it's trusted, whenever a recipe enters the lock:
 
-- for a new package, the full PKGBUILD;
-- for an update, the git diff since the locked commit.
+- for a new package, every file the recipe ships, the PKGBUILD first and `.SRCINFO` last, so install scripts and patches are in front of you too;
+- for an update, the git diff since the locked commit, `.SRCINFO` included.
+
+`.SRCINFO` matters because archix reads it: the dependencies, sources and PGP keys it locks and builds with come from there, not from running the PKGBUILD.
 
 ```console
 $ sudo archix install zen-browser-bin
 ==> zen-browser-bin: new AUR package at cd6266c6847e
+==> PKGBUILD
 # Maintainer: ...
 pkgname=zen-browser-bin
+...
+==> zen-browser-bin.install
+...
+==> .SRCINFO
 ...
 trust zen-browser-bin at cd6266c6847e and lock it? [Y/n]
 ```
@@ -107,12 +114,14 @@ Review happens wherever recipes enter the lock: `install`, `lock`, `update`, `up
 
 ## Clean chroot builds
 
-Every AUR package is built with devtools' `makechrootpkg` in a clean chroot at `/var/lib/archix/chroot`, as the unprivileged `archix-build` user. The chroot is created with `base-devel` at the host's locked snapshot date, and moved whenever the lock's date changes. AUR dependencies are built first and passed in. AUR builds need `devtools` and `git` installed.
+Every AUR package is built with devtools' `makechrootpkg` in a clean chroot at `/var/lib/archix/chroot`, as the unprivileged `archix-build` user. The chroot is created with `base-devel` at the host's locked snapshot date, and moved whenever the lock's date changes. It's created again from scratch when devtools changes its chroot format. AUR dependencies are built first and passed in. AUR builds need `devtools` and `git` installed.
 
 ```console
 :: creating the build chroot at the 2026-10-09 snapshot
 :: building zen-browser-bin 1.16.3b-1 (in a clean chroot)
 ```
+
+archix downloads the packages the chroot needs itself, with retries, rather than leaving it to pacman inside the chroot, which gives up after one slow connection to the archive. That covers the chroot's own `base-devel` when it's created or moved, and each build's repo dependencies, including those of the AUR packages the build needs first: they're resolved against the lock's snapshot and downloaded into pacman's cache, `/var/cache/pacman/pkg`, which devtools shares with the chroot, so makepkg installs them from there.
 
 This fixes two classic AUR problems:
 
@@ -131,9 +140,19 @@ Some packages don't build in a chroot: they need hardware access, a running serv
 aur = { build_on_host = { "some-driver-dkms" } },
 ```
 
+### `skip_check`
+
+Some recipes build fine but their own test suite fails against the locked snapshot, say against a newer toolchain than upstream tested with. A failing `check()` fails the build, and with it the switch. List those package bases in [`aur.skip_check`](/docs/reference/options/#aurskip_check), and archix builds them with `makepkg --nocheck`, in the chroot or on the host. It's paru's `--nocheck`, but per package and in the config, so the choice is declared and reviewed like the rest:
+
+```lua
+aur = { skip_check = { "helm-ls" } },
+```
+
 ## The build cache
 
-Built packages are cached in `/var/cache/archix/pkg`, keyed by recipe commit and snapshot date. If neither changed, archix reuses the built package instead of building again. Each generation records the sha256 of the file it installed, so rollback puts back that exact file.
+Built packages are cached in `/var/cache/archix/pkg`, named by recipe commit and snapshot date, so every build of a version keeps its own file. If neither changed, archix reuses the built package instead of building again. Each generation records the sha256 of the file it installed, so rollback puts back that exact file, even when a later build has the same version.
+
+A snapshot move rebuilds a package archix built, at the same commit, exactly when a library it links disappears in the switch: when a package the switch changes or removes stops shipping one of the ELF sonames the build needs. Otherwise it keeps the build it has. See [Rebuilds at the same version](/docs/guides/local-pkgbuilds-and-patches/#rebuilds-at-the-same-version).
 
 When a locked commit can't be built any more, because it's gone from the package's history or the build fails, archix offers the nearest newer version, then the nearest older one, and the lock follows once the version you accepted has built; if it fails too, `archix.lock` is left unchanged. Set [`missing_versions`](/docs/reference/options/) or pass `--accept-nearest newer|older` to decide without asking. See [Missing versions](/docs/concepts/lockfile/#missing-versions).
 

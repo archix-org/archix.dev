@@ -132,7 +132,9 @@ apply 1 change? [Y/n]
 
 The package is built from the new recipe and reinstalled at the same version. A package installed at the locked version that archix never built from this recipe, such as one you installed by hand, is replaced the same way.
 
-Builds from local recipes are cached in `/var/cache/archix/pkg` under a file name prefixed with a hash of the recipe, so two builds of the same version don't overwrite each other, and each generation records the file it installed. That's what lets a [rollback](/docs/concepts/generations/) go back across a same-version change: when the generation it returns to used a different recipe, the rollback lists the same `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)` line and reinstalls that generation's cached build, without building anything.
+An unchanged recipe is rebuilt too when a snapshot move takes away a library its package links. Before a switch, archix reads the ELF `DT_NEEDED` sonames of every package it built that the switch keeps, and when a package the switch upgrades, downgrades or removes stops shipping one of them, it rebuilds that package at the same version against the new snapshot and lists it as a `reinstall`. A build whose libraries all stay isn't rebuilt. The same goes for AUR packages.
+
+Builds from local recipes are cached in `/var/cache/archix/pkg` under a file name prefixed with a hash of the recipe and the snapshot, so two builds of the same version don't overwrite each other, and each generation records the file it installed. That's what lets a [rollback](/docs/concepts/generations/) go back across a same-version change: when the generation it returns to used a different recipe, the rollback lists the same `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)` line and reinstalls that generation's cached build, without building anything.
 
 ## Patched packages
 

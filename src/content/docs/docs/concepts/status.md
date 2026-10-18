@@ -5,7 +5,7 @@ sidebar:
   order: 7
 ---
 
-This page labels each feature by what archix's code and tests do today, as of archix commit `1bad0aa`:
+This page labels each feature by what archix's code and tests do today, as of archix commit `98ff81e`:
 
 - **Shipped**: built, and covered by the test suites named next to it.
 - **Partial**: built, with a gap the line names.
@@ -25,7 +25,9 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Rollback at runtime](/docs/concepts/generations/#rolling-back-from-a-running-system) | **Shipped** | `archix rollback` goes back, or forward, to any kept generation, also after `gc`. | VM, Arch suite |
 | [Repair after a power cut](/docs/concepts/safety/#a-power-cut-inside-pacman) | **Shipped** | The initramfs restores what a switch cut off inside pacman was changing, so the machine boots. | VM |
 | [`archix recover`](/docs/concepts/safety/#archix-recover) | **Shipped** | Continues, rolls back or abandons an unfinished switch, repairing torn pacman database entries first, and pacman's own libraries when it can't start. | VM, Arch suite |
-| [DKMS during a boot-time rollback](/docs/concepts/generations/#older-kernels-keep-booting) | **Shipped** | Booting an older entry rolls the kernel, its headers and the DKMS package back, and DKMS rebuilds the module for that kernel; archix's copy of each kernel's modules carries the last DKMS build. | VM |
+| [DKMS during a boot-time rollback](/docs/concepts/generations/#older-kernels-keep-booting) | **Shipped** | Booting an older entry rolls the kernel, its headers and the DKMS package back, and DKMS rebuilds and owns the module for that kernel; going back to a generation without the driver removes it. Tested with v4l2loopback and NVIDIA's open and closed drivers. | VM |
+| [Upgrading archix itself](/docs/concepts/safety/#upgrading-archix-itself) | **Shipped** | Switching to a new archix, and rolling back across that upgrade at runtime, from the boot menu and after a kill; each journal records the oldest archix that can finish it. | VM, Arch suite |
+| [`archix eject`](/docs/reference/cli/#eject) | **Shipped** | Hands booting back to plain systemd-boot entries or mkinitcpio UKIs, Secure Boot included, and takes archix's hooks and boot service off. | VM, Arch suite |
 | [Config written only when a switch commits](/docs/concepts/safety/#declined-and-killed-switches) | **Shipped** | `archix.lock` and `installed.lua` are evaluated from memory and written by the switch's journal as its generation becomes current; a kill before that leaves them untouched, and `recover` writes them only when it finishes the switch. | Arch suite |
 | [Rescue entries](/docs/concepts/safety/#rescue-mode) | **Shipped** | Restores a generation's core packages without pacman, from the initramfs or a live USB. | VM, Arch suite |
 | [Checks before a switch](/docs/concepts/safety/#signatures-and-disk-space) | **Shipped** | Signatures, free space on every mount a file lands on, and file conflicts are checked before anything changes. | VM (signatures, full disk), Arch suite (file conflicts) |

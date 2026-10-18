@@ -2,7 +2,7 @@
 title: Coming from NixOS
 description: Map NixOS concepts to archix, understand what works differently, and port an existing NixOS and Home Manager config.
 sidebar:
-  order: 5
+  order: 6
 ---
 
 You already know the ideas behind archix: a declarative config, a lockfile, generations and rollback, a typed module system with priorities. This page maps what you know onto archix, then covers what's different and how to port a config.
@@ -37,6 +37,8 @@ You already know the ideas behind archix: a declarative config, a lockfile, gene
 | `environment.etc` | `files` |
 | `systemd.services`, `systemd.user.services` | `units`, `services`, `home.systemd` |
 | `users.users` | `users` |
+| `system.activationScripts`, Home Manager's `home.activation` | `hooks` |
+| Home Manager's `home.file.<path>.onChange` | `home.files.<path>.on_change`, and `on_change` on `files` |
 | `nix-collect-garbage` | `archix gc` |
 | nixpkgs | The Arch repos, the AUR and third-party repos |
 | Generations in the boot menu | Generations in the systemd-boot menu |
@@ -93,6 +95,19 @@ On NixOS, imperative changes mostly don't stick. On archix they're allowed. `pac
 ### Bootloaders
 
 systemd-boot only. GRUB and Limine are not supported. Each generation gets a UKI, signed with sbctl if you have keys, so Secure Boot works without lanzaboote. Picking an older generation in the boot menu rolls the system back to it early in boot, by reinstalling that generation's packages and files from the cache rather than switching a store path, so it works on any filesystem.
+
+### Activation hooks are soft failures
+
+`hooks` are archix's activation scripts. Like `system.activationScripts`, they run on every switch, including one that changes nothing, so they have to be idempotent, and `after` orders them like `deps`. Each one is a bash script that runs as root, or as a `user` you name, which also covers what Home Manager's `home.activation` does. `on_change` on a `files` or `home.files` entry is Home Manager's `onChange`: it runs only when that file changed.
+
+The difference from Home Manager is what a failure does. Home Manager stops activation when a script fails. archix runs the rest of the hooks, undoes nothing, since the switch was already complete, then lists the failure and exits non-zero, as it does for a service that won't start, and as NixOS does when an activation script snippet fails:
+
+```console
+failed: hook tailscale: exited with exit status: 1
+error: the new generation is current, but 1 step failed (listed above)
+```
+
+The timing differs too. NixOS runs activation scripts before it starts and restarts units; archix runs hooks last, once the new generation is current and Flatpak apps are installed, so a hook can use a service or an app the same switch added. There's no `entryAfter "writeBoundary"` to get right. See [Activation hooks](/docs/guides/hooks/).
 
 ### No store, so rollback reinstalls
 

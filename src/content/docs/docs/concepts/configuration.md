@@ -275,7 +275,7 @@ Two escape hatches are declared:
 local motd = archix.read_file("files/motd")
 ```
 
-Anything with side effects, like running a command, belongs in a systemd unit you declare with `units` and `services`. It runs at switch time, after evaluation, so it can't make two evaluations disagree.
+Anything with side effects, like running a command, belongs in a systemd unit you declare with `units` and `services`, in a [hook](/docs/guides/hooks/) that runs at the end of every switch, or in an `on_change` script that runs when a file changed. They run at switch time, after evaluation, so they can't make two evaluations disagree.
 
 ## Where the config lives
 

@@ -2,7 +2,7 @@
 title: Coming from NixOS
 description: Map NixOS concepts to archix, understand what works differently, and port an existing NixOS and Home Manager config.
 sidebar:
-  order: 6
+  order: 9
 ---
 
 You already know the ideas behind archix: a declarative config, a lockfile, generations and rollback, a typed module system with priorities. This page maps what you know onto archix, then covers what's different and how to port a config.
@@ -28,15 +28,31 @@ You already know the ideas behind archix: a declarative config, a lockfile, gene
 | `lib.mkOption { type = ...; }` | `archix.option { type = ... }` |
 | `types.listOf`, `attrsOf`, `nullOr`, `enum`, `submodule` | `archix.types.list_of`, `attrs_of`, `nullable`, `enum`, `submodule` |
 | `builtins.readFile ./x` | `archix.read_file("x")` |
+| A derivation in `pkgs/*.nix` | A PKGBUILD in `pkgbuilds/<dir>/` |
+| `overrideAttrs (old: { patches = old.patches ++ [ ./fix.patch ]; })` | `patches.<package> = { "patches/fix.patch" }` |
 | `pkgs.fetchurl { url; sha256; }` | `archix.fetchurl { url = ..., sha256 = ... }`, as a file in `files` or `home.files` |
 | `nix-prefetch-url` | `archix prefetch` |
 | `services.flatpak` with nix-flatpak's `packages` | `flatpak.apps`, locked to commits in `archix.lock` |
 | `networking.hostName` per host | `archix.hostname`, from the machine |
 | Home Manager `programs.*` | `programs.*`, ported from Home Manager |
 | `home.file` | `home.files` |
+| `home.file` being read-only in the Nix store | `mutable_files = false` |
+| `config.lib.file.mkOutOfStoreSymlink` | `home.files.<path> = { source = ..., live = true }` |
+| plasma-manager's `programs.plasma.configFile` | `home.files.<path>.merge` with `format = "kconfig"` |
+| plasma-manager's `immutable = true` | `mutable_files = false`, which writes merged kconfig keys as `Key[$i]` |
 | `environment.etc` | `files` |
 | `systemd.services`, `systemd.user.services` | `units`, `services`, `home.systemd` |
 | `users.users` | `users` |
+| `environment.variables`, `environment.sessionVariables` | `environment.variables` |
+| `environment.shellAliases` | `environment.shell_aliases` |
+| `networking.firewall.enable` | `firewall.enable` |
+| `networking.firewall.allowedTCPPorts`, `allowedUDPPorts` | `firewall.allowed_tcp_ports`, `allowed_udp_ports` |
+| `networking.firewall.allowedTCPPortRanges`, `allowedUDPPortRanges` | `firewall.allowed_tcp_port_ranges`, `allowed_udp_port_ranges` |
+| `networking.firewall.trustedInterfaces` | `firewall.trusted_interfaces` |
+| `networking.firewall.allowPing` | `firewall.allow_ping` |
+| `networking.firewall.checkReversePath` | `firewall.check_reverse_path` |
+| `networking.firewall.extraInputRules` | `firewall.extra_input_rules` |
+| `restartIfChanged`, `stopIfChanged` on a service | `restart_if_changed.<unit>` |
 | `system.activationScripts`, Home Manager's `home.activation` | `hooks` |
 | Home Manager's `home.file.<path>.onChange` | `home.files.<path>.on_change`, and `on_change` on `files` |
 | `nix-collect-garbage` | `archix gc` |
@@ -51,7 +67,7 @@ The priorities use the same numbers: option defaults are 1500, `default` is 1000
 
 archix installs Arch's binary packages. There's no store, no derivations, no build closure to evaluate, and nothing to wait for while nixpkgs catches up. The filesystem is a normal FHS layout, so binaries from the internet, language toolchains and proprietary apps just work.
 
-The flip side: you can't override how a package is built from your config, the way `overrideAttrs` does. If you need a custom build, publish it to the AUR or to a repo of your own declared in `custom_repos`. archix locks those like everything else, and builds AUR packages in a clean chroot.
+Custom builds still live in your config. A package you'd write as a derivation in `pkgs/*.nix` becomes a PKGBUILD in `pkgbuilds/<dir>/`, and declaring its name is enough. An `overrideAttrs` that adds `patches` becomes [`patches.<package>`](/docs/reference/options/#patches): archix rebuilds Arch's own recipe for the locked version with your patches. Both are locked by a hash of the recipe and built in the same clean chroot as AUR packages. Other changes to how an official package is built, such as different configure flags, mean copying its recipe into `pkgbuilds/`. See [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
 
 ### A lock of versions, not of inputs
 
@@ -78,6 +94,16 @@ There's no `mkIf`, `mkMerge`, `mkBefore` or `mkAfter`. Use plain `if`, return a 
 
 Evaluation is still pure. The sandbox has no `io` or `os`, `pairs` iterates in sorted order, and the only escape hatches are `archix.hostname` and `archix.read_file`.
 
+### A firewall in nft syntax
+
+`firewall` follows `networking.firewall` with the nftables backend: the same options in snake_case, ranges as `{ from = 60000, to = 61000 }`, and `check_reverse_path` as `"strict"`, `"loose"` or `"off"`. It lives in its own `inet archix` table and leaves other tables alone. There's no iptables backend, so `extraCommands` and `extraStopCommands` written for iptables have to be rewritten as nft rules, in `extra_input_rules` for the input chain or `extra_rules` for chains and sets of your own. See [Environment and firewall](/docs/guides/environment-and-firewall/#firewall).
+
+`environment.variables` reaches login shells and systemd user sessions, which covers both `environment.variables` and `environment.sessionVariables`. `environment.shell_aliases` reaches login shells; for every interactive zsh, use `programs.zsh.shell_aliases`.
+
+### Writable files by default
+
+Home Manager's files are symlinks into the read-only Nix store. archix writes real files, writable by default, so apps that save their settings keep working. Set [`mutable_files = false`](/docs/reference/options/#mutable_files) to get the NixOS behaviour: files lose their write bits, and every switch puts them back. For a file you want to keep editing in place, like `mkOutOfStoreSymlink`, use a [live link](/docs/guides/dotfiles-and-apps/#live-links-for-app-written-configs). For KDE and other apps that write their own config, [`merge`](/docs/guides/dotfiles-and-apps/#setting-single-keys) sets single keys the way plasma-manager does, and with `mutable_files = false` it locks kconfig keys with `[$i]`, like plasma-manager's `immutable`.
+
 ### Mutable passwords
 
 archix never manages passwords. That matches NixOS's default of `users.mutableUsers = true`: users and groups are declared, passwords are set with `passwd`. When archix creates a user, it reminds you to run `passwd`. There's no equivalent of `hashedPassword`.
@@ -94,7 +120,15 @@ On NixOS, imperative changes mostly don't stick. On archix they're allowed. `pac
 
 ### Bootloaders
 
-systemd-boot only. GRUB and Limine are not supported. Each generation gets a UKI, signed with sbctl if you have keys, so Secure Boot works without lanzaboote. Picking an older generation in the boot menu rolls the system back to it early in boot, by reinstalling that generation's packages and files from the cache rather than switching a store path, so it works on any filesystem.
+systemd-boot only. GRUB and Limine are not supported. Each generation gets a UKI, signed with sbctl if you have keys, so Secure Boot works without lanzaboote; `archix secure-boot setup` creates and enrolls the keys. See [Secure Boot](/docs/guides/secure-boot/). Picking an older generation in the boot menu rolls the system back to it early in boot, by reinstalling that generation's packages and files from the cache rather than switching a store path, so it works on any filesystem.
+
+### Restarts follow replaced files, not unit changes
+
+NixOS restarts a service when its unit changes, which with a store covers every new dependency. archix has no store paths to compare, so it finds what to restart from the running system: units whose processes still map or hold open deleted files under `/usr`, and units whose packages depend on a changed package that ships Python, Perl, Node, Ruby or Lua code. Like `restartIfChanged = false`, it never restarts the display manager, dbus, logind, NetworkManager, sshd, gettys or your desktop session's units, and lists them for a logout instead. [`restart_if_changed`](/docs/reference/options/#restart_if_changed) overrides that per unit, `true` or `false`; there's no separate stop-then-start mode. See [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files).
+
+### Rollback asks before unsafe downgrades
+
+NixOS rolls back without asking, even when an older PostgreSQL can't read the data the newer one migrated. archix asks first, defaulting to no, when `switch` or `rollback` would take PostgreSQL, MariaDB, MySQL and a few others back across a major version, or cross a version you list in [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades). `--noconfirm` refuses such downgrades unless you add `--allow-unsafe-downgrade`. Picking an older generation in the boot menu goes ahead without asking, as on NixOS, and leaves a note at login naming what to check. See [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data).
 
 ### Activation hooks are soft failures
 

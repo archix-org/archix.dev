@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-This page documents every option archix ships: packages and repositories, the AUR, third-party repos, generations, the system (files, users, services and more), activation hooks, booting, AppImages, Flatpak apps, your home directory and the `programs.*` modules. Your installed archix is still the authoritative list, because `archix options` is generated from the declarations themselves, and it includes options your own modules declare.
+This page documents every option archix ships: packages and repositories, the AUR, third-party repos, generations, the system (files, users, services and more), the environment, the firewall, activation hooks, booting, AppImages, Flatpak apps, your home directory and the `programs.*` modules. Your installed archix is still the authoritative list, because `archix options` is generated from the declarations themselves, and it includes options your own modules declare.
 
 All of these modules are built in and loaded before your `init.lua`. You never import them.
 
@@ -60,6 +60,8 @@ List only what you want; dependencies are resolved and locked for you, and marke
 
 AUR package names go in the same list. archix looks each name up in your configured repos first, third-party repos included, and only then in the AUR. See [AUR packages](/docs/guides/aur/).
 
+So do packages built from the config's own recipes. A recipe in `pkgbuilds/<dir>/` needs no option: declare a package it builds, by its exact name, and that recipe wins over the repos and the AUR. A recipe that only `provides` a name doesn't beat the repos for it. Dependencies resolve from the repos first, then `pkgbuilds/`, then the AUR. A name found nowhere is an error: `` `foo` is in none of the configured repos, pkgbuilds/ or the AUR ``. See [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
+
 Like every list, `packages` concatenates across modules in definition order. Duplicates are harmless. Program modules add their own packages here, so `programs.kitty.enable = true` is enough to install kitty.
 
 ```lua
@@ -72,6 +74,45 @@ To replace the list a shared module built up instead of adding to it, force it:
 
 ```lua
 packages = archix.force { "base", "linux", "linux-firmware" },
+```
+
+### `prefer`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/packages.lua` |
+
+Packages to use when a dependency could be met by several, such as which font satisfies `ttf-font`. They're installed as dependencies, not declared.
+
+Every preferred package is locked and installed, marked as a dependency, and it wins over the provider pacman would pick and over the real package of the same name: `prefer = { "rustup" }` meets `rust` with rustup. See [The lockfile](/docs/concepts/lockfile/#official-repos-arch-linux-archive-snapshots).
+
+```lua
+prefer = { "rustup", "noto-fonts" },
+```
+
+### `patches`
+
+| | |
+| --- | --- |
+| Type | `attrs of list of str` |
+| Default | `{}` |
+| Declared in | `<archix>/packages.lua` |
+
+Patch files for official packages, keyed by package name and relative to the config directory. archix rebuilds Arch's own recipe for the locked version with them, applied with `patch -p1` before the recipe's `prepare()`, and adds a sub-release to the pkgrel. Recipes in `pkgbuilds/<dir>/` need no option: declaring a package they build is enough.
+
+archix clones Arch's recipe from gitlab.archlinux.org at the tag for the locked version, and applies each patch, in list order, in whichever top-level directory of `$srcdir` it fits. The patched build's pkgrel is a sub-release, `2` becoming `2.1`, so it sorts after Arch's. Other packages of the same pkgbase in the lock are swapped for the patched build too. It's locked with `repo = "local"` and `base = "patch:<pkgbase>"`, and `archix update` rebuilds it for each new version.
+
+The package has to be in the host's lock, declared or as a dependency, and in Arch's official repos. A package your lock takes from a third-party repo, such as CachyOS's `hyprland`, is replaced by the patched build of Arch's recipe at Arch's version at the locked snapshot; an official or pinned package keeps its version. Otherwise `diff`, `lock` and `switch` stop with `patches.<name>: <name> isn't among this config's packages or their dependencies`, or `patches.<name>: <name> isn't in Arch's official repos, and only Arch's recipes can be patched`. A path can't leave the config directory. A patch that applies nowhere fails the build before the system changes.
+
+```lua title="lua/hosts/desktop/init.lua"
+return {
+  packages = { "hyprland" },
+  patches = {
+    hyprland = { "patches/hyprland/0001-fix-cursor-warp.patch" },
+  },
+}
 ```
 
 ### `repos`
@@ -97,6 +138,54 @@ return {
 If several modules set `repos`, their lists concatenate in definition order, and that order is the priority order. Duplicate entries are ignored, and an empty list is an error: packages need at least one repository.
 
 Third-party repos such as CachyOS's are declared with [`custom_repos`](#custom_repos).
+
+### `archive_url`
+
+| | |
+| --- | --- |
+| Type | `str` |
+| Default | `"https://archive.archlinux.org"` |
+| Declared in | `<archix>/packages.lua` |
+
+The Arch Linux Archive, or a mirror of it with the same layout (`repos/YYYY/MM/DD/...`), that locks resolve and download from.
+
+Point it at a mirror you run, or a caching proxy in front of the archive, when the archive is slow or far away. Every snapshot database and official package comes from there, including `/packages/` for pins. `switch` records the URL, so `rollback`, `recover` and the boot-time rollback, which don't evaluate the config, use the same one. There's no fallback to the public archive: while the URL is down, packages that aren't cached can't be fetched.
+
+```lua
+archive_url = "https://ala-mirror.example.org",
+```
+
+### `package_caches`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/packages.lua` |
+
+Package caches tried before the archive: directories (`file:///mnt/nas/archix`) or HTTP servers holding what `archix cache push` copied. Repo packages are checked against the lock's sha256; AUR builds are taken as the cache's build records say, so list only caches you control.
+
+Caches are tried in order, before the archive and the third-party repos' servers, for every package file a lock, switch or temporary install needs. An AUR package, or a build of one of the config's recipes, is reused from a cache that has a build record for the same recipe commit and snapshot, instead of being built again. A cache that fails is skipped with a warning. `switch` records the list, so `rollback` and `recover` use it too. Fill a cache with [`archix cache push`](/docs/reference/cli/#cache-push); see [Package caches](/docs/concepts/lockfile/#package-caches).
+
+```lua
+package_caches = { "file:///mnt/nas/archix" },
+```
+
+### `lock_warn_after_days`
+
+| | |
+| --- | --- |
+| Type | `int` |
+| Default | `30` |
+| Declared in | `<archix>/packages.lua` |
+
+Warn when `archix.lock`'s snapshot is older than this many days, since fixes released after it aren't installed; `0` never warns.
+
+`archix status` and `archix switch` print the warning, ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``, and go on as usual. Raise it for a machine you keep on an old snapshot on purpose.
+
+```lua
+lock_warn_after_days = 90,
+```
 
 ### `undeclared_packages`
 
@@ -128,7 +217,7 @@ return {
 
 Installed packages archix leaves alone and never reports as undeclared.
 
-Use it for packages you deliberately manage by hand, such as a driver you build yourself or a tool you test from a local checkout. An ignored package is never removed, whatever `undeclared_packages` says, and never shows up in `diff`. Like `packages`, the list concatenates across modules. `archix init` puts foreign packages that aren't on the AUR here.
+Use it for packages you deliberately manage by hand, such as a tool you test from a local checkout. A package you build yourself can instead go in [`pkgbuilds/`](/docs/guides/local-pkgbuilds-and-patches/), so it's locked and rolled back like the rest. An ignored package is never removed, whatever `undeclared_packages` says, and never shows up in `diff`. Like `packages`, the list concatenates across modules. `archix init` puts foreign packages that aren't on the AUR here.
 
 ```lua title="lua/modules/common.lua"
 return {
@@ -137,6 +226,24 @@ return {
 ```
 
 Ignoring only affects packages that aren't in the lock. A package you also declare in `packages` is managed as usual.
+
+### `unsafe_downgrades`
+
+| | |
+| --- | --- |
+| Type | `attrs of list of str` |
+| Default | `{}` |
+| Declared in | `<archix>/packages.lua` |
+
+Versions per package that a downgrade mustn't cross without asking, on top of archix's own list (postgresql and mariadb major versions and a few more). A switch or rollback going back across one asks, defaulting to no; `--noconfirm` refuses unless `--allow-unsafe-downgrade` is given.
+
+A downgrade from at or above a listed version to below it counts, for any package. Each generation stores the option, so a rollback checks it without evaluating the config. archix's own list covers `postgresql`, `forgejo`, `nextcloud`, `redis` and `valkey` by their first version part, and `mariadb`, `mysql`, `percona-server`, `gitea` and `mattermost` by their first two. See [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data).
+
+```lua
+unsafe_downgrades = { lemon = { "3.54" }, ["matrix-synapse"] = { "1.100", "2.0" } },
+```
+
+With that, going from `3.54.0-1` back to `3.53.4-1` asks: `lemon 3.54.0-1 -> 3.53.4-1 crosses 3.54, which unsafe_downgrades marks`.
 
 ## AUR
 
@@ -162,7 +269,7 @@ The AUR to look packages up in and clone build recipes from.
 
 Show each AUR build recipe entering the lock (the PKGBUILD, or a diff) and ask before trusting it.
 
-A commit already in the lock is never shown again. `--noconfirm` skips the review for one run; `aur.review = false` skips it always.
+A new package shows every file its recipe ships, PKGBUILD first, install scripts and patches included; an update shows the git diff, `.SRCINFO` included. A commit already in the lock is never shown again. `--noconfirm` skips the review for one run; `aur.review = false` skips it always.
 
 ### `aur.build_on_host`
 
@@ -178,6 +285,22 @@ Their build dependencies are installed from the locked snapshot for the build, t
 
 ```lua
 aur = { build_on_host = { "some-driver-dkms" } },
+```
+
+### `aur.skip_check`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/aur.lua` |
+
+AUR packages (by pkgbase) built without running their test suite (`makepkg --nocheck`), for recipes whose `check()` fails against the locked snapshot.
+
+It applies in the chroot and with `build_on_host` alike. Use it when the package builds but its own tests don't pass against the snapshot's toolchain, rather than skipping checks for one run. See [`skip_check`](/docs/guides/aur/#skip_check).
+
+```lua
+aur = { skip_check = { "helm-ls" } },
 ```
 
 ### `missing_versions`
@@ -211,13 +334,13 @@ Each entry has these fields:
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `name` | `str` | *required* | Repository name, as in `pacman.conf`. |
-| `servers` | `list of str` | *required* | Server URLs, tried in order; `$repo` and `$arch` are expanded like pacman does. |
+| `servers` | `list of str` | *required* | Server URLs, tried in order; `$repo` and `$arch` are expanded like pacman does. `$arch` becomes `x86_64`, so CachyOS's `$arch_v3` and `$arch_v4` become `x86_64_v3` and `x86_64_v4`. |
 | `keys` | `list of str` | `[]` | Fingerprints of the repository's signing keys; archix imports and locally signs them. |
 | `keyserver` | `str` | `"hkps://keyserver.ubuntu.com"` | Where the `keys` are fetched from. |
 | `sig_level` | `str` | `"Required DatabaseOptional"` | The repository's `SigLevel` in `pacman.conf`. |
 | `before_official` | `bool` | `false` | List the repository before core and extra, so its packages win (CachyOS's repos need this). |
 
-A name that clashes with an official repo or another custom repo is an error. archix writes a block for each repo into `/etc/pacman.conf`, so plain pacman sees the same repos, and removes the block when the repo leaves the config.
+A name that clashes with an official repo or another custom repo is an error. When resolving, archix accepts packages for `x86_64` and every x86-64 level the CPU supports, so CachyOS's `x86_64_v3` and `x86_64_v4` repos resolve, and a CPU without v4 never gets v4 packages. A switch on an older CPU refuses a lock resolved on a machine with a newer level, and `archix lock` on that machine resolves it again for its own CPU; see [CPU levels](/docs/guides/third-party-repos/#cpu-levels). archix writes a block for each repo into `/etc/pacman.conf`, so plain pacman sees the same repos, and removes the block when the repo leaves the config.
 
 ```lua
 custom_repos = {
@@ -237,9 +360,9 @@ custom_repos = {
 | Default | `"ask"` |
 | Declared in | `<archix>/packages.lua` |
 
-When a locked package from a custom repo is gone: ask (the answer defaults to falling back), fall back without asking, or fail. Falling back tries the repo's current version, then the AUR, then the official repos.
+When a locked package from a custom repo is gone: ask (with --noconfirm, fail), fall back without asking, or fail. Falling back tries the repo's current version, then the AUR, then the official repos.
 
-The lock follows whatever replaces the package, and an AUR replacement goes through review. With `"ask"`, `--noconfirm` falls back.
+The lock follows whatever replaces the package, and an AUR replacement goes through review. With `"ask"`, `--noconfirm` fails the switch instead, so an unattended run never swaps a package or rewrites the lock: `linux-cachyos 6.17.2-2 is gone from cachyos-core-v3; nothing was changed. Run without --noconfirm to choose a replacement, or set third_party_fallback = "fallback"`. See [The fallback chain](/docs/guides/third-party-repos/#the-fallback-chain).
 
 ## Generations
 
@@ -281,7 +404,7 @@ Every setting in this section renders to files archix manages. Their contents ar
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Files archix writes, keyed by absolute path; give one of `text`, `source`, `link` or `url`. Files archix replaces are backed up and restored when they leave the config.
+Files archix writes, keyed by absolute path; give one of `text`, `source`, `link`, `url` or `merge`. Files archix replaces are backed up and restored when they leave the config.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -294,14 +417,20 @@ Files archix writes, keyed by absolute path; give one of `text`, `source`, `link
 | `owner` | `str` | `"root"` | |
 | `group` | `str` | `"root"` | |
 | `on_change` | `null or lines` | `null` | A bash script run as root after a switch or rollback that changed this file, before the [hooks](#hooks). |
+| `mutable` | `null or bool` | `null` | Write the file read-only (`false`) or writable (`true`); by default as [`mutable_files`](#mutable_files) says. |
+| `merge` | `null or submodule` | `null` | Set only these keys in a file the app also writes, keeping the rest of it, like plasma-manager. Leaving the config leaves the keys as they are. `format` is one of `"ini"`, `"kconfig"` or `"json"`, *required*; `values` (`attrs of any`, default `{}`) holds the keys: sections (kconfig groups nest) of keys, or a JSON object deep-merged into the file. |
 
-Give exactly one of `text`, `source`, `link` and `url`. `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
+Give exactly one of `text`, `source`, `link`, `url` and `merge`; otherwise it's an error, `files.<path>: give exactly one of text, source, link, url or merge`. `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
 
 `on_change` runs when the switch or rollback changed the file: when its entry differs from the one in the generation the system is leaving (the first switch that manages it, new contents, mode, owner, group or link target, a rollback to a generation where it was different), or when the file on disk didn't match and archix wrote it again, such as a hand-edited file put back or a deleted one recreated. It doesn't run when only the script changes, or when the file leaves the config. A boot-menu rollback skips it and records the file in `/var/lib/archix/pending-on-change`, so the next switch, rollback or recovery runs it, and `archix recover` runs every `on_change` script, since it can't tell which files the interrupted switch rewrote. Make the script idempotent. A failing script is a soft failure, listed as `failed: on_change of <path>: ...`. See [Activation hooks](/docs/guides/hooks/#on_change).
 
 A `url` needs a `sha256` of 64 hex digits; without one, `diff` and `switch` stop with `files.<path>: url needs sha256`. The hash is what's locked: `diff` compares the file on disk against it without downloading anything, and `switch` downloads the file after you confirm, before it changes anything. A download whose hash differs stops the switch: `<url> has sha256 <actual>, but the config says <sha256>`. The contents go into the same store as every other managed file, so rollback restores them even after the URL is gone.
 
-archix doesn't write under `/usr` (except `/usr/local`), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`. Files in a home directory go in [`home.files`](#homefiles).
+With `mutable = false`, or [`mutable_files = false`](#mutable_files), the file is written without its write bits, so `"0644"` becomes `0444` and `"0755"` becomes `0555`. Links aren't affected.
+
+`merge` sets keys in a file archix doesn't own, such as one an app writes too: archix edits only the declared keys and leaves the app's own. The app's keys never show up in `archix diff`; a declared key that changed does, and the next switch sets it back. JSON files may be JSONC, with comments and trailing commas, but archix drops the comments when it writes the file back; a file that can't take its keys stops the switch before anything changes. A new file gets `0644` and `owner`/`group`; an existing one keeps its mode and owner. When the entry leaves the config, the file keeps its keys and is neither restored nor deleted. See [Setting single keys](/docs/guides/dotfiles-and-apps/#setting-single-keys).
+
+archix doesn't write under `/usr` (except `/usr/local`), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`: `files: <path> is in a directory archix doesn't write to; home files go in home.files, and boot entries in boot.extra_entries`. Files in a home directory go in [`home.files`](#homefiles), and systemd-boot entries in [`boot.extra_entries`](#bootextra_entries).
 
 ```lua
 files = {
@@ -310,12 +439,29 @@ files = {
   ["/etc/X11/xorg.conf.d/30-touchpad.conf"] = { source = "files/30-touchpad.conf" },
   ["/etc/resolv.conf"] = { link = "/run/systemd/resolve/stub-resolv.conf" },
   ["/etc/foo.conf"] = { text = "port = 8080", on_change = "systemctl try-restart foo" },
+  ["/etc/xdg/kdeglobals"] = { merge = { format = "kconfig", values = { General = { ColorScheme = "BreezeDark" } } } },
   ["/usr/local/bin/hello"] = archix.fetchurl {
     url = "https://downloads.example.org/hello/1.2.0/hello-x86_64",
     sha256 = "5891b5b522d5df086d0ff0b110fbd9d21bb4fc7163af34d08286a2e846f6be03",
     mode = "0755",
   },
 },
+```
+
+### `mutable_files`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `true` |
+| Declared in | `<archix>/system.lua` |
+
+Whether files archix writes stay writable. false writes them read-only like the Nix store, restores them on every switch, and marks merged kconfig keys [$i]; each file's mutable overrides it.
+
+With `false`, files from `text`, `source` and `url` in [`files`](#files) and [`home.files`](#homefiles) lose their write bits, `0644` becoming `0444`. A file's own `mutable` wins either way. Links and live links aren't affected: a live link points into your config repo, which stays writable. Merged ini and JSON files stay writable for their app, since those keys can't be locked; merged kconfig keys get KDE's lock marker, `ColorScheme[$i]=BreezeDark`, so KDE won't change them. It's called `mutable_files` because `files` is already the option for system files. See [Read-only files](/docs/guides/dotfiles-and-apps/#read-only-files).
+
+```lua
+mutable_files = false,
 ```
 
 ### `units`
@@ -361,7 +507,7 @@ systemd user units for every user, keyed by file name. They're written to `/etc/
 
 System units to enable and start (`true`) or disable and stop (`false`).
 
-Units are stopped and disabled before their files go away, and enabled and started after `daemon-reload`. A unit that fails to start doesn't undo the switch: the generation still becomes current, the failures are listed, and archix exits non-zero.
+Units are stopped and disabled before their files go away, and enabled and started after `daemon-reload`. An enabled unit whose file, or a drop-in under `/etc/systemd/system/<unit>.d/`, the switch changed is restarted with `systemctl try-restart`. A unit that fails to start doesn't undo the switch: the generation still becomes current, the failures are listed, and archix exits non-zero.
 
 ```lua
 services = { ["sshd.service"] = true, ["bluetooth.service"] = true, ["cups.service"] = false },
@@ -379,6 +525,22 @@ User units to enable (`true`) or disable (`false`) for every user, with `systemc
 
 ```lua
 user_services = { ["pipewire-pulse.socket"] = true },
+```
+
+### `restart_if_changed`
+
+| | |
+| --- | --- |
+| Type | `attrs of bool` |
+| Default | `{}` |
+| Declared in | `<archix>/system.lua` |
+
+System or user units to always (`true`) or never (`false`) restart when a switch replaces files they use. By default archix restarts them, except the display manager, dbus, logind, NetworkManager, sshd, gettys and the desktop session's own units, which it lists for a logout instead.
+
+Keys are full unit names, such as `sshd.service`, and apply to system and user units of that name alike. `true` restarts a unit archix would otherwise only list; `false` lists one it would otherwise restart. Either way, a unit is only restarted if it's running, and `true` can't force a restart of the unit archix runs in or of a unit that started during the switch. See [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files).
+
+```lua
+restart_if_changed = { ["sshd.service"] = true, ["postgresql.service"] = false },
 ```
 
 ### `users`
@@ -401,7 +563,7 @@ Users archix creates and keeps in step; ones it created are removed (home kept) 
 | `description` | `str` | `""` | The GECOS field. |
 | `system` | `bool` | `false` | A system user: low uid, no home directory. |
 
-Declaring a user that already exists brings it in line with every field, defaults included: a declared user is authoritative, so `groups` is the complete list of supplementary groups, and `shell` falls back to `/bin/bash`. When you declare an existing user by hand, list all of its groups and its shell. `archix init` captures existing users with their real groups, shell, home and description, so declaring them changes nothing. Users that archix didn't create are never deleted.
+Declaring a user that already exists brings it in line with every field, defaults included: a declared user is authoritative, so `groups` is the complete list of supplementary groups, and `shell` falls back to `/bin/bash`. When you declare an existing user by hand, list all of its groups and its shell. `archix init` captures existing users with their real groups, shell, home and description, so declaring them changes nothing. Users that archix didn't create are never deleted. One it created is deleted only after its services have stopped, and if you declare it again later without a `uid`, it gets back the uid it had, so the files it owned are still its own. Groups work the same way.
 
 ```lua
 users = {
@@ -528,6 +690,176 @@ udev_rules = {
 },
 ```
 
+## Environment
+
+See [Environment and firewall](/docs/guides/environment-and-firewall/) for a walkthrough.
+
+### `environment.variables`
+
+| | |
+| --- | --- |
+| Type | `attrs of any` |
+| Default | `{}` |
+| Declared in | `<archix>/environment.lua` |
+
+Environment variables for every user: login shells get them from `/etc/profile.d/archix-environment.sh`, and systemd user services and graphical sessions from `/etc/environment.d/90-archix.conf`. Lists are joined with `:`.
+
+The shell file has `export NAME="value"` lines and `environment.d` has `NAME=value` lines, and both expand `$VAR` and `${VAR}`; numbers and other values are written as text.
+
+```lua
+environment = {
+  variables = { EDITOR = "nvim", XDG_DATA_DIRS = { "/usr/local/share", "/usr/share" } },
+},
+```
+
+### `environment.shell_aliases`
+
+| | |
+| --- | --- |
+| Type | `attrs of str` |
+| Default | `{}` |
+| Declared in | `<archix>/environment.lua` |
+
+Shell aliases for every user's login shells, from `/etc/profile.d/archix-aliases.sh`; [`programs.zsh.shell_aliases`](#programszsh) covers every interactive zsh.
+
+Each one is written as `alias ll='ls -l'`.
+
+```lua
+environment = { shell_aliases = { ll = "ls -l" } },
+```
+
+## Firewall
+
+An nftables firewall in its own table. See [Environment and firewall](/docs/guides/environment-and-firewall/#firewall) for a walkthrough and the rules it writes.
+
+### `firewall.enable`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/firewall.lua` |
+
+An nftables firewall in its own `inet archix` table, loaded by `archix-firewall.service`. Incoming traffic is dropped unless it answers outgoing traffic or something below allows it; other tables (Docker's, Tailscale's) are left alone.
+
+With `true`, archix declares the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network starts. Rule changes reload the service; turning it off stops it, which deletes only the `archix` table. archix doesn't use `nftables.service`, whose stop flushes every table.
+
+The input chain has policy drop and accepts, in order: established and related traffic, loopback, `trusted_interfaces`, all ICMPv6, DHCPv6 replies from `fe80::/10`, ping when `allow_ping` is on, the allowed ports and ranges, then `extra_input_rules`.
+
+```lua
+firewall = {
+  enable = true,
+  allowed_tcp_ports = { 22, 80, 443 },
+  trusted_interfaces = { "tailscale0" },
+},
+```
+
+### `firewall.allowed_tcp_ports`
+
+| | |
+| --- | --- |
+| Type | `list of int` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+TCP ports open to everyone.
+
+Ports must be 1 to 65535: `firewall ports must be 1-65535, not 70000`.
+
+### `firewall.allowed_udp_ports`
+
+| | |
+| --- | --- |
+| Type | `list of int` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+UDP ports open to everyone.
+
+### `firewall.allowed_tcp_port_ranges`
+
+| | |
+| --- | --- |
+| Type | `list of submodule` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+TCP port ranges open to everyone, as `{ from, to }`.
+
+Both `from` and `to` (`int`, *required*) are 1 to 65535, with `from` no greater than `to`: otherwise `firewall port ranges need from <= to, both 1-65535`.
+
+```lua
+firewall = { allowed_tcp_port_ranges = { { from = 8000, to = 8010 } } },
+```
+
+### `firewall.allowed_udp_port_ranges`
+
+| | |
+| --- | --- |
+| Type | `list of submodule` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+UDP port ranges open to everyone, as `{ from, to }`.
+
+```lua
+firewall = { allowed_udp_port_ranges = { { from = 60000, to = 61000 } } },
+```
+
+### `firewall.trusted_interfaces`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+Interfaces whose incoming traffic is always accepted, such as a VPN's.
+
+### `firewall.allow_ping`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `true` |
+| Declared in | `<archix>/firewall.lua` |
+
+Answer ICMP echo requests. ICMPv6, which IPv6 needs to work, is always accepted.
+
+### `firewall.check_reverse_path`
+
+| | |
+| --- | --- |
+| Type | `one of "strict", "loose", "off"` |
+| Default | `"strict"` |
+| Declared in | `<archix>/firewall.lua` |
+
+Drop packets whose source address wouldn't be routed back out the interface they came in on (strict), out of any interface (loose), or don't check (off). VPNs that route asymmetrically may need loose.
+
+The check runs in an `rpfilter` chain that lets DHCPv4 through. `"off"` leaves that chain out.
+
+### `firewall.extra_input_rules`
+
+| | |
+| --- | --- |
+| Type | `lines` |
+| Default | `""` |
+| Declared in | `<archix>/firewall.lua` |
+
+nftables rules added to the end of the input chain, such as `ip saddr 192.168.1.0/24 tcp dport 8080 accept`.
+
+### `firewall.extra_rules`
+
+| | |
+| --- | --- |
+| Type | `lines` |
+| Default | `""` |
+| Declared in | `<archix>/firewall.lua` |
+
+More nftables chains or sets inside the archix table.
+
+Once `nftables` is installed, a switch checks the whole ruleset with `nft -c -f` before changing anything, and a mistake stops it: `the firewall rules don't load (check extra_input_rules and extra_rules); nothing was changed:` and nft's error. On the first switch, before `nft` is installed, a mistake is a soft failure when the service loads the file.
+
 ## Hooks
 
 Scripts archix runs as part of every switch and rollback. See [Activation hooks](/docs/guides/hooks/) for a walkthrough.
@@ -564,11 +896,11 @@ hooks = {
 
 ## Boot and kernel
 
-archix can write a boot entry for every generation, so you can pick an older generation from the boot menu. Each entry is a unified kernel image, built with `ukify` from a fresh `mkinitcpio` initramfs, and placed in `EFI/Linux` on the ESP as `archix-<n>.efi`, where systemd-boot finds it. Booting an older entry rolls the system back to that generation.
+archix can write a boot entry for every generation, so you can pick an older generation from the boot menu. Each entry is `loader/entries/archix-<n>.conf` on the ESP, starting a unified kernel image in `EFI/archix/`, built with `ukify` from a fresh `mkinitcpio` initramfs; generations whose kernel and initramfs match share one. See [Boot entries](/docs/concepts/generations/#boot-entries). Booting an older entry rolls the system back to that generation.
 
 With `boot.loader` set, archix declares the packages it needs for this itself: the `boot.kernel` package, `mkinitcpio` and `systemd-ukify`, plus `sbctl` when `boot.secure_boot = true`. You don't list them in `packages`. With the default `secure_boot = null`, signing depends on sbctl being installed with keys, so keep `sbctl` declared yourself if you rely on that.
 
-The newest two generations also get a rescue entry when the static binary `/usr/lib/archix/archix-static` exists, which the `archix`, `archix-bin` and `archix-git` AUR packages install. See [Safety](/docs/concepts/safety/#rescue-mode).
+The newest two generations also get a rescue entry when the static binary `/usr/lib/archix/archix-static` exists, which the `archix-git` AUR package installs, and a protected entry with [`boot.protected_entry`](#bootprotected_entry). See [Safety](/docs/concepts/safety/#rescue-mode) and [Secure Boot](/docs/guides/secure-boot/).
 
 ```lua
 boot = { loader = "systemd-boot", microcode = { "amd-ucode.img" } },
@@ -585,7 +917,7 @@ kernel_params = { "root=UUID=0a1b2c3d-...", "rw", "quiet" },
 
 Kernel command line parameters, written to `/etc/kernel/cmdline` for boot entries.
 
-With `boot.loader` set, this is the whole command line, so it must contain `root=`; archix refuses to switch without it. Each entry adds `archix.generation=<n>`.
+With `boot.loader` set, this is the whole command line, so it must contain `root=`; archix refuses to switch without it. The generation an entry boots isn't on the command line; archix reads it from the entry systemd-boot started.
 
 ### `boot.loader`
 
@@ -637,6 +969,8 @@ Microcode images on the ESP loaded before the initramfs, such as `amd-ucode.img`
 
 How many of the newest generations keep a boot entry; fewer if the ESP runs out of room.
 
+Older entries are removed to make room for new ones, the current generation's included, oldest first. If even removing every older archix entry wouldn't free enough, a switch stops before changing anything: `the ESP at /boot has 38 MiB free (112 MiB more after removing every older archix entry), but this switch's boot entries need about 196 MiB; nothing was changed. Free up space on it, or set boot.entries lower`. Lowering `boot.entries` keeps fewer entries around, so the ESP fills up more slowly.
+
 ### `boot.secure_boot`
 
 | | |
@@ -647,7 +981,45 @@ How many of the newest generations keep a boot entry; fewer if the ESP runs out 
 
 Sign boot entries with sbctl; by default, whenever sbctl has keys.
 
-`true` also declares the `sbctl` package. When signing, archix also signs systemd-boot's own binary. Changing this records a new generation, so turning Secure Boot on re-signs.
+`true` also declares the `sbctl` package. When signing, archix also signs systemd-boot's own binary. Changing this records a new generation, so turning Secure Boot on re-signs. `sudo archix secure-boot setup` creates and enrolls the keys.
+
+With Secure Boot enforcing, a switch whose entry wouldn't be signed, because this is `false` or `sbctl` has no keys, is refused before anything changes. See [Secure Boot](/docs/guides/secure-boot/).
+
+### `boot.extra_entries`
+
+| | |
+| --- | --- |
+| Type | `attrs of lines` |
+| Default | `{}` |
+| Declared in | `<archix>/boot.lua` |
+
+More systemd-boot entries archix writes to the ESP's loader/entries, keyed by file name, such as `["memtest86+.conf"] = "title Memtest86+\nefi /memtest86+/memtest.efi"`. With Secure Boot on, whatever they start must be signed too.
+
+Each one becomes `<boot.esp>/loader/entries/<name>`, a managed file like any other, so it's removed when it leaves the config. Names must end in `.conf`, since systemd-boot reads only those: `boot.extra_entries: "memtest" must end in .conf, as systemd-boot reads only those`. archix doesn't sign what an entry starts; with Secure Boot on, sign it yourself, for example with `sbctl sign -s /boot/memtest86+/memtest.efi`.
+
+```lua title="lua/hosts/desktop/init.lua"
+return {
+  packages = { "memtest86+-efi" },
+  boot = {
+    loader = "systemd-boot",
+    extra_entries = {
+      ["memtest86+.conf"] = "title Memtest86+\nefi /memtest86+/memtest.efi",
+    },
+  },
+}
+```
+
+### `boot.protected_entry`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/boot.lua` |
+
+Also write an 'archix protected' entry for the newest generations with the kernel command line Easy Anti-Cheat Linux v2 asks for (integrity lockdown, kexec off, the BPF LSM, IOMMU without passthrough). It can't make the kernel well-known-signed; `archix secure-boot check --anticheat` shows what's still missing.
+
+The entry is `archix-<n>-protected.conf`, kept for the newest two generations like rescue entries, and signed like the rest. It adds `lockdown=integrity sysctl.kernel.kexec_load_disabled=1 lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0` to the command line. See [The protected entry](/docs/guides/secure-boot/#the-protected-entry).
 
 ### `boot.snapshots`
 
@@ -812,8 +1184,12 @@ Files in the user's home, keyed by path relative to it (a leading `~/` is allowe
 | `sha256` | `null or str` | `null` | The sha256 the download from `url` must have; `archix prefetch <url>` prints it. |
 | `executable` | `bool` | `false` | Write the file with mode `0755` instead of `0644`. |
 | `on_change` | `null or lines` | `null` | A bash script run as `home.user` after a switch or rollback that changed this file, before the [hooks](#hooks). |
+| `mutable` | `null or bool` | `null` | Write the file read-only (`false`) or writable (`true`); by default as [`mutable_files`](#mutable_files) says. |
+| `merge` | `null or submodule` | `null` | Set only these keys in a file the app also writes, keeping the rest of it, like plasma-manager. Leaving the config leaves the keys as they are. `format` is one of `"ini"`, `"kconfig"` or `"json"`, *required*; `values` (`attrs of any`, default `{}`) holds the keys: sections (kconfig groups nest) of keys, or a JSON object deep-merged into the file. |
 
-Give exactly one of `text`, `source`, `link` and `url`. A `source` is copied, and a directory `source` needs `live = true`. `live` only works with `source`; with `text`, `link` or `url` it's an error: `home.files.<path>: live = true needs source, the file in the config to link to`. A `url` works as it does in [`files`](#files): the hash is locked, and the download happens at switch. Paths can't leave the home or the config directory.
+Give exactly one of `text`, `source`, `link`, `url` and `merge`. A `source` is copied, and a directory `source` needs `live = true`. `live` only works with `source`; with `text`, `link` or `url` it's an error: `home.files.<path>: live = true needs source, the file in the config to link to`. A `url` works as it does in [`files`](#files): the hash is locked, and the download happens at switch. Paths can't leave the home or the config directory.
+
+`mutable` and `merge` work as in [`files`](#files): a read-only file is written `0444`, or `0555` with `executable`, and a merged file is owned by `home.user`. A `live` link stays writable, since it points into your config.
 
 When a path is a directory archix didn't manage before, such as an existing `~/.config/nvim` you now link into the config, it's moved to `/var/lib/archix/backups` and comes back when the entry leaves the config. See [Dotfiles and apps](/docs/guides/dotfiles-and-apps/).
 
@@ -826,6 +1202,7 @@ home = {
     [".config/nvim"] = { source = "home/.config/nvim", live = true },
     ["bin/hello"] = { text = "#!/bin/sh\necho hi\n", executable = true },
     [".config/user-dirs.dirs"] = { source = "home/user-dirs.dirs" },
+    [".config/kdeglobals"] = { merge = { format = "kconfig", values = { General = { ColorScheme = "BreezeDark" } } } },
     [".config/waybar/config.jsonc"] = { source = "home/waybar/config.jsonc", on_change = "pkill -SIGUSR2 -x waybar || true" },
     [".local/share/fonts/Inter.ttf"] = archix.fetchurl {
       url = "https://downloads.example.org/fonts/Inter-4.1.ttf",

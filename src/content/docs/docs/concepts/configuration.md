@@ -20,17 +20,24 @@ The layout follows neovim: an entry point at the top, and modules under `lua/`.
 │       └── etc
 │           └── sysctl.d
 │               └── 80-swappiness.conf
-└── lua
-    ├── hosts
-    │   ├── desktop
-    │   │   ├── init.lua
-    │   │   └── installed.lua
-    │   └── laptop.lua
-    └── modules
-        ├── common.lua
-        ├── gaming.lua
-        └── desktop
-            └── init.lua
+├── lua
+│   ├── hosts
+│   │   ├── desktop
+│   │   │   ├── init.lua
+│   │   │   └── installed.lua
+│   │   └── laptop.lua
+│   └── modules
+│       ├── common.lua
+│       ├── gaming.lua
+│       └── desktop
+│           └── init.lua
+├── patches
+│   └── hyprland
+│       └── 0001-fix-cursor-warp.patch
+└── pkgbuilds
+    └── backup-scripts
+        ├── PKGBUILD
+        └── backup.sh
 ```
 
 - `init.lua` is the entry point. It usually does nothing but import other modules.
@@ -38,6 +45,8 @@ The layout follows neovim: an entry point at the top, and modules under `lua/`.
 - `lua/hosts/<host>/installed.lua` lists the host's packages. Edit it freely; `archix install` and `archix remove` edit it too, and archix imports it automatically when it exists. See [pacman and yay](/docs/concepts/pacman-and-yay/#installedlua).
 - `lua/modules/...` holds what you share between machines.
 - `files/` holds files that options such as `files` and `home.files` copy with `source`. `archix init` puts the `/etc` files it captures under `files/<host>/`, and the dotfiles you let it import under `home/`.
+- `pkgbuilds/<dir>/` holds your own package recipes. Every directory there with a `PKGBUILD` is one, and declaring a package it builds is all it takes. See [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/).
+- `patches/` holds patch files for official packages, named in the [`patches`](/docs/reference/options/#patches) option. The name is a convention; any path in the config directory works.
 - `archix.lock` is generated. Commit it next to `init.lua`.
 
 Module names are dotted paths under `lua/`. `"modules.common"` loads `lua/modules/common.lua`, and `"modules.desktop"` loads `lua/modules/desktop/init.lua` if there's no `lua/modules/desktop.lua`.

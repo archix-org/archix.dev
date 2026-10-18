@@ -2,7 +2,7 @@
 title: Third-party repos
 description: How archix declares and locks CachyOS, chaotic-aur and other third-party repos, and what happens when a locked version can't be restored.
 sidebar:
-  order: 2
+  order: 3
 ---
 
 Many Arch-based systems install packages from repos that Arch doesn't run. CachyOS has its optimized `cachyos-v3`, `cachyos-core-v3` and `cachyos-extra-v3` repos and its kernels. EndeavourOS has `endeavouros`. Plenty of people add chaotic-aur for prebuilt AUR packages.
@@ -35,7 +35,7 @@ return {
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `name` | | The repo's name, as in `pacman.conf`. It can't clash with an official repo. |
-| `servers` | | Server URLs, tried in order. `$repo` and `$arch` are expanded as pacman does. |
+| `servers` | | Server URLs, tried in order. `$repo` and `$arch` are expanded as pacman does; `$arch_v3` and `$arch_v4` become `x86_64_v3` and `x86_64_v4`. |
 | `keys` | `{}` | Fingerprints of the repo's signing keys. archix imports and locally signs any that pacman's keyring doesn't have yet, at switch. |
 | `keyserver` | `"hkps://keyserver.ubuntu.com"` | Where those keys are fetched from. |
 | `sig_level` | `"Required DatabaseOptional"` | The repo's `SigLevel`. |
@@ -49,6 +49,18 @@ You rarely write the declaration yourself. `archix init` imports every third-par
 
 The official repos are a separate, simpler option: [`repos`](/docs/reference/options/) picks which of `core`, `extra`, `multilib` and the testing repos you use. Those are always locked against the Arch Linux Archive, on CachyOS too. Repos resolve in `pacman.conf` order: the official ones at the lock's snapshot date, third-party ones at their live state.
 
+### CPU levels
+
+CachyOS builds its packages for x86-64 microarchitecture levels, and labels them `x86_64_v3` or `x86_64_v4` instead of `x86_64`. When archix resolves, it accepts `x86_64` plus every level your CPU supports, as reported by `/lib/ld-linux-x86-64.so.2 --help`, so those repos resolve, and a CPU without v4 never gets v4 packages. Server URLs may use `$arch_v3` or `$arch_v4`, as CachyOS's mirrorlists do: `$arch` is replaced by `x86_64`, so they become `x86_64_v3` and `x86_64_v4`.
+
+The levels come from the CPU of the machine that resolves the lock, not the host it's for. Locking several hosts on one machine is still fine, as long as each host's CPU can run what its lock holds, and archix checks that. Before changing anything, a switch looks at the architecture of every locked package, and if any is built for an x86-64 level this CPU doesn't support, it stops and leaves `archix.lock` as it is:
+
+```console
+error: archix.lock for laptop has packages built for a newer CPU level than this machine runs, so it was locked elsewhere: zlib (x86_64_v4), bash (x86_64_v4). Run `archix lock` on this machine; nothing was changed
+```
+
+The fix is `archix lock` on that machine. It treats such a lock as out of date even when the config hasn't changed, and resolves it again for its own CPU. So a desktop with x86-64-v4 can lock a v3 laptop's host; the laptop's switch refuses it, `archix lock` there re-locks it for v3, and you commit the result. A switch never rewrites the lock it's applying for this reason, and `diff` and `status` don't mention it.
+
 ## Three kinds of repo, three ways to lock
 
 archix locks each kind of package with the strongest guarantee its source can give.
@@ -57,8 +69,8 @@ archix locks each kind of package with the strongest guarantee its source can gi
 | --- | --- | --- | --- |
 | Examples | `core`, `extra`, `multilib` | any AUR package | `cachyos-v3`, `chaotic-aur`, `endeavouros` |
 | Locked by | Arch Linux Archive snapshot date, plus exact version and sha256 | Build recipe commit | Exact version and sha256 of the package file |
-| Where the file comes from | The ALA, for any date and any version | Built in a clean chroot from the locked commit | archix's own cached copy, or the repo's servers |
-| Restorable on a fresh machine | Always | As long as the commit is there and builds | Only while the repo still serves that version |
+| Where the file comes from | The ALA, for any date and any version | Built in a clean chroot from the locked commit, or a package cache's build of it | archix's own cached copy, a package cache, or the repo's servers |
+| Restorable on a fresh machine | Always | As long as the commit is there and builds | Only while the repo or a package cache still has that version |
 | When it can't be restored | Doesn't happen | The nearest-version prompt | The fallback chain |
 
 The official repos are the easy case. The Arch Linux Archive keeps every day of the repos and every package version ever published, so any lock can be restored anywhere.
@@ -74,6 +86,8 @@ Third-party repos have no dated archive. Most of them, CachyOS included, keep on
 So archix keeps its own copy. Every package file it installs from a third-party repo stays in `/var/cache/archix/pkg`, checked against the sha256 in the lock, and `gc` keeps it for as long as a kept generation needs it. On the machine that installed it, rollback and reinstalls work exactly as they do for official packages: the file is right there.
 
 The gap is a different machine, or the same machine after a reinstall. Its cache is empty. If the repo has moved on since you made the lock, the exact `linux-cachyos 6.17.2-2` in your lock doesn't exist anywhere archix can reach. No tool can fix that without an archive the repo doesn't provide. archix is upfront about it and gives you a predictable way forward.
+
+You can provide that archive yourself. Run `archix cache push` on the machine that has the files, into a directory your other machines list in [`package_caches`](/docs/reference/options/#package_caches), and they fetch the locked file from there, checked against the lock's `sha256`, before they ever ask the repo. See [Package caches](/docs/concepts/lockfile/#package-caches).
 
 ## The fallback chain
 
@@ -103,9 +117,18 @@ The [`third_party_fallback`](/docs/reference/options/) option sets the behaviour
 
 | Value | Behaviour |
 | --- | --- |
-| `"ask"` | Ask each time, defaulting to falling back. `--noconfirm` falls back. This is the default. |
-| `"fallback"` | Fall back without asking. |
+| `"ask"` | Ask each time, defaulting to falling back. With `--noconfirm`, there's no one to ask, so the switch fails. This is the default. |
+| `"fallback"` | Fall back without asking, `--noconfirm` or not. |
 | `"fail"` | Stop the switch: `linux-cachyos 6.17.2-2 is gone from cachyos-core-v3; third_party_fallback = "fail"`. |
+
+An unattended run never swaps what you run or rewrites the lock on its own. With `"ask"` and `--noconfirm`, a timer or script running `archix switch --noconfirm` stops before anything changes:
+
+```console
+linux-cachyos 6.17.2-2 is gone from cachyos-core-v3
+error: linux-cachyos 6.17.2-2 is gone from cachyos-core-v3; nothing was changed. Run without --noconfirm to choose a replacement, or set third_party_fallback = "fallback"
+```
+
+Set `"fallback"` if unattended runs should fall back too.
 
 The setting lives in your config, so it applies to every machine that uses the config.
 
@@ -113,6 +136,7 @@ The setting lives in your config, so it applies to every machine that uses the c
 
 - **Let `archix init` import the repos.** On CachyOS, the third-party repos aren't extras. They supply the kernel and many core packages.
 - **Add `keys` before you use the config on a second machine.** On the first one, the keys are already in pacman's keyring.
-- **Switch the second machine soon after locking.** Third-party versions are most likely to still exist right after the lock was made. The longer you wait, the more packages hit the fallback chain.
+- **Switch the second machine soon after locking, or share a package cache.** Third-party versions are most likely to still exist right after the lock was made. The longer you wait, the more packages hit the fallback chain, unless the first machine pushed them to a [package cache](/docs/concepts/lockfile/#package-caches) the second one lists.
 - **Keep the default prompt at first.** Watching what falls back where tells you how much of your system depends on CachyOS-only builds.
+- **Expect conflicting packages to swap.** CachyOS replaces some core packages with its own, such as `zlib-ng-compat` for `zlib`, which declares `conflicts=zlib`. Before anything changes, a switch checks that no two packages ship the same file, and it counts a package another one conflicts with or replaces as leaving, in either direction, the way pacman swaps them. So moving between `zlib` and `zlib-ng-compat` works, and a real clash stops the switch with nothing changed; see [Safety](/docs/concepts/safety/#prepare-then-apply).
 - **Commit the lock after a fallback.** The chosen versions are written back, and committing them saves your other machines from the same question.

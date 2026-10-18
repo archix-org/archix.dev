@@ -305,9 +305,9 @@ A failed hook is listed the same way, `failed: hook tailscale: exited with exit 
 
 ## Declined and killed switches
 
-A switch rewrites `archix.lock` while it resolves, and `install` and `remove` edit `installed.lua` before that. Before touching either, `switch`, `install`, `remove` and `upgrade` record their exact bytes, owner and mode in `/var/lib/archix/pending-config.json`. If the command ends without a new generation becoming current, because you answered no, a check refused it, or it failed, both files are put back byte for byte: `put back /home/me/config/archix.lock as they were before this command`.
+Nothing a switch changes in your config is written before the switch commits. `install` and `remove` evaluate the edited `installed.lua` from memory, and the new `archix.lock` stays in memory too. Both ride in the switch's journal, and the step that makes the new generation current writes them right after it does. So declining, a failed check or a failed switch leaves both files byte for byte as they were, and so does a kill or power cut before the journal exists.
 
-If archix is killed or the power goes in between, the record stays, and the next archix run puts the files back under archix's lock, as does `archix-boot.service` at the next boot: `put back /home/me/config/archix.lock and /home/me/config/lua/hosts/box/installed.lua as they were before an unfinished switch`. Until then the files on disk still hold the killed switch's edits. Once the switch's journal exists, the record waits for [`archix recover`](#archix-recover): continuing keeps the new files, rolling back or abandoning puts the old ones back.
+A kill or power cut after the journal exists leaves the switch unfinished, and both files still as they were. [`archix recover`](#archix-recover) then decides for the config as for the system: `--continue` finishes the switch and writes the new `archix.lock` and `installed.lua` with it, while `--rollback` and `--abandon` leave them untouched. A switch that needs no journal, because no package changes, writes them once its generation is current.
 
 archix runs as root, but files it writes in your config keep their owner and mode, and a new one, like the first `installed.lua`, gets the owner of the directory it's created in, as do new folders, which are 0755, so `git commit` keeps working after `sudo archix install`.
 

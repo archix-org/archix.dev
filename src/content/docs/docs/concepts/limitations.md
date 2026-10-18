@@ -13,8 +13,6 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **`/usr` isn't switched atomically.** A switch, like a rollback, has pacman replace files in place, package by package. A crash halfway leaves a mix of old and new files until the boot-time repair and `archix recover` sort it out; see [A power cut inside pacman](/docs/concepts/safety/#a-power-cut-inside-pacman). Nothing points the system at a complete, prebuilt `/usr` tree.
 
-**A killed switch leaves its config edits on disk until the next run.** `archix install` writes `installed.lua`, and a switch writes `archix.lock`, before anything is applied, because the config is evaluated from disk. A declined or failed switch puts both back at once; a killed one leaves them until the next archix run or boot puts them back; see [Declined and killed switches](/docs/concepts/safety/#declined-and-killed-switches). Evaluating the edited config in memory, so nothing is written until the switch succeeds, is planned.
-
 **Package rollback doesn't roll back data.** A rollback reinstalls older packages and puts back managed files, but leaves everything else on disk as it is, databases included. A newer PostgreSQL or MariaDB may have migrated its data, and the older version can't read it. archix asks before going back across such versions, from a list it ships plus your [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades), but a rollback from the boot menu goes ahead anyway; see [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data). Back up data you can't lose.
 
 ## Locking
@@ -53,7 +51,7 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 When a rollback from the boot menu reinstalls a kernel, pacman runs mkinitcpio's own hook, which rebuilds the images your mkinitcpio presets name, `/boot/initramfs-*.img` on a stock install. archix's UKIs, in `EFI/archix/`, aren't named by any preset; archix builds them itself, with its own `mkinitcpio` and `ukify` run, and the boot-time rollback doesn't rebuild or replace them.
 
-With `boot.loader` set, declaring `dkms` or any `*-dkms` package also declares `boot.kernel`'s headers, `linux-cachyos-headers` for `linux-cachyos`, so every generation can rebuild its modules for its own kernel when a boot-time rollback reinstalls it. A DKMS package that only arrives as a dependency of something else isn't noticed; declare it, or the headers, yourself.
+With `boot.loader` set, declaring `dkms` or any `*-dkms` package also declares `boot.kernel`'s headers, `linux-cachyos-headers` for `linux-cachyos`, so every generation can rebuild its modules for its own kernel when a boot-time rollback reinstalls it. A DKMS module that only arrives as a dependency, as `v4l2loopback-dkms` does for `v4l2loopback-utils`, brings the headers too: when the resolved lock has `dkms` but not the kernel's headers, archix resolves again with them.
 
 ## Not yet known
 

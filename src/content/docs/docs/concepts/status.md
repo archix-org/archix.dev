@@ -5,7 +5,7 @@ sidebar:
   order: 7
 ---
 
-This page labels each feature by what archix's code and tests do today, as of archix commit `2a5781d`:
+This page labels each feature by what archix's code and tests do today, as of archix commit `3172734`:
 
 - **Shipped**: built, and covered by the test suites named next to it.
 - **Partial**: built, with a gap the line names.
@@ -24,7 +24,8 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Rollback from the boot menu](/docs/concepts/generations/#rolling-back-from-the-boot-menu) | **Shipped** | Booting an older entry rolls back to it early in boot, and it stays the default entry. | VM |
 | [Rollback at runtime](/docs/concepts/generations/#rolling-back-from-a-running-system) | **Shipped** | `archix rollback` goes back, or forward, to any kept generation, also after `gc`. | VM, Arch suite |
 | [Repair after a power cut](/docs/concepts/safety/#a-power-cut-inside-pacman) | **Shipped** | The initramfs restores what a switch cut off inside pacman was changing, so the machine boots. | VM |
-| [`archix recover`](/docs/concepts/safety/#archix-recover) | **Shipped** | Continues, rolls back or abandons an unfinished switch, repairing torn pacman database entries first. | VM, Arch suite |
+| [`archix recover`](/docs/concepts/safety/#archix-recover) | **Shipped** | Continues, rolls back or abandons an unfinished switch, repairing torn pacman database entries first, and pacman's own libraries when it can't start. | VM, Arch suite |
+| [DKMS during a boot-time rollback](/docs/concepts/generations/#older-kernels-keep-booting) | **Shipped** | Booting an older entry rolls the kernel, its headers and the DKMS package back, and DKMS rebuilds the module for that kernel; archix's copy of each kernel's modules carries the last DKMS build. | VM |
 | [Rescue entries](/docs/concepts/safety/#rescue-mode) | **Shipped** | Restores a generation's core packages without pacman, from the initramfs or a live USB. | VM, Arch suite |
 | [Checks before a switch](/docs/concepts/safety/#signatures-and-disk-space) | **Shipped** | Signatures, free space on every mount a file lands on, and file conflicts are checked before anything changes. | VM (signatures, full disk), Arch suite (file conflicts) |
 | [AUR builds with review](/docs/guides/aur/) | **Shipped** | Recipes are locked by commit, shown for review, and built in a clean chroot. | Arch suite |
@@ -46,7 +47,6 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | --- | --- | --- | --- |
 | [Third-party repo exactness](/docs/concepts/limitations/#locking) | **Partial** | Locked versions are exact only while archix or a package cache has the file; otherwise a fresh machine gets what the repo serves today. | [Third-party repos](/docs/guides/third-party-repos/#why-third-party-versions-can-go-missing) |
 | [AUR reproducibility](/docs/concepts/limitations/#locking) | **Partial** | Recipe commits are pinned, the sources they download aren't: `-git` and `SKIP`-checksum sources float unless a package cache holds the build. | [The AUR](/docs/guides/aur/#how-aur-packages-are-locked) |
-| [DKMS during a boot-time rollback](/docs/concepts/limitations/#not-yet-known) | **Partial** | Rolling a kernel back at boot works; whether DKMS modules build for it that early isn't verified. | [Limitations](/docs/concepts/limitations/) |
 
 ## Planned
 

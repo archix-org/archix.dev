@@ -360,6 +360,8 @@ Next it repairs pacman's local database. A crash can tear an entry, leaving a pa
 
 Then it clears the way for pacman. Files the cut-off pacman run had already extracted belong to no package yet, and pacman would refuse to install over them. archix moves them to `/var/lib/archix/crash-leftovers/<time>` instead of overwriting anything: `moved 214 files left behind by the interrupted pacman run to /var/lib/archix/crash-leftovers/1792051200`.
 
+Last, it checks that pacman starts at all. pacman loads its own libraries, libcurl and libarchive among them, from packages it installs, so a run killed halfway can leave them at mixed versions, and pacman then fails before doing anything, with something like `symbol lookup error: /usr/lib/libcurl.so.4: undefined symbol: ...`. archix then unpacks pacman's dependency closure from the package files it's recovering to, without pacman, the way [rescue mode](#rescue-mode) does: `pacman couldn't start, its libraries left at mixed versions by the interruption; unpacked the 70 packages it runs on without it`. If pacman still doesn't start, recover stops and points you at the current generation's rescue entry.
+
 If the install step was the one interrupted, continuing reinstalls every package of the transaction, even ones pacman already reports as installed, so half-extracted ones are replaced. The verify step then checks the result. Prepare already downloaded everything to `/var/cache/archix/pkg`, so continuing needs no network.
 
 ### A power cut inside pacman

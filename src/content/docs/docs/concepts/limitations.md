@@ -49,9 +49,10 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 When a rollback from the boot menu reinstalls a kernel, pacman runs mkinitcpio's own hook, which rebuilds the images your mkinitcpio presets name, `/boot/initramfs-*.img` on a stock install. archix's per-generation UKIs, `EFI/Linux/archix-<n>.efi`, aren't named by any preset; archix builds them itself, with its own `mkinitcpio` and `ukify` run, and the boot-time rollback doesn't rebuild or replace them.
 
+DKMS rebuilds a module for the rolled-back kernel only if the generation has that kernel's headers. If it doesn't, you get the module DKMS last built for that kernel, from archix's copy of its modules, which can be a different version from the one the generation locks.
+
 ## Not yet known
 
-- **DKMS during a boot-time rollback.** Reinstalling an older kernel at boot makes DKMS build its modules for that kernel, which needs that kernel's headers. They come from the cache only if the generation you roll back to had them installed; whether the build then succeeds that early in boot isn't established yet.
 - **Weeks of use on real hardware.** The failure paths are exercised in VMs and containers: power cuts mid-update, killed runs, a full disk, a destroyed glibc, a revoked key. archix hasn't yet run for weeks on real machines, which is where the failures nobody thought to test turn up.
 
 [Feature status](/docs/concepts/status/) lists what's shipped, partial and planned, and what tests each.

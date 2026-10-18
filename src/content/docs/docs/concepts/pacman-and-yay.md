@@ -80,7 +80,7 @@ $ archix btop
     A monitor of resources
 1 extra/btop 1.4.5-1
     A monitor of system resources, bpytop ported to C++
-==> Packages to install (eg: 1 2 3, 1-3 or ^4): 1
+==> Install which? Numbers (1 3), ranges (2-5), ^ to leave one out: 1
 ...
 install    btop 1.4.5-1
 apply 1 change? [Y/n]

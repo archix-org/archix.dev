@@ -5,6 +5,8 @@ import { archixTheme } from '../lib/code-theme';
 const config = `return {
   repos = { "core", "extra", "multilib" },
   packages = { "steam", "mangohud", "obs-studio", "protonup-qt" },
+  boot = { loader = "systemd-boot" },
+  kernel_params = { "root=LABEL=arch", "rw" },
 
   users = { me = { groups = { "wheel" }, shell = "/usr/bin/zsh" } },
   home = { user = "me" },
@@ -86,7 +88,7 @@ const generations = [
 	const rollback: Line[] = [
 		['sudo archix rollback', 'cmd'],
 		['roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n] y'],
-		['rolled back to generation 41 (snapshot 2026-10-09)', 'ok'],
+		['rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config', 'ok'],
 		['steam', 'cmd'],
 		['# launches fine. generation 42 is kept until gc ages it out', 'note'],
 	];

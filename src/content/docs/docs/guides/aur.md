@@ -108,6 +108,8 @@ trust zen-browser-bin at cd6266c6847e and lock it? [Y/n]
 
 Answer `n` and nothing changes: `not locking zen-browser-bin; nothing was changed`.
 
+The lock also records each AUR package's maintainer. A package that changed hands since it was locked is named before its diff, since that's when a malicious recipe is most likely to slip in: `==> zen-browser-bin has a new AUR maintainer, alice -> mallory: read its recipe before you switch`. An orphaned package shows as `nobody (orphaned)`. This is printed even with `--noconfirm` or `aur.review = false`.
+
 A commit already in the lock is never shown again. You, or whoever committed the lock, already approved it. That's what lets a second machine install from your lock without asking about every package.
 
 Review happens wherever recipes enter the lock: `install`, `lock`, `update`, `upgrade`, `switch` when the config changed, and `init`. `--noconfirm` skips it for one command, and [`aur.review = false`](/docs/reference/options/) turns it off.

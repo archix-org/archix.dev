@@ -13,6 +13,8 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **`/usr` isn't switched atomically.** A switch, like a rollback, has pacman replace files in place, package by package. A crash halfway leaves a mix of old and new files until the boot-time repair and `archix recover` sort it out; see [A power cut inside pacman](/docs/concepts/safety/#a-power-cut-inside-pacman). Nothing points the system at a complete, prebuilt `/usr` tree.
 
+**A generation that doesn't boot isn't detected.** archix doesn't use systemd-boot's boot counting, where an entry carries a number of tries and `boot-complete.target` marks it good once a boot gets far enough. A new generation that hangs or panics at boot stays the default entry. Pick the previous generation in the boot menu yourself; booting it rolls the system back to it, and it stays the default after that.
+
 **Package rollback doesn't roll back data.** A rollback reinstalls older packages and puts back managed files, but leaves everything else on disk as it is, databases included. A newer PostgreSQL or MariaDB may have migrated its data, and the older version can't read it. archix asks before going back across such versions, from a list it ships plus your [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades), but a rollback from the boot menu goes ahead anyway; see [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data). Back up data you can't lose.
 
 ## Locking
@@ -23,7 +25,7 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **The Arch Linux Archive is the one source of old official packages.** Official packages are locked to a day of the archive, and fetched from it when they aren't cached. [`archive_url`](/docs/reference/options/#archive_url) points archix at a mirror with the same layout instead, and `switch` records it so rollback and `recover` use it too. It's still one URL with nothing behind it: while it's down, packages that neither archix's cache nor a [package cache](/docs/concepts/lockfile/#package-caches) holds can't be fetched, and `update` can't move to a new snapshot.
 
-**init leaves foreign packages that aren't on the AUR alone.** A package you built by hand, or one that left the AUR, can't be locked, so [`archix init`](/docs/reference/cli/#init) puts it in `ignored_packages` instead of declaring it. archix never installs, removes or rolls it back. To manage it, put its recipe in [`pkgbuilds/`](/docs/guides/local-pkgbuilds-and-patches/).
+**init leaves foreign packages that aren't on the AUR alone.** A package you built by hand, or one that left the AUR, can't be locked, so [`archix init`](/docs/reference/cli/#init) puts it in `ignored_packages` instead of declaring it. archix never installs, removes or rolls it back. To manage it, put its recipe in [`pkgbuilds/`](/docs/guides/local-pkgbuilds-and-patches/). On a second machine that shares the config, it's simply missing, and `switch` and `status` say so: `ignored_packages lists 1 package that isn't installed here, and archix never installs ignored ones: nvidia-dkms-custom`.
 
 ## Trust and signatures
 

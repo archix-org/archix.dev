@@ -5,7 +5,7 @@ sidebar:
   order: 7
 ---
 
-This page labels each feature by what archix's code and tests do today, as of archix commit `34a8004`:
+This page labels each feature by what archix's code and tests do today, as of archix commit `593453d`:
 
 - **Shipped**: built, and covered by the test suites named next to it.
 - **Partial**: built, with a gap the line names.

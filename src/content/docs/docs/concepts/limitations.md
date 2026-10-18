@@ -43,7 +43,7 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 ## Disk space
 
-**The free-space check is an estimate.** Before a switch or rollback changes anything, archix checks every mount the incoming files land on, the way pacman does, from the file sizes in each package's `.MTREE`, less what the replaced versions free there, plus a cushion; see [Signatures and disk space](/docs/concepts/safety/#signatures-and-disk-space). It doesn't count filesystem overhead, such as blocks a small file rounds up to, and a boot-menu rollback and `recover --rollback` skip it. If a filesystem runs out anyway while pacman installs, the switch is left unfinished, and `archix recover` continues it once you've made room.
+**The free-space check is an estimate.** Before a switch or rollback changes anything, archix checks every mount the incoming files land on, the way pacman does, from the file sizes in each package's `.MTREE`, less what the replaced versions free there, plus a cushion; see [Signatures and disk space](/docs/concepts/safety/#signatures-and-disk-space). It doesn't count filesystem overhead, such as blocks a small file rounds up to, and a boot-menu rollback skips it. Downloads into the package cache aren't counted ahead either; a full cache disk stops the switch while downloading, before anything changes. If a filesystem runs out anyway while pacman installs, the switch is left unfinished, and `archix recover` continues it once you've made room.
 
 ## The boot-time rollback and initramfs hooks
 

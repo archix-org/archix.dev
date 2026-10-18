@@ -156,7 +156,7 @@ To build once for several machines, push the builds to a [package cache](/docs/c
 
 A snapshot move rebuilds a package archix built, at the same commit, exactly when a library it links disappears in the switch: when a package the switch changes or removes stops shipping one of the ELF sonames the build needs. Otherwise it keeps the build it has. See [Rebuilds at the same version](/docs/guides/local-pkgbuilds-and-patches/#rebuilds-at-the-same-version).
 
-When a locked commit can't be built any more, because it's gone from the package's history or the build fails, archix offers the nearest newer version, then the nearest older one, and the lock follows once the version you accepted has built; if it fails too, `archix.lock` is left unchanged. Set [`missing_versions`](/docs/reference/options/) or pass `--accept-nearest newer|older` to decide without asking. See [Missing versions](/docs/concepts/lockfile/#missing-versions).
+When a locked commit can't be built any more, because it's gone from the package's history or the build fails, archix offers the nearest newer version, then the nearest older one, and the lock follows once the version you accepted has built; if it fails too, `archix.lock` is left unchanged. Set [`missing_versions`](/docs/reference/options/) or pass `--accept-nearest newer|older` to decide without asking. See [Missing versions](/docs/concepts/lockfile/#missing-versions). A build that fails while the chroot, the cache or `/tmp` has less than 1 GiB free is blamed on the disk, not the recipe: the switch stops with ``/var/lib/archix/chroot has only 19 MiB free, which is likely why the build failed; nothing was changed``, and no other version is tried.
 
 ## How installs run
 

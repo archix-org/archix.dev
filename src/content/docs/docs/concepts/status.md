@@ -11,7 +11,7 @@ This page labels each feature by what archix's code and tests do today, as of ar
 - **Partial**: built, with a gap the line names.
 - **Planned**: not built yet.
 
-Two test suites stand behind the labels. **VM** is a QEMU virtual machine with OVMF firmware that boots archix-managed generations: one run walks through boot-menu rollback, Secure Boot and rescue entries, and a rollback torture run, on ext4 and on a btrfs root laid out as CachyOS installs it, updates a real Arch install from the 2026-06-01 snapshot to 2026-10-10, cutting the power, killing runs and filling the disk along the way. **Arch suite** is archix's full test suite, run as root inside a systemd-booted Arch container, with real pacman transactions, AUR builds and network access.
+Two test suites stand behind the labels. **VM** is a QEMU virtual machine with OVMF firmware that boots archix-managed generations: one run walks through boot-menu rollback, Secure Boot and rescue entries, and a rollback torture run, on ext4 and on a btrfs root laid out as CachyOS installs it, updates a real Arch install from the 2026-06-01 snapshot to 2026-10-10, cutting the power, killing runs and filling the disk along the way. The same torture run also goes through a CachyOS install with CachyOS's real repos and x86-64-v3 packages, where its later rollbacks have to reinstall CachyOS packages with CachyOS's mirror unreachable. Others cover NVIDIA's DKMS drivers, archix upgrading itself from its previous release, and `archix eject`. **Arch suite** is archix's full test suite, run as root inside a systemd-booted Arch container, with real pacman transactions, AUR builds and network access.
 
 archix hasn't yet been run for weeks on real hardware. [Limitations and failure modes](/docs/concepts/limitations/) has the details behind every gap.
 
@@ -38,7 +38,7 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Managed `/etc` files, users and services](/docs/concepts/safety/#managed-files-backups-and-hand-edits) | **Shipped** | Files are backed up and hand edits saved; users, groups and services follow the config. | VM (files, services), Arch suite (users) |
 | [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files) | **Shipped** | Units still running replaced binaries, libraries or interpreted code are restarted. | Arch suite |
 | [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/) | **Shipped** | Recipes in the config and patched official packages are locked by content and built in the chroot. | VM, Arch suite |
-| [Third-party repos](/docs/guides/third-party-repos/) | **Shipped** | Declared repos, CPU-level checks, and a fallback chain when a locked package is gone. | Arch suite |
+| [Third-party repos](/docs/guides/third-party-repos/) | **Shipped** | Declared repos, CPU-level checks, a copy of every package a generation takes from one, and a fallback chain when a locked package is gone. | VM (CachyOS), Arch suite |
 | [Package caches](/docs/concepts/lockfile/#package-caches) | **Shipped** | `archix cache push` fills a directory, shared as a mount or over HTTP, that other machines fetch package files and AUR builds from first. | Arch suite |
 | [Archive mirrors](/docs/reference/options/#archive_url) | **Shipped** | `archive_url` points locking, switches, rollbacks and recovery at a mirror of the archive. | VM, Arch suite |
 | [Flatpak apps](/docs/guides/flatpak-and-appimages/) | **Shipped** | System-wide apps are locked to commits and pinned back on rollback. | Arch suite |

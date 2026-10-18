@@ -219,7 +219,12 @@ Every step is idempotent. A step doesn't mean "upgrade mesa from A to B"; it mea
 
 pacman doesn't fsync what it writes. So archix syncs the filesystem after every pacman step, before it marks the step done, and the journal never claims an install that is still only in memory. Generations, built packages, boot entries and the journal's own deletion are written durably too.
 
-While the journal runs, archix ignores Ctrl-C and the hangup a closed terminal or a dropped ssh session sends, and pacman runs in its own process group, so neither can stop pacman halfway through a transaction. If the switch is cut off anyway, by a power cut or `kill -9`, `archix recover` finishes it.
+While the journal runs, archix ignores Ctrl-C, and pacman runs in its own process group, so neither can stop pacman halfway through a transaction. A dropped ssh session can't stop a switch either:
+
+- Started from a login session, `switch`, `rollback`, `recover` and the other commands that change the system re-run themselves in a systemd scope of their own (`archix-<pid>.scope`, through `systemd-run --scope`), as NixOS runs its switch. So logind ending the session, which it does to every process in it with `KillUserProcesses=yes`, doesn't reach them. They stay on the same terminal, so prompts work as before.
+- When the terminal hangs up mid-switch, archix writes the rest of its output to `/var/lib/archix/after-hangup.log` instead, since writing to a dead terminal fails. Log back in and read it, or check `archix status`.
+
+If the switch is cut off anyway, by a power cut or `kill -9`, `archix recover` finishes it.
 
 The `on_change` scripts a switch owes are recorded before it changes any file, and cleared only once they've run, so a crash in between doesn't lose them.
 

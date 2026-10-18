@@ -1,6 +1,6 @@
 ---
 title: Installation
-description: Install archix from the AUR on Arch Linux, CachyOS or EndeavourOS, and check that your machine meets the requirements.
+description: Install archix from the AUR on Arch Linux or CachyOS, and check that your machine meets the requirements.
 sidebar:
   order: 2
 ---
@@ -9,7 +9,7 @@ archix ships as one AUR package, `archix-git`, which builds the newest commit on
 
 ## Requirements
 
-- **An Arch-based system on x86_64.** Arch Linux, CachyOS and EndeavourOS are supported. CachyOS is the primary target, so its repos get special care (see [Third-party repos](/docs/guides/third-party-repos/)).
+- **An Arch-based system on x86_64.** Arch Linux and CachyOS are tested, each in its own VM suite. Other Arch-based systems such as EndeavourOS should work but aren't tested. Boot entries build their own initramfs with mkinitcpio, which archix installs, even where the system's own boot uses dracut. CachyOS is the primary target, so its repos get special care (see [Third-party repos](/docs/guides/third-party-repos/)).
 - **systemd-boot**, if you want a boot entry per generation, rollback from the boot menu and rescue entries. Entries are unified kernel images (UKIs) built with `mkinitcpio` and `ukify`. You don't install those yourself: with `boot.loader` set, archix declares the kernel, `mkinitcpio` and `systemd-ukify`, plus `sbctl` with `boot.secure_boot = true`, and the next switch installs whatever is missing. GRUB and Limine are not supported: on those bootloaders archix still manages your system and `archix rollback` still works from a running system, but you don't get generation boot entries.
 - **sbctl keys**, optional. If `sbctl` has keys, or you set `boot.secure_boot = true`, archix signs every UKI and systemd-boot itself, so Secure Boot stays on. `sudo archix secure-boot setup` creates the keys and enrolls them; see [Secure Boot](/docs/guides/secure-boot/).
 - **Any filesystem.** Rollback reinstalls a generation's exact packages and files from the cache, which works the same on ext4, btrfs or anything else. On a btrfs root, archix also takes a read-only snapshot of `/` before every switch, as an extra recovery point you can use by hand. See [Generations and rollback](/docs/concepts/generations/#btrfs-snapshots).

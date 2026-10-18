@@ -947,7 +947,7 @@ Where the EFI system partition is mounted.
 | Default | `"linux"` |
 | Declared in | `<archix>/boot.lua` |
 
-The kernel package boot entries use, such as `linux-lts` or `linux-zen`. archix declares it for you. Each entry keeps a copy of its kernel's modules, so an older entry still boots after the kernel package was upgraded.
+The kernel package boot entries use, such as `linux-lts`, `linux-zen` or `linux-cachyos`. archix declares it for you, and `archix init` sets it to the package of the kernel you're running. Each entry keeps a copy of its kernel's modules, so an older entry still boots after the kernel package was upgraded.
 
 ### `boot.microcode`
 

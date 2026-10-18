@@ -5,7 +5,7 @@ description: archix turns an Arch-based system into one declared, locked and rev
 
 import { CardGrid, LinkCard } from '@astrojs/starlight/components';
 
-archix is a system configuration tool for Arch Linux and Arch-based distros. CachyOS is the first-class target, and EndeavourOS works too. You describe the whole machine in Lua: packages from the official repos, the AUR and third-party repos like CachyOS, plus `/etc` files, systemd units, users, kernel parameters and dotfiles. archix makes the system match that description, records exactly what it installed in a lockfile, and keeps every switch as a generation you can roll back to.
+archix is a system configuration tool for Arch Linux and Arch-based distros. CachyOS is the first-class target. Other Arch-based systems such as EndeavourOS should work, but only Arch and CachyOS are tested. You describe the whole machine in Lua: packages from the official repos, the AUR and third-party repos like CachyOS, plus `/etc` files, systemd units, users, kernel parameters and dotfiles. archix makes the system match that description, records exactly what it installed in a lockfile, and keeps every switch as a generation you can roll back to.
 
 If you know NixOS, the idea is familiar: a declarative config, a lockfile and rollback. The difference is that archix runs on Arch's real packages and the AUR. There is no Nix store, no derivations and no second package ecosystem to learn.
 

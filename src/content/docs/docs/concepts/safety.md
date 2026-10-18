@@ -303,6 +303,14 @@ error: the new generation is current, but 1 step failed (listed above)
 
 A failed hook is listed the same way, `failed: hook tailscale: exited with exit status: 1`, and so is an `on_change` script, by its file: `failed: on_change of /etc/foo.conf: exited with exit status: 1`. Hooks also run on a switch that changes nothing, where a failure ends with `error: nothing was changed, but 1 step failed (listed above)`, and on rollbacks, where it's `error: generation 41 (snapshot 2026-10-09) is current, but 1 step failed (listed above)`.
 
+## Declined and killed switches
+
+A switch rewrites `archix.lock` while it resolves, and `install` and `remove` edit `installed.lua` before that. Before touching either, `switch`, `install`, `remove` and `upgrade` record their exact bytes, owner and mode in `/var/lib/archix/pending-config.json`. If the command ends without a new generation becoming current, because you answered no, a check refused it, or it failed, both files are put back byte for byte: `put back /home/me/config/archix.lock as they were before this command`.
+
+If archix is killed or the power goes in between, the record stays, and the next archix run puts the files back under archix's lock, as does `archix-boot.service` at the next boot: `put back /home/me/config/archix.lock and /home/me/config/lua/hosts/box/installed.lua as they were before an unfinished switch`. Until then the files on disk still hold the killed switch's edits. Once the switch's journal exists, the record waits for [`archix recover`](#archix-recover): continuing keeps the new files, rolling back or abandoning puts the old ones back.
+
+archix runs as root, but files it writes in your config keep their owner and mode, and a new one, like the first `installed.lua`, gets the owner of the directory it's created in, so `git commit` keeps working after `sudo archix install`.
+
 ## Unfinished switches
 
 archix never decides how an unfinished switch ends. Guessing wrong after a crash could make things worse, so a human decides. The one thing it does on its own is make the machine bootable again when the switch was cut off inside pacman; see [A power cut inside pacman](#a-power-cut-inside-pacman).

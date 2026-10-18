@@ -69,7 +69,7 @@ With `boot.secure_boot = false`, the parenthesis reads `(boot.secure_boot = fals
 As a backstop, in the `:: writing the boot entry` step, archix checks every entry it built, and the systemd-boot loader on the ESP, for a signature before copying the entry to the ESP, which is what would make it the default. An unsigned one stops the step:
 
 ```console
-error: writing the boot entry failed; the switch is unfinished, run `archix recover`: Secure Boot is on, but archix-43.efi isn't signed, so the firmware would refuse it; nothing was moved. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)
+error: writing the boot entry failed; the switch is unfinished, run `archix recover`: Secure Boot is on, but 7.2.9-arch1-1-aedff12d49d2.efi isn't signed, so the firmware would refuse it; nothing was moved. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)
 ```
 
 The entry is built from the kernel the switch installs, so it can't be checked earlier, and the check before the switch already refuses every case where archix knows it won't sign. By then the packages and files are in place, but the old generation is still current and still the default boot entry. Fix the keys, then finish with `sudo archix recover`, or go back with `sudo archix recover --rollback`. See [Safety](/docs/concepts/safety/#secure-boot).
@@ -140,7 +140,7 @@ return {
 }
 ```
 
-Next to its normal entry, each of the newest two generations then gets `archix-<n>-protected.efi`, titled "Arch Linux (archix protected, generation 43)", signed like the others. Its command line adds:
+Next to its normal entry, each of the newest two generations then gets `archix-<n>-protected.conf`, titled "Arch Linux (archix protected, generation 43)", signed like the others. Its command line adds:
 
 ```
 lockdown=integrity sysctl.kernel.kexec_load_disabled=1 lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0

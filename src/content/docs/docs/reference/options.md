@@ -896,7 +896,7 @@ hooks = {
 
 ## Boot and kernel
 
-archix can write a boot entry for every generation, so you can pick an older generation from the boot menu. Each entry is a unified kernel image, built with `ukify` from a fresh `mkinitcpio` initramfs, and placed in `EFI/Linux` on the ESP as `archix-<n>.efi`, where systemd-boot finds it. Booting an older entry rolls the system back to that generation.
+archix can write a boot entry for every generation, so you can pick an older generation from the boot menu. Each entry is `loader/entries/archix-<n>.conf` on the ESP, starting a unified kernel image in `EFI/archix/`, built with `ukify` from a fresh `mkinitcpio` initramfs; generations whose kernel and initramfs match share one. See [Boot entries](/docs/concepts/generations/#boot-entries). Booting an older entry rolls the system back to that generation.
 
 With `boot.loader` set, archix declares the packages it needs for this itself: the `boot.kernel` package, `mkinitcpio` and `systemd-ukify`, plus `sbctl` when `boot.secure_boot = true`. You don't list them in `packages`. With the default `secure_boot = null`, signing depends on sbctl being installed with keys, so keep `sbctl` declared yourself if you rely on that.
 
@@ -917,7 +917,7 @@ kernel_params = { "root=UUID=0a1b2c3d-...", "rw", "quiet" },
 
 Kernel command line parameters, written to `/etc/kernel/cmdline` for boot entries.
 
-With `boot.loader` set, this is the whole command line, so it must contain `root=`; archix refuses to switch without it. Each entry adds `archix.generation=<n>`.
+With `boot.loader` set, this is the whole command line, so it must contain `root=`; archix refuses to switch without it. The generation an entry boots isn't on the command line; archix reads it from the entry systemd-boot started.
 
 ### `boot.loader`
 
@@ -1019,7 +1019,7 @@ return {
 
 Also write an 'archix protected' entry for the newest generations with the kernel command line Easy Anti-Cheat Linux v2 asks for (integrity lockdown, kexec off, the BPF LSM, IOMMU without passthrough). It can't make the kernel well-known-signed; `archix secure-boot check --anticheat` shows what's still missing.
 
-The entry is `archix-<n>-protected.efi`, kept for the newest two generations like rescue entries, and signed like the rest. It adds `lockdown=integrity sysctl.kernel.kexec_load_disabled=1 lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0` to the command line. See [The protected entry](/docs/guides/secure-boot/#the-protected-entry).
+The entry is `archix-<n>-protected.conf`, kept for the newest two generations like rescue entries, and signed like the rest. It adds `lockdown=integrity sysctl.kernel.kexec_load_disabled=1 lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0` to the command line. See [The protected entry](/docs/guides/secure-boot/#the-protected-entry).
 
 ### `boot.snapshots`
 

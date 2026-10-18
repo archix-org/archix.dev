@@ -54,4 +54,5 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | --- | --- | --- | --- |
 | [Atomic `/usr` tree](/docs/concepts/limitations/#rollback) | **Planned** | Not built: switches and rollbacks are journaled pacman runs that replace files in place. | [Safety](/docs/concepts/safety/) |
 | [Secure Boot revocation](/docs/concepts/limitations/#secure-boot-and-the-tpm) | **Planned** | Not built: no SBAT or `dbx` handling, so old signed entries stay bootable. | [Secure Boot](/docs/guides/secure-boot/) |
-| [Signed TPM PCR policies](/docs/concepts/limitations/#secure-boot-and-the-tpm) | **Planned** | Not built: secrets sealed to PCR 11 need re-sealing after every switch. | [Secure Boot](/docs/guides/secure-boot/) |
+| [Signed TPM PCR policies](/docs/concepts/limitations/#secure-boot-and-the-tpm) | **Planned** | Not built: secrets sealed to PCR 11 need re-sealing after a switch that changes the UKI. | [Secure Boot](/docs/guides/secure-boot/) |
+| [Config edits only after a switch succeeds](/docs/concepts/limitations/#rollback) | **Planned** | Not built: `installed.lua` and `archix.lock` are written before applying, and put back if the switch is declined, fails or is killed. | [Safety](/docs/concepts/safety/#declined-and-killed-switches) |

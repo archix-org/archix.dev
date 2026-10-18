@@ -253,7 +253,7 @@ $ sudo archix install zen-browser-bin
 $ sudo archix -S neovim ripgrep
 ```
 
-The names go into `lua/hosts/<host>/installed.lua`, a plain Lua file archix imports automatically and you can edit too, and then archix switches. A name a recipe in `pkgbuilds/` builds under exactly that name comes from there; other names are looked up in your configured repos, then in `pkgbuilds/` by what recipes `provides`, then in the AUR, and new AUR build recipes are shown for review. A name found nowhere stops it: `` `foo` is in none of the configured repos, pkgbuilds/ or the AUR ``. If you abort, the switch fails or the config stops evaluating, `installed.lua` is put back as it was.
+The names go into `lua/hosts/<host>/installed.lua`, a plain Lua file archix imports automatically and you can edit too, and then archix switches. A name a recipe in `pkgbuilds/` builds under exactly that name comes from there; other names are looked up in your configured repos, then in `pkgbuilds/` by what recipes `provides`, then in the AUR, and new AUR build recipes are shown for review. A name found nowhere stops it: `` `foo` is in none of the configured repos, pkgbuilds/ or the AUR ``. A name the config already declares somewhere else isn't added again: `tree is already declared in the config; not adding it to lua/hosts/box/installed.lua`, and the switch installs it from there. If you decline, the switch fails or the config stops evaluating, `installed.lua` and `archix.lock` are put back byte for byte; see [Declined and killed switches](/docs/concepts/safety/#declined-and-killed-switches).
 
 | Flag | Description |
 | --- | --- |
@@ -373,7 +373,7 @@ It unpacks the core set straight from the cache: what systemd, pacman, archix an
 | Flag | Default | Description |
 | --- | --- | --- |
 | `--root <dir>` | `/` | The mounted system to repair, such as `/mnt`. |
-| `--generation <n>` | `archix.generation` from the kernel command line, else the current one | The generation whose packages to restore. A rescue entry carries its own generation, so it restores that one. |
+| `--generation <n>` | The generation of the boot entry that started (`LoaderEntrySelected`, or `archix.generation` on older entries), else the current one | The generation whose packages to restore. A rescue entry carries its own generation, so it restores that one. |
 | `--package <name>` | | Also restore this package, beyond the core set. Repeat it for more. |
 
 ### `secure-boot`

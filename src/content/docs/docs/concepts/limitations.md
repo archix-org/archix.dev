@@ -13,6 +13,8 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **`/usr` isn't switched atomically.** A switch, like a rollback, has pacman replace files in place, package by package. A crash halfway leaves a mix of old and new files until the boot-time repair and `archix recover` sort it out; see [A power cut inside pacman](/docs/concepts/safety/#a-power-cut-inside-pacman). Nothing points the system at a complete, prebuilt `/usr` tree.
 
+**A killed switch leaves its config edits on disk until the next run.** `archix install` writes `installed.lua`, and a switch writes `archix.lock`, before anything is applied, because the config is evaluated from disk. A declined or failed switch puts both back at once; a killed one leaves them until the next archix run or boot puts them back; see [Declined and killed switches](/docs/concepts/safety/#declined-and-killed-switches). Evaluating the edited config in memory, so nothing is written until the switch succeeds, is planned.
+
 **Package rollback doesn't roll back data.** A rollback reinstalls older packages and puts back managed files, but leaves everything else on disk as it is, databases included. A newer PostgreSQL or MariaDB may have migrated its data, and the older version can't read it. archix asks before going back across such versions, from a list it ships plus your [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades), but a rollback from the boot menu goes ahead anyway; see [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data). Back up data you can't lose.
 
 ## Locking
@@ -37,7 +39,9 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **Old signed boot entries stay bootable.** Every entry archix signs is signed with your key, and archix doesn't use SBAT or the firmware's `dbx` to revoke older ones. An entry `gc` deleted from the ESP is gone, but a copy of a signed entry from an older generation, with an older kernel, still boots wherever it's put.
 
-**PCR 11 bindings break on every switch.** archix doesn't sign PCR policies for its UKIs. Each switch writes a new UKI, which measures differently into PCR 11, so a disk key or other secret sealed to PCR 11 has to be re-sealed after each switch. Bind to PCRs that don't change per switch, such as PCR 7, or use a passphrase as well.
+**PCR 11 bindings break when the UKI changes.** archix doesn't sign PCR policies for its UKIs. A switch that changes the kernel, initramfs or command line writes a new UKI, which measures differently into PCR 11, so a disk key or other secret sealed to PCR 11 has to be re-sealed after it. Bind to PCRs that don't change per switch, such as PCR 7, or use a passphrase as well.
+
+**Which generation booted isn't signed.** The UKIs and their command lines are signed. Which generation a boot belongs to comes from the boot menu entry, `loader/entries/archix-<n>.conf`, an unsigned file on the FAT ESP, which systemd-boot reports in the `LoaderEntrySelected` EFI variable. Someone who can write to the ESP can rename or edit entries so that a boot rolls back to another generation archix still keeps: a package downgrade done at boot, to a set of packages archix once installed. They can't add a kernel command-line option or boot an unsigned UKI with Secure Boot on, and an older kept generation is one the boot menu offers anyway. archix rolls nothing back when the variable is missing, as when the firmware starts a UKI or `BOOTX64.EFI` directly, when it names an entry that isn't archix's, or when it names a generation archix doesn't have.
 
 See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check.
 
@@ -47,7 +51,7 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 ## The boot-time rollback and initramfs hooks
 
-When a rollback from the boot menu reinstalls a kernel, pacman runs mkinitcpio's own hook, which rebuilds the images your mkinitcpio presets name, `/boot/initramfs-*.img` on a stock install. archix's per-generation UKIs, `EFI/Linux/archix-<n>.efi`, aren't named by any preset; archix builds them itself, with its own `mkinitcpio` and `ukify` run, and the boot-time rollback doesn't rebuild or replace them.
+When a rollback from the boot menu reinstalls a kernel, pacman runs mkinitcpio's own hook, which rebuilds the images your mkinitcpio presets name, `/boot/initramfs-*.img` on a stock install. archix's UKIs, in `EFI/archix/`, aren't named by any preset; archix builds them itself, with its own `mkinitcpio` and `ukify` run, and the boot-time rollback doesn't rebuild or replace them.
 
 DKMS rebuilds a module for the rolled-back kernel only if the generation has that kernel's headers. If it doesn't, you get the module DKMS last built for that kernel, from archix's copy of its modules, which can be a different version from the one the generation locks.
 

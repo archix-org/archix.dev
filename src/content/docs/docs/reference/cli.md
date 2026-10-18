@@ -368,7 +368,7 @@ restored pacman 7.0.0.r7.g1f38429-1
 
 It unpacks the core set straight from the cache: what systemd, pacman, archix and the installed kernels need to run, down to glibc, as recorded when the generation was activated, plus every package an unfinished switch was changing. It keeps edited config files (the package's version is saved as `.pacnew`) and rewrites their entries in pacman's database. Then `sudo archix rollback 42`, as the last line says, repairs everything else. It records what it restored in `/var/lib/archix/last-rescue` under the root, such as `generation 42, 36 packages restored, at unix time 1792051200`.
 
-`/usr/lib/archix/archix-static` is the static binary the `archix`, `archix-bin` and `archix-git` AUR packages install, and the one rescue boot entries carry. See [Safety](/docs/concepts/safety/#rescue-mode).
+`/usr/lib/archix/archix-static` is the static binary the `archix-git` AUR package installs, and the one rescue boot entries carry. See [Safety](/docs/concepts/safety/#rescue-mode).
 
 | Flag | Default | Description |
 | --- | --- | --- |

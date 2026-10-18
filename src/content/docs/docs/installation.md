@@ -64,6 +64,19 @@ archix is an AUR package on your system, so `archix init` declares it in `instal
 
 Don't update it with `makepkg` again.
 
+Each switch or rollback keeps a copy of the archix that started it next to its journal, so if it's cut off after installing an older archix, that older one can still hand the unfinished switch back; see [Upgrading archix itself](/docs/concepts/safety/#upgrading-archix-itself).
+
+## Removing archix
+
+`sudo archix eject` hands the machine back to plain pacman, mkinitcpio and systemd-boot: it writes ordinary boot entries for your kernels, makes one the default, and takes archix's own entries, hooks and boot service off. Your packages, files and services stay as they are. Then remove the package:
+
+```console
+$ sudo archix eject
+$ sudo pacman -Rns archix-git
+```
+
+See [`eject`](/docs/reference/cli/#eject) for what it changes, and its flags for putting original files back and deleting archix's state.
+
 ## The static rescue binary
 
 All three AUR packages also install a statically linked archix at `/usr/lib/archix/archix-static`. When archix manages booting, it adds an mkinitcpio hook that copies that binary into the initramfs, and gives the newest two generations an `archix rescue` boot entry. That entry repairs a system pacman can't repair, without a live USB.

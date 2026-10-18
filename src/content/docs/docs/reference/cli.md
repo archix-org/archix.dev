@@ -170,7 +170,7 @@ downloading htop-3.4.1-1-x86_64.pkg.tar.zst
 switched to generation 2 (snapshot 2026-10-09)
 ```
 
-`switch` re-locks at the locked date if the config changed, lists the package, file, user, group, service and Flatpak changes, and asks before applying them. A package built from a recipe in the config that changed while its version didn't is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and rebuilt and reinstalled at the same version. Then it downloads files declared with a `url` into the store (each checked against its `sha256`), builds AUR packages and the config's own [recipes and patched packages](/docs/guides/local-pkgbuilds-and-patches/) in a clean chroot, downloads every package to `/var/cache/archix/pkg` (each file checked against the lock's `sha256`) and applies the steps above from a [journal](/docs/concepts/safety/#the-journal). In `:: restarting what uses replaced files`, it restarts the system and user units still running replaced binaries, libraries or interpreted code, lines such as `:: restarting cups.service php-fpm.service`, and lists what it leaves for a logout, such as the display manager and your desktop apps: `:: still using replaced files until you log out or reboot: ...`. See [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files). If the switch replaces or removes the running kernel's package, archix keeps that kernel's modules loadable, prints `:: kept the running kernel's modules, so they still load until you reboot`, and ends with `the running kernel was replaced: reboot to finish (its modules stay loadable until then)`; see [The running kernel](/docs/concepts/safety/#the-running-kernel).
+`switch` re-locks at the locked date if the config changed, lists the package, file, user, group, service and Flatpak changes, and asks before applying them. A package built from a recipe in the config that changed while its version didn't is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and rebuilt and reinstalled at the same version. Then it downloads files declared with a `url` into the store (each checked against its `sha256`), builds AUR packages and the config's own [recipes and patched packages](/docs/guides/local-pkgbuilds-and-patches/) in a clean chroot, downloads every package to `/var/cache/archix/pkg` (each file checked against the lock's `sha256`, and hard-linked rather than copied when pacman's cache already has it) and applies the steps above from a [journal](/docs/concepts/safety/#the-journal). In `:: restarting what uses replaced files`, it restarts the system and user units still running replaced binaries, libraries or interpreted code, lines such as `:: restarting cups.service php-fpm.service`, and lists what it leaves for a logout, such as the display manager and your desktop apps: `:: still using replaced files until you log out or reboot: ...`. See [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files). If the switch replaces or removes the running kernel's package, archix keeps that kernel's modules loadable, prints `:: kept the running kernel's modules, so they still load until you reboot`, and ends with `the running kernel was replaced: reboot to finish (its modules stay loadable until then)`; see [The running kernel](/docs/concepts/safety/#the-running-kernel).
 
 With [`hooks`](/docs/guides/hooks/) declared, the preview ends with a `run hooks` line listing them in the order they'll run. Hooks aren't counted in `apply N changes?`, and they aren't a journal step: they run last, under `:: running activation hooks`, once the new generation is current and Flatpak apps are installed and pinned. The `on_change` scripts of files the switch changed run first, then each hook prints a `hook <name>` line as it starts.
 
@@ -323,6 +323,42 @@ freed 812.4 MiB: 46 cached package files, 3 snapshot databases
 
 It keeps the current generation, the newest [`generations.keep`](/docs/reference/options/) (10) and every generation younger than `generations.keep_days` (30), using the limits the current generation was applied with.
 
+### `eject`
+
+Stop archix managing the machine, and leave plain Arch that boots and updates with pacman alone. It lists what it does and asks first:
+
+```console
+$ sudo archix eject
+archix eject: archix stops managing this machine
+  boot      plain systemd-boot entries for /boot's kernel and initramfs, for linux, signed with sbctl, whose hook re-signs them on kernel updates; then archix's 8 entries go
+  removes   archix-boot.service, the rescue initramfs hook, the pacman hook and the login notices
+  files     stay as they are, made writable again (--restore-originals puts the originals back)
+  keeps     packages, users, groups, services and pacman.conf
+  keeps     /var/lib/archix and /var/cache/archix (--purge deletes them)
+eject? [y/N] y
+boot: default arch-linux.conf
+boot: /boot/loader/entries/arch-linux.conf
+archix no longer manages this machine. `pacman -Rns archix` removes archix itself; `archix switch` would take the machine back
+```
+
+When archix manages booting, the boot menu comes first, before anything of archix's goes:
+
+- With the ESP at `/boot`, eject runs each kernel's mkinitcpio preset and writes an `arch-<kernel>.conf` entry for `/boot/vmlinuz-<kernel>` and its initramfs, plus an `-fallback` one when the preset builds that image, with the command line from `/etc/kernel/cmdline`. pacman's kernel hooks keep those files current.
+- With the ESP elsewhere, systemd-boot can't read `/boot`, so eject points each kernel's preset at a UKI, `default_uki="<esp>/EFI/Linux/arch-<kernel>.efi"`, and builds it. systemd-boot lists UKIs there by itself, and kernel updates rebuild them.
+- If sbctl has keys, the kernel or UKI is signed with `sbctl sign -s`, so sbctl's own pacman hook signs it again after every update and Secure Boot stays on.
+
+The default kernel's entry becomes systemd-boot's default. Only then do archix's entries and UKIs go. An entry of yours with the same name is kept as it is.
+
+Packages, users, groups, services, the firewall and `pacman.conf`, which stays on your live mirrors, are left as they are. Managed files stay too, made writable again. `/etc/kernel/cmdline` always stays, since mkinitcpio reads it.
+
+| Flag | Description |
+| --- | --- |
+| `--noconfirm` | Don't ask. |
+| `--restore-originals` | Put back the files archix replaced, from `/var/lib/archix/backups`, and delete the ones it created, as taking them out of the config would. |
+| `--purge` | Also delete `/var/lib/archix`, `/var/cache/archix` and archix's btrfs snapshots. Without it, a later `archix switch` takes the machine back with its generations. |
+
+Like `rollback`, it refuses while a switch is unfinished, and doesn't evaluate the config. A VM test ejects a Secure Boot machine, boots the plain entry with Secure Boot still enforcing, has plain pacman install another kernel, and boots that.
+
 ### `recover`
 
 Deal with a switch that was interrupted: continue it, roll it back or abandon it. Shows what was interrupted and at which step, then asks which one you want.
@@ -333,7 +369,7 @@ the switch to generation 43 (snapshot 2026-10-15) (started at unix time 17920512
 [c]ontinue it, [r]oll back, [a]bandon (close the journal without changes), or [q]uit?
 ```
 
-Before it does anything, `recover` checks that pacman isn't running and removes a stale pacman lock. Unless you abandon, it then repairs what a crash left in pacman's way: database entries the crash tore are rewritten from the package file being installed, or moved to `/var/lib/archix/torn-db` and reinstalled, and files the cut-off pacman run left behind with no owner are moved to `/var/lib/archix/crash-leftovers` instead of being overwritten. See [Interrupted pacman transactions](/docs/concepts/safety/#interrupted-pacman-transactions). With no unfinished switch, it prints `nothing to recover: no switch is unfinished`. It doesn't evaluate the config.
+Before it does anything, `recover` checks that pacman isn't running and removes a stale pacman lock. Unless you abandon, it then repairs what a crash left in pacman's way: database entries the crash tore are rewritten from the package file being installed, or moved to `/var/lib/archix/torn-db` and reinstalled, and files the cut-off pacman run left behind with no owner are moved to `/var/lib/archix/crash-leftovers` instead of being overwritten. A keyring package's install script rewrites pacman's gpg keyring, and a crash at that moment can leave it unreadable, which makes pacman reject every package. `recover` then moves it to `/var/lib/archix/torn-gnupg` and rebuilds it with `pacman-key --init` and `--populate`: `pacman's keyring was torn by the crash; rebuilt it from /usr/share/pacman/keyrings`. Keys you imported by hand, not from a keyring package, need importing again. See [Interrupted pacman transactions](/docs/concepts/safety/#interrupted-pacman-transactions). With no unfinished switch, it prints `nothing to recover: no switch is unfinished`. It doesn't evaluate the config.
 
 `--continue`, `--rollback` and `--abandon` skip the question; only one of them can be given.
 
@@ -462,6 +498,8 @@ desktop is locked to snapshot 2026-10-09 (212 packages, 1 pinned off the snapsho
 The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
 
 On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. When everything is in place, the last line is `the system matches the lock`. When a switch is unfinished, the first lines say which one and at which step, and tell you to run `archix recover`. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
+
+Packages archix builds from a VCS checkout, AUR packages and recipes named `-git`, `-hg`, `-svn`, `-bzr`, `-fossil` or `-darcs`, get their own line, since their locked recipe doesn't pin what they build: ``1 package builds from a VCS source, so a rebuild from its locked recipe can differ (`archix cache push` keeps the exact build): neovim-git``. `archix lock` and `update` mark them the same way, `+ neovim-git 0.12.0.r310.g1a2b3c4-1 (builds from a VCS source, so it floats)`. Packages in `ignored_packages` that aren't installed are named too, as `switch` names them: `ignored_packages lists 1 package that isn't installed here, and archix never installs ignored ones: nvidia-dkms-custom`. That's what a second machine sees when it shares a config `init` wrote on another.
 
 ### `generations`
 

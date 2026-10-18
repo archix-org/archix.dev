@@ -308,7 +308,7 @@ Config tables are checked before merging:
 | `pairs`, iterating keys in sorted order | `math.random`, `math.randomseed` |
 | `print`, writing `trace:` lines to stderr | |
 
-`pairs` is sorted so that evaluation is reproducible; plain Lua's iteration order changes from run to run. `print` is for debugging and doesn't affect the result:
+`pairs` is sorted so that evaluation is reproducible; plain Lua's iteration order changes from run to run. Numbers come first, then strings, then booleans. A table or function used as a key sorts last, but two of them in one table have no order that holds from run to run, so `pairs` stops with `two keys are tables or functions, which have no reproducible order; key the table by strings or numbers`. The `archix.formats` writers take only string, number and boolean keys. `print` is for debugging and doesn't affect the result:
 
 ```console
 $ archix eval > /dev/null

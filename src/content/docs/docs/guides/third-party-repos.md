@@ -41,7 +41,7 @@ return {
 | `sig_level` | `"Required DatabaseOptional"` | The repo's `SigLevel`. |
 | `before_official` | `false` | List the repo before `core` and `extra`, so its packages win. CachyOS's repos need this. |
 
-From the declaration, archix writes the repo's section into `/etc/pacman.conf`, in a [block it manages](/docs/concepts/pacman-and-yay/#third-party-repos-in-pacmanconf), so plain pacman sees the same repos. Removing a repo from your config removes its section, and its packages. A fresh machine gets the same repos, with the same keys, on its first switch.
+From the declaration, archix writes the repo's section into `/etc/pacman.conf`, in a [block it manages](/docs/concepts/pacman-and-yay/#third-party-repos-in-pacmanconf), so plain pacman sees the same repos. If pacman has no database for a new repo yet, the switch downloads it, so pacman doesn't warn `database file for 'cachyos' does not exist` on every run. Removing a repo from your config removes its section, and its packages. A fresh machine gets the same repos, with the same keys, on its first switch.
 
 You rarely write the declaration yourself. `archix init` imports every third-party repo in your current `pacman.conf`: its servers, including the ones in `Include`d mirrorlists, its `SigLevel`, and whether it's listed before the official repos. On a CachyOS install, that's where your kernel, and often your mesa, glibc and more, come from.
 
@@ -83,7 +83,9 @@ Third-party repos are the hard case.
 
 Third-party repos have no dated archive. Most of them, CachyOS included, keep only the current version of each package. When a new build lands, the old one is gone from the mirrors.
 
-So archix keeps its own copy. Every package file it installs from a third-party repo stays in `/var/cache/archix/pkg`, checked against the sha256 in the lock, and `gc` keeps it for as long as a kept generation needs it. On the machine that installed it, rollback and reinstalls work exactly as they do for official packages: the file is right there.
+So archix keeps its own copy. Every package file a generation takes from a third-party repo stays in `/var/cache/archix/pkg`, checked against the sha256 in the lock, and `gc` keeps it for as long as a kept generation needs it. That includes packages archix didn't install itself, such as the ones `archix init` found on the machine: the switch that makes the generation copies them from pacman's cache, or downloads them while the repo still has them. On that machine, rollback and reinstalls work exactly as they do for official packages: the file is right there.
+
+When the copy can't be made, the switch says so and goes on: `warning: couldn't keep a copy of linux-cachyos 6.17.2-2, so a rollback to this generation needs cachyos to still have it`. A rollback or `archix recover` that finds no copy, as for a generation an older archix made, asks the servers `pacman.conf` lists for that repo.
 
 The gap is a different machine, or the same machine after a reinstall. Its cache is empty. If the repo has moved on since you made the lock, the exact `linux-cachyos 6.17.2-2` in your lock doesn't exist anywhere archix can reach. No tool can fix that without an archive the repo doesn't provide. archix is upfront about it and gives you a predictable way forward.
 

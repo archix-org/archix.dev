@@ -29,6 +29,7 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Config written only when a switch commits](/docs/concepts/safety/#declined-and-killed-switches) | **Shipped** | `archix.lock` and `installed.lua` are evaluated from memory and written by the switch's journal as its generation becomes current; a kill before that leaves them untouched, and `recover` writes them only when it finishes the switch. | Arch suite |
 | [Rescue entries](/docs/concepts/safety/#rescue-mode) | **Shipped** | Restores a generation's core packages without pacman, from the initramfs or a live USB. | VM, Arch suite |
 | [Checks before a switch](/docs/concepts/safety/#signatures-and-disk-space) | **Shipped** | Signatures, free space on every mount a file lands on, and file conflicts are checked before anything changes. | VM (signatures, full disk), Arch suite (file conflicts) |
+| [Keyrings](/docs/concepts/safety/#keyrings) | **Shipped** | Incoming keyring packages are populated into the signature check and installed first; a switch or rollback never takes a keyring back. | Arch suite |
 | [AUR builds with review](/docs/guides/aur/) | **Shipped** | Recipes are locked by commit, shown for review, and built in a clean chroot. | Arch suite |
 | [Soname rebuilds](/docs/guides/local-pkgbuilds-and-patches/#rebuilds-at-the-same-version) | **Shipped** | A package archix built is rebuilt when a library it links disappears in a switch; a rollback reinstalls the generation's own build. | VM |
 | [Secure Boot signing](/docs/guides/secure-boot/) | **Shipped** | Boot entries and systemd-boot are signed with your keys, and a switch that wouldn't be signed is refused. | VM, Arch suite |
@@ -47,7 +48,7 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | Feature | Status | What's missing | Covered in |
 | --- | --- | --- | --- |
 | [Third-party repo exactness](/docs/concepts/limitations/#locking) | **Partial** | Locked versions are exact only while archix or a package cache has the file; otherwise a fresh machine gets what the repo serves today. | [Third-party repos](/docs/guides/third-party-repos/#why-third-party-versions-can-go-missing) |
-| [AUR reproducibility](/docs/concepts/limitations/#locking) | **Partial** | Recipe commits are pinned, the sources they download aren't: `-git` and `SKIP`-checksum sources float unless a package cache holds the build. | [The AUR](/docs/guides/aur/#how-aur-packages-are-locked) |
+| [AUR reproducibility](/docs/concepts/limitations/#locking) | **Partial** | Recipe commits are pinned, the sources they download aren't: `-git` and `SKIP`-checksum sources float unless a package cache holds the build; the lock and `status` name the VCS ones. | [The AUR](/docs/guides/aur/#how-aur-packages-are-locked) |
 
 ## Planned
 

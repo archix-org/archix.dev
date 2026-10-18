@@ -56,6 +56,13 @@ pacman checks a package's signature only as it installs it, and finds out the di
 
 A rollback reinstalls packages that were verified when they were first installed. It installs them by the sha256 the generation pinned, without their `.sig` file, so a packager key revoked since then doesn't block going back. `recover --rollback` does the same for the packages the current generation pinned, and pacman checks any other file against today's keyring.
 
+### Keyrings
+
+Packages that ship a pacman keyring, the files `pacman-key --populate` reads from `/usr/share/pacman/keyrings`, get two rules: `archlinux-keyring`, and third-party ones such as `cachyos-keyring` and `chaotic-keyring`.
+
+- **They go in first.** A newer snapshot can bring packages signed by a packager that only its newer `archlinux-keyring` knows. Plain pacman refuses those until you update the keyring on its own. archix runs the signature check above against a copy of pacman's keyring with the incoming keyrings already populated into it. The install step then installs the keyring packages by themselves, so their install scripts add the keys, syncs the disk, and installs the rest after. A crash during the rest can't tear the keyring, and `archix recover` rebuilds one that a crash did tear. If the copy can't be made, the check warns and uses the installed keyring.
+- **They never go back.** An older keyring trusts packager keys that were revoked since, and lacks the ones added since. A switch or rollback that would downgrade one keeps the installed version instead: `keeping archlinux-keyring 20260909-1 rather than going back to 20260602-1: an older keyring trusts keys revoked since`.
+
 ### One archix at a time
 
 Only one archix changes the system at a time. `switch`, `install`, `remove`, `upgrade` and bare `archix`, `rollback`, `recover`, `gc`, `init`, `secure-boot setup` and the boot-time check take an exclusive lock on `/var/lib/archix/running`, and a second one stops at once:
@@ -150,10 +157,10 @@ Restarts use `systemctl try-restart`, so a unit that isn't running isn't started
 :: still using replaced files until you log out or reboot: firefox, plasma-plasmashell.service, sddm.service
 ```
 
-Some units are never restarted, because restarting them would end your session or cut you off. archix lists them on the last line instead, for you to pick up by logging out or rebooting:
+Some units are never restarted, because restarting them would end your session, cut you off or break what running apps hold open. archix lists them on the last line instead, for you to pick up by logging out or rebooting:
 
-- system units: the display manager, `display-manager.service` and the unit it points to, such as `sddm.service`; `dbus.service`, `dbus-broker.service`, `systemd-logind.service`, `NetworkManager.service`, `sshd.service`, and every `getty@`, `serial-getty@` and `user@` unit;
-- user units whose names start with `dbus`, `plasma-kwin`, `plasma-plasmashell`, `plasma-ksmserver`, `plasma-workspace`, `niri`, `gnome-shell`, `org.gnome.Shell`, `hyprland`, `sway` or `wayland-wm`: the desktop session itself;
+- system units: the display manager, `display-manager.service` and the unit it points to, such as `sddm.service`; `dbus.service`, `dbus-broker.service`, `systemd-logind.service`; the network, `NetworkManager.service`, `systemd-networkd.service`, `systemd-resolved.service`, `iwd.service` and `wpa_supplicant.service`, since the switch may be running over ssh; `sshd.service`, and every `getty@`, `serial-getty@` and `user@` unit;
+- user units whose names start with `dbus`, `plasma-kwin`, `plasma-plasmashell`, `plasma-ksmserver`, `plasma-workspace`, `niri`, `gnome-shell`, `org.gnome.Shell`, `hyprland`, `sway` or `wayland-wm`, the desktop session itself, or with `pipewire`, `wireplumber` or `xdg-desktop-portal`, which apps hold audio and screen-sharing streams to;
 - programs in session and app scopes, your desktop apps, listed by process name.
 
 Two more kinds of unit are skipped without being listed:
@@ -217,6 +224,20 @@ While the journal runs, archix ignores Ctrl-C and the hangup a closed terminal o
 The `on_change` scripts a switch owes are recorded before it changes any file, and cleared only once they've run, so a crash in between doesn't lose them.
 
 When every step is done, the journal is deleted. A journal on disk always means a switch is unfinished.
+
+### Upgrading archix itself
+
+archix is one of the packages a switch installs, so a switch can replace archix while it runs, and a rollback can put an older archix back before it finishes. A journal cut off at that point is read by a different archix than the one that wrote it.
+
+So each journal records the oldest archix that can finish it: format 1, or 2 when the switch writes `archix.lock` and `installed.lua` as it commits, which an archix that reads only format 1 would skip. Next to the journal, archix keeps a copy of itself, `/var/lib/archix/journal-archix`, the static build when the package installed one, so the initramfs can run it too. An archix that finds a journal it can't finish hands it to that copy, with the same command line:
+
+```text
+/var/lib/archix/journal.json was started by a newer archix; handing over to it
+```
+
+Without the copy, it stops without touching anything: `/var/lib/archix/journal.json needs journal version 2, but this archix reads up to version 1; finish it with the archix that started it (/var/lib/archix/journal-archix), or install a newer archix`. The copy goes when the journal does.
+
+A VM test starts from the previous release, 0.1.0-dogfood, installed as a package from a local repo. The previous release switches to the new archix, which reads the generations, lock and state it wrote, and then replaces itself in a switch of its own. The new archix rolls back to the previous release at runtime, and the previous release reads the new archix's state. A rollback to the previous release is killed once pacman has installed it, and the previous release finishes it. Booting the previous release's entry has the new archix roll back to it, and booting the new archix's entry has the previous release roll forward.
 
 ## Atomic writes
 
@@ -399,7 +420,7 @@ For that, when archix manages booting, the initramfs carries a static archix, an
   Arch Linux (archix rescue, generation 42)
 ```
 
-Booting it adds `archix.rescue` to the kernel command line. Before switching to the real root, the initramfs runs `archix rescue`, which unpacks that entry's generation's core packages straight from the cache, read from `archix.generation` on the command line, without pacman. The core set is what systemd, pacman, archix and every installed kernel need to run, their whole dependency closure down to glibc, recorded when the generation was activated; a generation from an archix too old to record it gets a fixed list instead. If a switch is unfinished, rescue also restores every package that switch was changing. It keeps config files you edited, saving the package's version as `.pacnew`, and rewrites the packages' entries in pacman's database the way pacman writes them, with the packaged files' backup hashes, so the next upgrade still notices your edits. Then the system boots, and rescue's last line tells you how to finish with the regular tools:
+Booting it adds `archix.rescue` to the kernel command line. Before switching to the real root, the initramfs runs `archix rescue`, which unpacks that entry's generation's core packages straight from the cache, read from `archix.generation` on the command line, without pacman. The core set is what systemd, pacman, archix and every installed kernel need to run, their whole dependency closure down to glibc, recorded when the generation was activated; a generation from an archix too old to record it gets a fixed list instead. If a switch is unfinished, rescue also restores every package that switch was changing. It keeps config files you edited, saving the package's version as `.pacnew`, and rewrites the packages' entries in pacman's database the way pacman writes them, with the packaged files' backup hashes, so the next upgrade still notices your edits. For each kernel it restored, it runs `depmod`, as pacman's hook would, so that kernel's modules load. Then the system boots, and rescue's last line tells you how to finish with the regular tools:
 
 ```
 36 packages restored; boot normally, then run `sudo archix rollback 43` to put everything else back

@@ -309,7 +309,7 @@ A switch rewrites `archix.lock` while it resolves, and `install` and `remove` ed
 
 If archix is killed or the power goes in between, the record stays, and the next archix run puts the files back under archix's lock, as does `archix-boot.service` at the next boot: `put back /home/me/config/archix.lock and /home/me/config/lua/hosts/box/installed.lua as they were before an unfinished switch`. Until then the files on disk still hold the killed switch's edits. Once the switch's journal exists, the record waits for [`archix recover`](#archix-recover): continuing keeps the new files, rolling back or abandoning puts the old ones back.
 
-archix runs as root, but files it writes in your config keep their owner and mode, and a new one, like the first `installed.lua`, gets the owner of the directory it's created in, so `git commit` keeps working after `sudo archix install`.
+archix runs as root, but files it writes in your config keep their owner and mode, and a new one, like the first `installed.lua`, gets the owner of the directory it's created in, as do new folders, which are 0755, so `git commit` keeps working after `sudo archix install`.
 
 ## Unfinished switches
 

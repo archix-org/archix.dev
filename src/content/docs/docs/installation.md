@@ -5,12 +5,7 @@ sidebar:
   order: 2
 ---
 
-archix ships as two AUR packages:
-
-- `archix` builds from source.
-- `archix-bin` installs a prebuilt binary.
-
-Both install the same tool, plus the static `archix` binary that [rescue mode](/docs/concepts/safety/#rescue-mode) puts in the initramfs. Pick `archix-bin` if you'd rather not compile Rust on a fresh machine.
+archix ships as one AUR package, `archix-git`, which builds the newest commit on `main` from source. It installs the tool, plus the static `archix` binary that [rescue mode](/docs/concepts/safety/#rescue-mode) puts in the initramfs. There's no release package or prebuilt binary yet.
 
 ## Requirements
 
@@ -26,47 +21,35 @@ You don't have an AUR helper yet, or you're about to replace the one you have. B
 
 ```console
 $ sudo pacman -S --needed base-devel git devtools
-$ git clone https://aur.archlinux.org/archix.git && cd archix && makepkg -si
+$ git clone https://aur.archlinux.org/archix-git.git && cd archix-git && makepkg -si
 ```
 
-For the prebuilt binary, clone `archix-bin` instead:
-
-```console
-$ git clone https://aur.archlinux.org/archix-bin.git && cd archix-bin && makepkg -si
-```
-
-If you already have yay or paru, `yay -S archix` works too. Once archix has made its first switch, it replaces them.
+`archix-git` builds the newest commit on `main`. If you already have yay or paru, `yay -S archix-git` works too. Once archix has made its first switch, it replaces them.
 
 Check that it runs:
 
 ```console
 $ archix --version
-archix 1.0.0
+archix 0.1.0
 ```
 
 Then run `sudo archix init` to capture your system into a config and a lock that match it exactly, so the first `archix diff` is empty. Until there's a config, commands that need one say so: ``there's no archix config at /etc/archix yet; run `sudo archix init` to write one that describes this machine, or point --config at yours``. The [quick start](/docs/quick-start/) walks through it.
 
 ## `ax`, the short name
 
-Every archix package installs two commands: `archix`, and `ax`, a symlink to it at `/usr/bin/ax`. `ax` is the same program, with every command and flag, so `sudo ax switch` is `sudo archix switch`. Help and usage errors name the command you typed, `Usage: ax [OPTIONS] [COMMAND]`; everything else archix prints still says `archix`. This documentation uses `archix` throughout.
+archix-git installs two commands: `archix`, and `ax`, a symlink to it at `/usr/bin/ax`. `ax` is the same program, with every command and flag, so `sudo ax switch` is `sudo archix switch`. Help and usage errors name the command you typed, `Usage: ax [OPTIONS] [COMMAND]`; everything else archix prints still says `archix`. This documentation uses `archix` throughout.
 
-A few unrelated AUR packages also install `/usr/bin/ax`: `ax`, `ax-bin`, `ax-git` and `ax-cli`. The archix packages conflict with `ax`, which all of those provide, so pacman asks whether to remove the other one instead of stopping with a file conflict:
+A few unrelated AUR packages also install `/usr/bin/ax`: `ax`, `ax-bin`, `ax-git` and `ax-cli`. archix-git conflicts with `ax`, which all of those provide, so pacman asks whether to remove the other one instead of stopping with a file conflict:
 
 ```console
-:: archix-bin-1.0.0-1 and ax-bin-0.4.2-1 are in conflict (ax). Remove ax-bin? [y/N]
+:: archix-git-0.1.0.r35.g76a7920-1 and ax-bin-0.4.2-1 are in conflict (ax). Remove ax-bin? [y/N]
 ```
 
 Answer no and pacman installs nothing. The two can't be installed side by side.
 
-## The latest commit: archix-git
+## About archix-git
 
-`archix-git` builds the newest commit on `main` instead of a release. It provides and conflicts with `archix`, so it replaces it:
-
-```console
-$ git clone https://aur.archlinux.org/archix-git.git && cd archix-git && makepkg -si
-```
-
-It installs the same files as the release packages, `/usr/bin/archix`, the `/usr/bin/ax` link and `/usr/lib/archix/archix-static`, owned by pacman, with a version such as `0.1.0.r35.g76a7920`. `archix init` declares it like any AUR package. As with every `-git` package, a switch only rebuilds it when its recipe changes, not on every upstream commit; run `makepkg -si` in the clone again to pick up new commits sooner.
+`archix-git` builds the newest commit on `main`, not a release. It installs `/usr/bin/archix`, the `/usr/bin/ax` link and `/usr/lib/archix/archix-static`, owned by pacman, with a version such as `0.1.0.r35.g76a7920`. `archix init` declares it like any AUR package. As with every `-git` package, a switch only rebuilds it when its recipe changes, not on every upstream commit; run `makepkg -si` in the clone again to pick up new commits sooner.
 
 The same PKGBUILD is in the archix repository, so you can also build from a checkout, or build another branch with `ARCHIX_BRANCH`:
 

@@ -53,7 +53,7 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 When a rollback from the boot menu reinstalls a kernel, pacman runs mkinitcpio's own hook, which rebuilds the images your mkinitcpio presets name, `/boot/initramfs-*.img` on a stock install. archix's UKIs, in `EFI/archix/`, aren't named by any preset; archix builds them itself, with its own `mkinitcpio` and `ukify` run, and the boot-time rollback doesn't rebuild or replace them.
 
-DKMS rebuilds a module for the rolled-back kernel only if the generation has that kernel's headers. If it doesn't, you get the module DKMS last built for that kernel, from archix's copy of its modules, which can be a different version from the one the generation locks.
+With `boot.loader` set, declaring `dkms` or any `*-dkms` package also declares `boot.kernel`'s headers, `linux-cachyos-headers` for `linux-cachyos`, so every generation can rebuild its modules for its own kernel when a boot-time rollback reinstalls it. A DKMS package that only arrives as a dependency of something else isn't noticed; declare it, or the headers, yourself.
 
 ## Not yet known
 

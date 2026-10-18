@@ -191,7 +191,7 @@ Generations cost disk space, mostly in the package cache. archix cleans up after
 | Boot entries | The newest 5, and fewer if the ESP runs out of space |
 | Rescue entries | The newest 2 |
 | Protected entries | The newest 2, with `boot.protected_entry` |
-| Package cache, managed-file contents (downloads included), snapshot databases | Only what kept generations need |
+| Package cache, managed-file contents (downloads included), snapshot databases | Only what kept generations need, plus snapshot databases fetched in the last day, which an `archix lock` running at the same time may be using |
 | Preserved kernel modules in `/var/lib/archix/kernels` | Only the kernels of kept boot entries |
 | Running-kernel modules kept during a switch | Deleted once that kernel isn't running, at the next switch or rollback, or at the next boot from an archix boot entry, unless a boot entry still uses the copy |
 | btrfs snapshots | Deleted with their generation |

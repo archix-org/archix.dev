@@ -189,7 +189,7 @@ Booting older generations, Secure Boot enforcing with keys enrolled by `archix s
 
 On a btrfs root, archix takes a read-only snapshot of `/` right before applying each switch, in `/.archix-snapshots/<generation>-<time>`. Turn it off with `boot.snapshots = false`.
 
-These snapshots are manual recovery points. Rollback, at the command line or from the boot menu, never restores them; it reinstalls packages and files the same way on every filesystem. A snapshot is there for when you want something back by hand: copy a file out of it, or, from a live USB, make a writable snapshot of it and boot that as your root. It only covers the subvolume mounted at `/`, not nested ones such as a separate `/home`. Each snapshot is deleted with its generation.
+These snapshots are manual recovery points. Rollback, at the command line or from the boot menu, never restores them; it reinstalls packages and files the same way on every filesystem. A snapshot is there for when you want something back by hand: copy a file out of it, or, from a live USB, make a writable snapshot of it and boot that as your root. It only covers the subvolume mounted at `/`, not nested ones such as a separate `/home`. Each snapshot is deleted with its generation, and until then holds every file later switches replace; see [what they cost](/docs/concepts/atomicity/#btrfs-snapshots-and-what-they-cost).
 
 ## Limits and `gc`
 

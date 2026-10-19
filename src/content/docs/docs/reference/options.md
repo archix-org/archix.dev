@@ -1111,7 +1111,7 @@ The entry is `archix-<n>-protected.conf`, kept for the newest two generations li
 
 On a btrfs root, take a read-only snapshot of `/` before every switch.
 
-A snapshot is deleted along with its generation. It's a manual recovery point; booting an older generation works by reinstalling its packages, on any filesystem. This option applies whether or not `boot.loader` is set.
+A snapshot is deleted along with its generation, so they're kept as long as [`generations.keep`](#generationskeep) and [`generations.keep_days`](#generationskeep_days) keep generations. Until then each one holds every file later switches replace, an update's worth of space per snapshot; see [what they cost](/docs/concepts/atomicity/#btrfs-snapshots-and-what-they-cost). It's a manual recovery point; booting an older generation works by reinstalling its packages, on any filesystem. This option applies whether or not `boot.loader` is set.
 
 ## AppImages
 

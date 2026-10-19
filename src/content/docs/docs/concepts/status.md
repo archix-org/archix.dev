@@ -11,6 +11,7 @@ This page labels each feature by what archix's code and tests do today, as of ar
 - **Partial**: built, with a gap the line names.
 - **Experimental**: built and tested in a VM or container, but not in the way it's meant to be used: real firmware, a real TPM.
 - **Planned**: not built yet.
+- **Not planned**: measured or weighed, and turned down for a reason the line gives.
 
 Two test suites stand behind the labels. **VM** is a QEMU virtual machine with OVMF firmware that boots archix-managed generations: one run walks through boot-menu rollback, Secure Boot and rescue entries, and a rollback torture run, on ext4 and on a btrfs root laid out as CachyOS installs it, updates a real Arch install from the 2026-06-01 snapshot to 2026-10-10, cutting the power, killing runs and filling the disk along the way. The same torture run also goes through a CachyOS install with CachyOS's real repos and x86-64-v3 packages, where its later rollbacks have to reinstall CachyOS packages with CachyOS's mirror unreachable. Others cover NVIDIA's DKMS drivers, archix upgrading itself from its previous release, and `archix eject`. **Arch suite** is archix's full test suite, run as root inside a systemd-booted Arch container, with real pacman transactions, AUR builds and network access.
 
@@ -61,8 +62,8 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Secure Boot revocation](/docs/guides/secure-boot/#revoking-old-boot-images) | **Experimental** | `archix secure-boot revoke`, or `boot.revoke_unused` after every switch, appends the hashes of UKIs archix signed and no longer uses to `dbx`, signed with your KEK, leaving every other entry. | VM (OVMF only) |
 | [Signed TPM PCR policies](/docs/guides/secure-boot/#tpm-bound-secrets) | **Experimental** | With systemd's PCR signing key in place, every UKI carries a PCR 11 policy signed with it. | Arch suite (the policy is in the UKI; nothing unlocks a secret with a TPM) |
 
-## Planned
+## Not planned
 
-| Feature | Status | Today | Covered in |
+| Feature | Status | Why | Covered in |
 | --- | --- | --- | --- |
-| [Atomic `/usr` tree](/docs/concepts/limitations/#rollback) | **Planned** | Not built: switches and rollbacks are journaled pacman runs that replace files in place. | [Safety](/docs/concepts/safety/) |
+| [Atomic A/B `/usr`](/docs/concepts/atomicity/) | **Not planned** | Measured: rolls back in milliseconds, but pacman writes `/etc` and `/var` live, so a rollback leaves missing and orphaned files there and the next upgrade fails. Switches stay journaled pacman runs; whole-root transactional updates on btrfs may follow after the beta, after a design note. | [Why archix isn't atomic](/docs/concepts/atomicity/) |

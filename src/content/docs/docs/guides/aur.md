@@ -79,7 +79,7 @@ A VCS package, usually named `-git`, sets its own version while it builds: its `
 recorded the versions these packages gave themselves while building: archix-git 0.1.0.r35.g76a7920-1
 ```
 
-The commit in the lock is still the recipe's, so the sources a VCS package builds from aren't pinned: a later rebuild of the same commit can produce a newer version. See [Limitations](/docs/concepts/limitations/).
+The first build also records the commit each git source was cloned at, in the lock's `sources`, and a later build of the same lock checks out that commit, so it builds the same version. `archix update` to a newer snapshot drops it, and the next build takes upstream's newest commit. Mercurial, Subversion, Bazaar and Fossil sources aren't pinned; see [Limitations](/docs/concepts/limitations/#locking).
 
 `archix lock` and `archix switch` keep the locked commits. `archix update` and `archix -Syu` move AUR packages to the newest commit. See [The lockfile](/docs/concepts/lockfile/#aur-packages-commits).
 
@@ -154,7 +154,7 @@ aur = { skip_check = { "helm-ls" } },
 
 Built packages are cached in `/var/cache/archix/pkg`, named by recipe commit and snapshot date, so every build of a version keeps its own file. If neither changed, archix reuses the built package instead of building again. Each generation records the sha256 of the file it installed, so rollback puts back that exact file, even when a later build has the same version.
 
-To build once for several machines, push the builds to a [package cache](/docs/concepts/lockfile/#package-caches) with `archix cache push`, and list it in [`package_caches`](/docs/reference/options/#package_caches) on the others. A machine that finds a build of the same recipe commit at the same snapshot there installs it instead of building: `:: using zen-browser-bin's build from the package cache at file:///mnt/nas/archix/aur-builds/zen-browser-bin/cd6266c6847e61c71facdd7dbf869b5cf64359be-2026-10-09.json`. That build is trusted as the cache's record says, so list only caches you control.
+To build once for several machines, push the builds to a [package cache](/docs/concepts/lockfile/#package-caches) with `archix cache push`, and list it in [`package_caches`](/docs/reference/options/#package_caches) on the others. A machine that finds a build of the same recipe commit at the same snapshot there installs it instead of building: `:: using zen-browser-bin's build from the package cache at file:///mnt/nas/archix/aur-builds/zen-browser-bin/cd6266c6847e61c71facdd7dbf869b5cf64359be-2026-10-09.json`. It has to be the build the lock records, by `sha256`; until a machine has built it, that build is trusted as the cache's record says, so list only caches you control. [`package_cache_push`](/docs/reference/options/#package_cache_push) has the building machine fill the cache after every switch.
 
 A snapshot move rebuilds a package archix built, at the same commit, exactly when a library it links disappears in the switch: when a package the switch changes or removes stops shipping one of the ELF sonames the build needs. Otherwise it keeps the build it has. See [Rebuilds at the same version](/docs/guides/local-pkgbuilds-and-patches/#rebuilds-at-the-same-version).
 

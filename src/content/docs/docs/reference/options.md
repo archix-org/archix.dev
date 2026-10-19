@@ -149,10 +149,27 @@ Third-party repos such as CachyOS's are declared with [`custom_repos`](#custom_r
 
 The Arch Linux Archive, or a mirror of it with the same layout (`repos/YYYY/MM/DD/...`), that locks resolve and download from.
 
-Point it at a mirror you run, or a caching proxy in front of the archive, when the archive is slow or far away. Every snapshot database and official package comes from there, including `/packages/` for pins. `switch` records the URL, so `rollback`, `recover` and the boot-time rollback, which don't evaluate the config, use the same one. There's no fallback to the public archive: while the URL is down, packages that aren't cached can't be fetched.
+Point it at a mirror you run, or a caching proxy in front of the archive, when the archive is slow or far away. Every snapshot database and official package comes from there, including `/packages/` for pins. `switch` records the URL, so `rollback`, `recover` and the boot-time rollback, which don't evaluate the config, use the same one. When it's down or lacks a file, the [`archive_mirrors`](#archive_mirrors) are tried in order.
 
 ```lua
 archive_url = "https://ala-mirror.example.org",
+```
+
+### `archive_mirrors`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/packages.lua` |
+
+Copies of the archive with its layout, tried in order when archive_url is down or lacks a file, for locking, downloads, rollbacks and recovery.
+
+A file is looked for on `archive_url` first, then at the same path on each mirror. Once `archive_url` fails to answer, as opposed to not having a file, the rest of the run goes straight to the mirrors, so a dead archive costs one round of retries, not one per package: `warning: downloading https://ala-mirror.example.org/repos/2026/10/10/core/os/x86_64/core.db: ...; trying https://archive.archlinux.org/repos/2026/10/10/core/os/x86_64/core.db`. The resolver's pacman configuration lists every mirror as a `Server` after the archive. `switch` records the list, so `rollback` and `recover` use it too. Every file is still checked against the lock's sha256, wherever it comes from.
+
+```lua
+archive_url = "https://ala-mirror.example.org",
+archive_mirrors = { "https://archive.archlinux.org" },
 ```
 
 ### `package_caches`
@@ -163,12 +180,29 @@ archive_url = "https://ala-mirror.example.org",
 | Default | `[]` |
 | Declared in | `<archix>/packages.lua` |
 
-Package caches tried before the archive: directories (`file:///mnt/nas/archix`) or HTTP servers holding what `archix cache push` copied. Repo packages are checked against the lock's sha256; AUR builds are taken as the cache's build records say, so list only caches you control.
+Package caches tried before the archive: directories (`file:///mnt/nas/archix`) or HTTP servers holding what `archix cache push` copied. Repo packages and AUR builds are checked against the lock's sha256; an AUR build the lock has no sha256 for yet is taken as the cache's build record says, so list only caches you control.
 
-Caches are tried in order, before the archive and the third-party repos' servers, for every package file a lock, switch or temporary install needs. An AUR package, or a build of one of the config's recipes, is reused from a cache that has a build record for the same recipe commit and snapshot, instead of being built again. A cache that fails is skipped with a warning. `switch` records the list, so `rollback` and `recover` use it too. Fill a cache with [`archix cache push`](/docs/reference/cli/#cache-push); see [Package caches](/docs/concepts/lockfile/#package-caches).
+Caches are tried in order, before the archive and the third-party repos' servers, for every package file a lock, switch or temporary install needs. An AUR package, or a build of one of the config's recipes, is reused from a cache that has a build record for the same recipe commit and snapshot, instead of being built again, as long as it's the build `archix.lock` records; another build is passed over: `warning: the package cache at file:///mnt/nas/archix has a build of yay that doesn't match archix.lock; building it here instead`. A cache that fails is skipped with a warning. `switch` records the list, so `rollback` and `recover` use it too. Fill a cache with [`archix cache push`](/docs/reference/cli/#cache-push), or have every switch fill it with [`package_cache_push`](#package_cache_push); see [Package caches](/docs/concepts/lockfile/#package-caches).
 
 ```lua
 package_caches = { "file:///mnt/nas/archix" },
+```
+
+### `package_cache_push`
+
+| | |
+| --- | --- |
+| Type | `null or str` |
+| Default | `null` |
+| Declared in | `<archix>/packages.lua` |
+
+A package cache directory (`file:///mnt/nas/archix`) every switch copies this machine's new package files, signatures and AUR build records into, as `archix cache push` does, so other machines get its exact third-party versions and AUR builds. A failed copy only warns.
+
+After every switch that makes a generation, archix copies whatever the directory doesn't already hold and says `copied 3 files to /mnt/nas/archix`. A cache that's unmounted or read-only doesn't fail the switch, which is already done: `warning: couldn't copy this machine's packages to the package cache at file:///mnt/nas/archix: ...`. List the same directory in [`package_caches`](#package_caches) on the machines that read from it.
+
+```lua
+package_caches = { "file:///mnt/nas/archix" },
+package_cache_push = "file:///mnt/nas/archix",
 ```
 
 ### `lock_warn_after_days`
@@ -970,6 +1004,20 @@ Microcode images on the ESP loaded before the initramfs, such as `amd-ucode.img`
 How many of the newest generations keep a boot entry; fewer if the ESP runs out of room.
 
 Older entries are removed to make room for new ones, the current generation's included, oldest first. If even removing every older archix entry wouldn't free enough, a switch stops before changing anything: `the ESP at /boot has 38 MiB free (112 MiB more after removing every older archix entry), but this switch's boot entries need about 196 MiB; nothing was changed. Free up space on it, or set boot.entries lower`. Lowering `boot.entries` keeps fewer entries around, so the ESP fills up more slowly.
+
+### `boot.tries`
+
+| | |
+| --- | --- |
+| Type | `int` |
+| Default | `3` |
+| Declared in | `<archix>/boot.lua` |
+
+How many boots systemd-boot tries a new generation's entry before it falls back to the last generation that booted, which archix then rolls back to; a boot that reaches boot-complete.target counts as good. Needs systemd-boot 260 or newer on the ESP; 0 turns boot counting off.
+
+A new generation's entry is written as `archix-12+3.conf`, and `loader.conf` names it as `preferred`, with `default` left on the newest generation that has booted. systemd-boot counts a try down at every boot of it, and once a boot reaches `boot-complete.target`, `systemd-bless-boot` renames it `archix-12.conf` and it counts as good. After three boots that never got that far, it's `archix-12+0-3.conf`, which systemd-boot passes over for `default`, and at that boot archix rolls the system back to the generation that started and leaves a note at the next login: `archix: generation 12 didn't finish booting in the tries it had, so systemd-boot started generation 11, and archix rolled back to it`.
+
+Counting needs systemd-boot to count tries for a UKI entry, which came in 258, and `preferred`, which came in 260; archix reads what the running systemd-boot supports from its `LoaderFeatures` variable, and with an older one writes plain entries as before. A generation that boots far enough but is broken past that point, such as a desktop that doesn't start, counts as good.
 
 ### `boot.secure_boot`
 

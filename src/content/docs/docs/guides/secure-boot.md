@@ -147,3 +147,20 @@ lockdown=integrity sysctl.kernel.kexec_load_disabled=1 lsm=landlock,lockdown,yam
 ```
 
 Pick it in the boot menu when you want it. It covers lockdown, kexec, the BPF LSM and the IOMMU. It can't make the kernel well-known-signed, so the first anti-cheat requirement stays unmet, and loaded NVIDIA or DKMS modules still count against the last one. `archix secure-boot check --anticheat` shows what's still missing.
+
+## TPM-bound secrets
+
+A disk key or other secret sealed to PCR 11 breaks whenever the UKI changes, since a new kernel, initramfs or command line measures differently. systemd's answer is a signed PCR policy: the UKI carries a policy for its own PCR 11 values, signed with your key, and the secret is bound to the key instead of the values. archix signs one into every UKI it builds once systemd's PCR signing key exists, at `/etc/systemd/tpm2-pcr-private-key.pem` with its public half at `/etc/systemd/tpm2-pcr-public-key.pem`, where `systemd-cryptenroll` looks for the public key. Create the key yourself; `ukify genkey` needs `python-cryptography`:
+
+```console
+$ sudo ukify genkey --pcr-private-key=/etc/systemd/tpm2-pcr-private-key.pem --pcr-public-key=/etc/systemd/tpm2-pcr-public-key.pem
+```
+
+From the next switch that makes a generation on, UKIs carry `.pcrsig` and `.pcrpkey` sections, since the key is part of what a UKI's name hashes; a switch with nothing to do builds none. Then bind the secret to the key, for a LUKS volume:
+
+```console
+$ sudo systemd-cryptenroll --tpm2-device=auto --tpm2-public-key=/etc/systemd/tpm2-pcr-public-key.pem --tpm2-public-key-pcrs=11 /dev/nvme0n1p2
+```
+
+Every later switch signs the new UKI's policy with the same key, so the secret keeps unlocking. Anyone who can read the private key can sign a policy for any UKI, so it's as sensitive as your Secure Boot keys.
+

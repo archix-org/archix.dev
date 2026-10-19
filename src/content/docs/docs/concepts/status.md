@@ -9,6 +9,7 @@ This page labels each feature by what archix's code and tests do today, as of ar
 
 - **Shipped**: built, and covered by the test suites named next to it.
 - **Partial**: built, with a gap the line names.
+- **Experimental**: built and tested in a VM or container, but not in the way it's meant to be used: real firmware, a real TPM.
 - **Planned**: not built yet.
 
 Two test suites stand behind the labels. **VM** is a QEMU virtual machine with OVMF firmware that boots archix-managed generations: one run walks through boot-menu rollback, Secure Boot and rescue entries, and a rollback torture run, on ext4 and on a btrfs root laid out as CachyOS installs it, updates a real Arch install from the 2026-06-01 snapshot to 2026-10-10, cutting the power, killing runs and filling the disk along the way. The same torture run also goes through a CachyOS install with CachyOS's real repos and x86-64-v3 packages, where its later rollbacks have to reinstall CachyOS packages with CachyOS's mirror unreachable. Others cover NVIDIA's DKMS drivers, archix upgrading itself from its previous release, and `archix eject`. **Arch suite** is archix's full test suite, run as root inside a systemd-booted Arch container, with real pacman transactions, AUR builds and network access.
@@ -42,11 +43,9 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Third-party repos](/docs/guides/third-party-repos/) | **Shipped** | Declared repos, CPU-level checks, a copy of every package a generation takes from one, and a fallback chain when a locked package is gone. | VM (CachyOS), Arch suite |
 | [Package caches](/docs/concepts/lockfile/#package-caches) | **Shipped** | `archix cache push`, or every switch with `package_cache_push`, fills a directory, shared as a mount or over HTTP, that other machines fetch package files and AUR builds from first, checked against the lock. | Arch suite |
 | [Archive mirrors](/docs/reference/options/#archive_mirrors) | **Shipped** | `archive_url` points locking, switches, rollbacks and recovery at a mirror of the archive, and `archive_mirrors` lists more, tried when it's down. | VM, Arch suite |
-| [Secure Boot revocation](/docs/guides/secure-boot/#revoking-old-boot-images) | **Shipped** | `archix secure-boot revoke`, or `boot.revoke_unused` after every switch, appends the hashes of UKIs archix signed and no longer uses to `dbx`, signed with your KEK, leaving every other entry. | VM |
-| [Signed TPM PCR policies](/docs/guides/secure-boot/#tpm-bound-secrets) | **Shipped** | With systemd's PCR signing key in place, every UKI carries a PCR 11 policy signed with it, for secrets bound with `systemd-cryptenroll --tpm2-public-key`. | Arch suite (the signed policy; no TPM unlock yet) |
 | [Flatpak apps](/docs/guides/flatpak-and-appimages/) | **Shipped** | System-wide apps are locked to commits and pinned back on rollback. | Arch suite |
 | [Dotfiles and home](/docs/guides/dotfiles-and-apps/) | **Shipped** | Home files, live links, merged keys and `programs.*` modules. | Arch suite |
-| [`archix init`](/docs/quick-start/) | **Shipped** | Captures an existing machine into a config and lock that match it exactly, rebuilding packages no repo or the AUR has as recipes from their installed files. | Arch suite |
+| [`archix init`](/docs/quick-start/) | **Shipped** | Captures an existing machine into a config and lock that match it exactly; packages no repo or the AUR has are rebuilt as recipes from their installed files when you pick them. | Arch suite |
 
 ## Partial
 
@@ -54,6 +53,13 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | --- | --- | --- | --- |
 | [Third-party repo exactness](/docs/concepts/limitations/#locking) | **Partial** | Locked versions are exact only while archix or a package cache has the file; otherwise a fresh machine gets what the repo serves today. | [Third-party repos](/docs/guides/third-party-repos/#why-third-party-versions-can-go-missing) |
 | [AUR reproducibility](/docs/concepts/limitations/#locking) | **Partial** | Recipe commits, git sources and `SKIP`-checksum downloads are pinned after the first build; Mercurial, Subversion, Bazaar and Fossil sources aren't, and builds aren't bit-for-bit reproducible. | [The AUR](/docs/guides/aur/#vcs-packages) |
+
+## Experimental
+
+| Feature | Status | What it does | Tested in |
+| --- | --- | --- | --- |
+| [Secure Boot revocation](/docs/guides/secure-boot/#revoking-old-boot-images) | **Experimental** | `archix secure-boot revoke`, or `boot.revoke_unused` after every switch, appends the hashes of UKIs archix signed and no longer uses to `dbx`, signed with your KEK, leaving every other entry. | VM (OVMF only) |
+| [Signed TPM PCR policies](/docs/guides/secure-boot/#tpm-bound-secrets) | **Experimental** | With systemd's PCR signing key in place, every UKI carries a PCR 11 policy signed with it. | Arch suite (the policy is in the UKI; nothing unlocks a secret with a TPM) |
 
 ## Planned
 

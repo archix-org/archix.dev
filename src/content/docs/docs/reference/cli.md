@@ -129,6 +129,7 @@ System-wide Flatpak apps are declared too, each locked to the commit it's instal
 | Flag | Description |
 | --- | --- |
 | `--defaults` | Take every recommended answer without opening the wizard: everything in System, the recommended config files, no dotfiles (it writes no `home` section and touches nothing in your home), and a git repository (`git init`, `git add -A`) when git is installed. It needs no terminal, and prints what it captured in Packages, System, Config files, Boot and Generations sections before Lock and Result. Config files lists the recommended files it chose, then `· N more files left unmanaged; the wizard (archix init without --defaults) lets you pick them`. Its output includes `! their remote is gone, so archix leaves these Flatpak apps alone: ...` when that applies. Without it, `init` needs a terminal: `` `archix init` asks questions; run it in a terminal, or pass --defaults to take every default ``. |
+| `--repack PACKAGE` | Rebuild this package, which no repo or the AUR has, as a recipe in `pkgbuilds/` from its installed files, as ticking it in the wizard does. Its files stay in `/var/cache/archix/sources`, out of the config, and its builds out of package caches; a config file you edited goes in as the package shipped it, from a cached package file, or not at all. Can be given more than once. Without it, `--defaults` rebuilds nothing and leaves such packages in `ignored_packages`. |
 
 `init` refuses to run if the config directory already has an `init.lua`.
 
@@ -448,7 +449,7 @@ $ archix secure-boot check
 
 #### `secure-boot revoke`
 
-Add the boot images archix signed and no longer uses to the firmware's `dbx`, so it refuses to start them. Needs root, except with `--dry-run`.
+Experimental, tested on OVMF only: add the boot images archix signed and no longer uses to the firmware's `dbx`, so it refuses to start them. Needs root, except with `--dry-run`.
 
 ```console
 $ sudo archix secure-boot revoke
@@ -655,7 +656,7 @@ $ sudo archix cache push /mnt/nas/archix
 copied 214 files to /mnt/nas/archix
 ```
 
-It copies everything in `/var/cache/archix/pkg`, the files archix downloaded and the packages it built, plus the build records under `aur-builds/`, and skips files the directory already has at the same size. Each file is written under a temporary name and renamed, so a machine reading the cache never sees half of one. Serve the directory over HTTP to share it beyond a network mount. `cache push` doesn't evaluate the config. See [Package caches](/docs/concepts/lockfile/#package-caches).
+It copies everything in `/var/cache/archix/pkg`, the files archix downloaded and the packages it built, plus the build records under `aur-builds/`, and skips files the directory already has at the same size. Builds of private recipes, the ones `init --repack` writes, are never copied, since their files may not be yours to share. Each file is written under a temporary name and renamed, so a machine reading the cache never sees half of one. Serve the directory over HTTP to share it beyond a network mount. `cache push` doesn't evaluate the config. See [Package caches](/docs/concepts/lockfile/#package-caches).
 
 ## Internal commands
 

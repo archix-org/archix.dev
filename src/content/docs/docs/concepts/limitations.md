@@ -35,7 +35,7 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 ## Secure Boot and the TPM
 
-**Old signed boot entries stay bootable.** Every entry archix signs is signed with your key, and archix doesn't use SBAT or the firmware's `dbx` to revoke older ones. An entry `gc` deleted from the ESP is gone, but a copy of a signed entry from an older generation, with an older kernel, still boots wherever it's put.
+**Old signed boot entries stay bootable until you revoke them.** Every UKI archix signs is signed with your key, so a copy of one from an older generation, with an older kernel, boots wherever it's put, until [`archix secure-boot revoke`](/docs/guides/secure-boot/#revoking-old-boot-images), or [`boot.revoke_unused`](/docs/reference/options/#bootrevoke_unused) after every switch, puts its hash in `dbx`. That takes sbctl's KEK as a file, and archix adds at most 128 entries, so a machine that kept revoking for years would have to stop. SBAT isn't used: without shim, nothing enforces it. Old signed copies of systemd-boot itself aren't revoked.
 
 **PCR 11 bindings need a signed policy.** A switch that changes the kernel, initramfs or command line writes a new UKI, which measures differently into PCR 11, so a secret sealed to PCR 11's values has to be re-sealed after it. Once you create systemd's PCR signing key, archix signs a PCR policy into every UKI, and a secret bound to the key with `systemd-cryptenroll --tpm2-public-key` keeps unlocking; see [TPM-bound secrets](/docs/guides/secure-boot/#tpm-bound-secrets). archix's tests check the signed policy in the UKI, but don't yet unlock a secret with a TPM across a switch.
 

@@ -1019,6 +1019,22 @@ A new generation's entry is written as `archix-12+3.conf`, and `loader.conf` nam
 
 Counting needs systemd-boot to count tries for a UKI entry, which came in 258, and `preferred`, which came in 260; archix reads what the running systemd-boot supports from its `LoaderFeatures` variable, and with an older one writes plain entries as before. A generation that boots far enough but is broken past that point, such as a desktop that doesn't start, counts as good.
 
+### `boot.revoke_unused`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/boot.lua` |
+
+After every switch, add the boot images archix signed and no entry uses any more to dbx, as `archix secure-boot revoke` does, so the firmware refuses them. Needs Secure Boot keys from sbctl as files, and declares efitools.
+
+A switch that prunes boot entries takes their UKIs off the ESP, and this puts their hashes in `dbx` right after, with every check [`archix secure-boot revoke`](/docs/reference/cli/#secure-boot-revoke) makes. If revoking fails, the switch is still done, and says why: `revoking boot images no entry uses: ...`.
+
+```lua
+boot = { loader = "systemd-boot", esp = "/boot", secure_boot = true, revoke_unused = true },
+```
+
 ### `boot.secure_boot`
 
 | | |

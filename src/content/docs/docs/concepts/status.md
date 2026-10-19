@@ -42,6 +42,7 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Third-party repos](/docs/guides/third-party-repos/) | **Shipped** | Declared repos, CPU-level checks, a copy of every package a generation takes from one, and a fallback chain when a locked package is gone. | VM (CachyOS), Arch suite |
 | [Package caches](/docs/concepts/lockfile/#package-caches) | **Shipped** | `archix cache push`, or every switch with `package_cache_push`, fills a directory, shared as a mount or over HTTP, that other machines fetch package files and AUR builds from first, checked against the lock. | Arch suite |
 | [Archive mirrors](/docs/reference/options/#archive_mirrors) | **Shipped** | `archive_url` points locking, switches, rollbacks and recovery at a mirror of the archive, and `archive_mirrors` lists more, tried when it's down. | VM, Arch suite |
+| [Secure Boot revocation](/docs/guides/secure-boot/#revoking-old-boot-images) | **Shipped** | `archix secure-boot revoke`, or `boot.revoke_unused` after every switch, appends the hashes of UKIs archix signed and no longer uses to `dbx`, signed with your KEK, leaving every other entry. | VM |
 | [Signed TPM PCR policies](/docs/guides/secure-boot/#tpm-bound-secrets) | **Shipped** | With systemd's PCR signing key in place, every UKI carries a PCR 11 policy signed with it, for secrets bound with `systemd-cryptenroll --tpm2-public-key`. | Arch suite (the signed policy; no TPM unlock yet) |
 | [Flatpak apps](/docs/guides/flatpak-and-appimages/) | **Shipped** | System-wide apps are locked to commits and pinned back on rollback. | Arch suite |
 | [Dotfiles and home](/docs/guides/dotfiles-and-apps/) | **Shipped** | Home files, live links, merged keys and `programs.*` modules. | Arch suite |
@@ -59,4 +60,3 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | Feature | Status | Today | Covered in |
 | --- | --- | --- | --- |
 | [Atomic `/usr` tree](/docs/concepts/limitations/#rollback) | **Planned** | Not built: switches and rollbacks are journaled pacman runs that replace files in place. | [Safety](/docs/concepts/safety/) |
-| [Secure Boot revocation](/docs/concepts/limitations/#secure-boot-and-the-tpm) | **Planned** | Not built: no SBAT or `dbx` handling, so old signed entries stay bootable. | [Secure Boot](/docs/guides/secure-boot/) |

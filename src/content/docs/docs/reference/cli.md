@@ -42,7 +42,7 @@ Commands always win over terms: `archix status` runs `status`, and a typo such a
 
 ## Root
 
-Commands that change the system need root: `install`, `remove`, `switch`, `upgrade` (and `-Syu` and bare `archix`), `rollback`, `recover`, `gc`, `init` and `secure-boot setup`. Run as your user, they stop before touching anything, `installed.lua` included, and give you the line to run, the way you typed it:
+Commands that change the system need root: `install`, `remove`, `switch`, `upgrade` (and `-Syu` and bare `archix`), `rollback`, `recover`, `gc`, `init`, `secure-boot setup` and `secure-boot revoke` (but not `--dry-run`). Run as your user, they stop before touching anything, `installed.lua` included, and give you the line to run, the way you typed it:
 
 ```console
 $ archix -S htop
@@ -414,7 +414,7 @@ It unpacks the core set straight from the cache: what systemd, pacman, archix an
 
 ### `secure-boot`
 
-Set up and check Secure Boot. Neither subcommand evaluates the config. See [Secure Boot](/docs/guides/secure-boot/).
+Set up, check and revoke. None of the subcommands evaluates the config. See [Secure Boot](/docs/guides/secure-boot/).
 
 #### `secure-boot setup`
 
@@ -445,6 +445,27 @@ $ archix secure-boot check
 | Flag | Description |
 | --- | --- |
 | `--anticheat` | Also check what Easy Anti-Cheat Linux v2 requires of the boot: a kernel signed with a well-known key, integrity lockdown, kexec disabled, the BPF LSM, the IOMMU without passthrough, a TPM 2.0 and a measured boot, and no out-of-tree or unsigned kernel modules. It ends with `Easy Anti-Cheat Linux v2 would refuse this boot: N requirements aren't met` when any is unmet. See [Anti-cheat requirements](/docs/guides/secure-boot/#anti-cheat-requirements). |
+
+#### `secure-boot revoke`
+
+Add the boot images archix signed and no longer uses to the firmware's `dbx`, so it refuses to start them. Needs root, except with `--dry-run`.
+
+```console
+$ sudo archix secure-boot revoke
+2 boot images archix signed and no longer uses:
+  4a49f7139881a5bd  7.2.8-arch1-1-aedff12d49d2.efi
+  9c03b1e27f5d6a40  7.2.8-arch1-1-rescue-31b0c9e4d2aa.efi
+dbx has 431 entries, 0 of them archix's; this adds 2 (124 bytes)
+add 2 hashes to dbx? [y/N] y
+revoked 2 boot images; the firmware refuses them from now on (dbx from before: /var/lib/archix/boot/dbx-before-1792512000)
+```
+
+archix records the Authenticode hash of every UKI it signs, and revokes the ones no file on the ESP is any more, never a hash any `.efi` file on the ESP has. The update is signed with sbctl's KEK and appended to `dbx` under archix's own owner GUID, `e85b82c6-e8da-40eb-b968-e918df35dec1`, so Microsoft's entries and any other stay as they are. It stops before writing when that would make more than 128 of archix's entries, when the firmware doesn't report its free variable space or would have less than 64 KiB left, when the KEK isn't a key file (sbctl can keep it in a TPM or a YubiKey), or when `efitools` isn't installed. It backs `dbx` up first, and checks the hashes are there after. With nothing to revoke it says `nothing to revoke: every boot image archix signed is still on the ESP or already in dbx`. [`boot.revoke_unused`](/docs/reference/options/#bootrevoke_unused) does this after every switch. See [Revoking old boot images](/docs/guides/secure-boot/#revoking-old-boot-images).
+
+| Flag | Description |
+| --- | --- |
+| `--dry-run` | List what it would revoke and stop. Without `dbx` to read, it lists as if `dbx` were empty. |
+| `--noconfirm` | Don't ask before writing `dbx`. |
 
 ## Commands that read the system or the config
 
@@ -499,7 +520,7 @@ The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at
 
 On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. When everything is in place, the last line is `the system matches the lock`. When a switch is unfinished, the first lines say which one and at which step, and tell you to run `archix recover`. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 
-Packages archix builds from a VCS checkout, AUR packages and recipes named `-git`, `-hg`, `-svn`, `-bzr`, `-fossil` or `-darcs`, get their own line, since their locked recipe doesn't pin what they build: ``1 package builds from a VCS source, so a rebuild from its locked recipe can differ (`archix cache push` keeps the exact build): neovim-git``. `archix lock` and `update` mark them the same way, `+ neovim-git 0.12.0.r310.g1a2b3c4-1 (builds from a VCS source, so it floats)`. Packages in `ignored_packages` that aren't installed are named too, as `switch` names them: `ignored_packages lists 1 package that isn't installed here, and archix never installs ignored ones: nvidia-dkms-custom`. That's what a second machine sees when it shares a config `init` wrote on another.
+Packages archix builds from a VCS checkout, AUR packages and recipes named `-git`, `-hg`, `-svn`, `-bzr`, `-fossil` or `-darcs`, get their own line while the lock has no pinned sources for them, as before their first build: ``1 package builds from a VCS source archix.lock has no commit for yet, so its next build takes upstream's newest code, whose git commit is then recorded: neovim-git``. `archix lock` and `update` mark them the same way, `+ neovim-git 0.12.0.r310.g1a2b3c4-1 (builds from a VCS source; its first build records the commit)`. Packages in `ignored_packages` that aren't installed are named too, as `switch` names them: `ignored_packages lists 1 package that isn't installed here, and archix never installs ignored ones: nvidia-dkms-custom`. That's what a second machine sees when it shares a config `init` wrote on another.
 
 ### `generations`
 

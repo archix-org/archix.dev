@@ -5,7 +5,7 @@ sidebar:
   order: 7
 ---
 
-This page labels each feature by what archix's code and tests do today, as of archix commit `184a721`:
+This page labels each feature by what archix's code and tests do today, as of archix commit `c2ca6c6`:
 
 - **Shipped**: built, and covered by the test suites named next to it.
 - **Partial**: built, with a gap the line names.
@@ -22,6 +22,7 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Lock and switch](/docs/concepts/lockfile/) | **Shipped** | Official packages pinned to a day of the Arch Linux Archive by version and sha256; a switch prepares everything, then applies from a journal. | VM, Arch suite |
 | [Generations](/docs/concepts/generations/) | **Shipped** | Every switch is a numbered generation with its packages, files, users and services; `gc` keeps them by count and age. | VM, Arch suite |
 | [Rollback from the boot menu](/docs/concepts/generations/#rolling-back-from-the-boot-menu) | **Shipped** | Booting an older entry rolls back to it early in boot, and it stays the default entry. | VM |
+| [Boot counting](/docs/reference/options/#boottries) | **Shipped** | With systemd-boot 260 or newer, a generation that doesn't reach `boot-complete.target` in three boots is passed over for the last one that booted, which archix rolls back to. | VM |
 | [Rollback at runtime](/docs/concepts/generations/#rolling-back-from-a-running-system) | **Shipped** | `archix rollback` goes back, or forward, to any kept generation, also after `gc`. | VM, Arch suite |
 | [Repair after a power cut](/docs/concepts/safety/#a-power-cut-inside-pacman) | **Shipped** | The initramfs restores what a switch cut off inside pacman was changing, so the machine boots. | VM |
 | [`archix recover`](/docs/concepts/safety/#archix-recover) | **Shipped** | Continues, rolls back or abandons an unfinished switch, repairing torn pacman database entries first, and pacman's own libraries when it can't start. | VM, Arch suite |
@@ -39,23 +40,23 @@ archix hasn't yet been run for weeks on real hardware. [Limitations and failure 
 | [Restarting what uses replaced files](/docs/concepts/safety/#restarting-what-uses-replaced-files) | **Shipped** | Units still running replaced binaries, libraries or interpreted code are restarted. | Arch suite |
 | [Local PKGBUILDs and patches](/docs/guides/local-pkgbuilds-and-patches/) | **Shipped** | Recipes in the config and patched official packages are locked by content and built in the chroot. | VM, Arch suite |
 | [Third-party repos](/docs/guides/third-party-repos/) | **Shipped** | Declared repos, CPU-level checks, a copy of every package a generation takes from one, and a fallback chain when a locked package is gone. | VM (CachyOS), Arch suite |
-| [Package caches](/docs/concepts/lockfile/#package-caches) | **Shipped** | `archix cache push` fills a directory, shared as a mount or over HTTP, that other machines fetch package files and AUR builds from first. | Arch suite |
-| [Archive mirrors](/docs/reference/options/#archive_url) | **Shipped** | `archive_url` points locking, switches, rollbacks and recovery at a mirror of the archive. | VM, Arch suite |
+| [Package caches](/docs/concepts/lockfile/#package-caches) | **Shipped** | `archix cache push`, or every switch with `package_cache_push`, fills a directory, shared as a mount or over HTTP, that other machines fetch package files and AUR builds from first, checked against the lock. | Arch suite |
+| [Archive mirrors](/docs/reference/options/#archive_mirrors) | **Shipped** | `archive_url` points locking, switches, rollbacks and recovery at a mirror of the archive, and `archive_mirrors` lists more, tried when it's down. | VM, Arch suite |
+| [Secure Boot revocation](/docs/guides/secure-boot/#revoking-old-boot-images) | **Shipped** | `archix secure-boot revoke`, or `boot.revoke_unused` after every switch, appends the hashes of UKIs archix signed and no longer uses to `dbx`, signed with your KEK, leaving every other entry. | VM |
+| [Signed TPM PCR policies](/docs/guides/secure-boot/#tpm-bound-secrets) | **Shipped** | With systemd's PCR signing key in place, every UKI carries a PCR 11 policy signed with it, for secrets bound with `systemd-cryptenroll --tpm2-public-key`. | Arch suite (the signed policy; no TPM unlock yet) |
 | [Flatpak apps](/docs/guides/flatpak-and-appimages/) | **Shipped** | System-wide apps are locked to commits and pinned back on rollback. | Arch suite |
 | [Dotfiles and home](/docs/guides/dotfiles-and-apps/) | **Shipped** | Home files, live links, merged keys and `programs.*` modules. | Arch suite |
-| [`archix init`](/docs/quick-start/) | **Shipped** | Captures an existing machine into a config and lock that match it exactly. | Arch suite |
+| [`archix init`](/docs/quick-start/) | **Shipped** | Captures an existing machine into a config and lock that match it exactly, rebuilding packages no repo or the AUR has as recipes from their installed files. | Arch suite |
 
 ## Partial
 
 | Feature | Status | What's missing | Covered in |
 | --- | --- | --- | --- |
 | [Third-party repo exactness](/docs/concepts/limitations/#locking) | **Partial** | Locked versions are exact only while archix or a package cache has the file; otherwise a fresh machine gets what the repo serves today. | [Third-party repos](/docs/guides/third-party-repos/#why-third-party-versions-can-go-missing) |
-| [AUR reproducibility](/docs/concepts/limitations/#locking) | **Partial** | Recipe commits are pinned, the sources they download aren't: `-git` and `SKIP`-checksum sources float unless a package cache holds the build; the lock and `status` name the VCS ones. | [The AUR](/docs/guides/aur/#how-aur-packages-are-locked) |
+| [AUR reproducibility](/docs/concepts/limitations/#locking) | **Partial** | Recipe commits, git sources and `SKIP`-checksum downloads are pinned after the first build; Mercurial, Subversion, Bazaar and Fossil sources aren't, and builds aren't bit-for-bit reproducible. | [The AUR](/docs/guides/aur/#vcs-packages) |
 
 ## Planned
 
 | Feature | Status | Today | Covered in |
 | --- | --- | --- | --- |
 | [Atomic `/usr` tree](/docs/concepts/limitations/#rollback) | **Planned** | Not built: switches and rollbacks are journaled pacman runs that replace files in place. | [Safety](/docs/concepts/safety/) |
-| [Secure Boot revocation](/docs/concepts/limitations/#secure-boot-and-the-tpm) | **Planned** | Not built: no SBAT or `dbx` handling, so old signed entries stay bootable. | [Secure Boot](/docs/guides/secure-boot/) |
-| [Signed TPM PCR policies](/docs/concepts/limitations/#secure-boot-and-the-tpm) | **Planned** | Not built: secrets sealed to PCR 11 need re-sealing after a switch that changes the UKI. | [Secure Boot](/docs/guides/secure-boot/) |

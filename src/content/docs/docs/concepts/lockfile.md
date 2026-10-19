@@ -51,8 +51,9 @@ Each package is one inline table on one line, sorted by name, so a lock diff in 
 | `packages` | One inline table per package, dependencies included, keyed by package name. |
 | `version`, `file` | The exact package version and its package file. |
 | `repo` | Where it comes from: an official repo such as `core`, a third-party repo by name, `archive` for a pin, `aur`, or `local` for a package built from the config's own recipes. |
-| `sha256` | The checksum of the package file. A file that doesn't match is never installed. AUR packages have none; see below. |
+| `sha256` | The checksum of the package file. A file that doesn't match is never installed. For AUR and `local` packages, the first build's, recorded once it's built; see below. |
 | `base`, `commit` | For AUR packages: the package base and the git commit of its build recipe. For `local` packages: `local:<dir>` or `patch:<pkgbase>`, and a hash of the recipe. See [Local recipes and patched packages](#local-recipes-and-patched-packages). |
+| `sources` | For AUR and `local` packages, what the first build's sources were: the commit of each git source and the sha256 of each download whose checksums are `SKIP`. See [AUR packages](#aur-packages-commits). |
 | `explicit` | Whether pacman marks it as explicitly installed or as a dependency. |
 | `build_only` | `true` for an AUR package that's only needed to build other AUR packages. It's built, but never installed. |
 | `recipes` | A fingerprint of each recipe in `pkgbuilds/` and of each package's patches, from when the lock was written. Only present when there are any. See [Local recipes and patched packages](#local-recipes-and-patched-packages). |
@@ -68,7 +69,7 @@ To resolve, archix runs `pacman -Sp` against that day's sync databases and an em
 
 When a dependency names a real package, the lock includes that package, even where pacman met the dependency with another package's `provides`. pacman reuses a provider that's already in the transaction, and on a fresh resolve that can be the wrong one: `ca-certificates-utils` provides `ca-certificates` but ships no certificates, and a lock with only it would empty the CA bundle. A provider still wins when you declare it or list it in `prefer`, and when the real package would conflict with something else in the lock. An existing lock picks this up on the next `archix update`, or when the declared packages change.
 
-Official packages come from `https://archive.archlinux.org` unless [`archive_url`](/docs/reference/options/#archive_url) names a mirror of it with the same layout, such as a local caching proxy. `switch` records the URL it used, so `rollback` and `recover`, which don't evaluate the config, fetch from the same place.
+Official packages come from `https://archive.archlinux.org` unless [`archive_url`](/docs/reference/options/#archive_url) names a mirror of it with the same layout, such as a local caching proxy. `switch` records the URL it used, so `rollback` and `recover`, which don't evaluate the config, fetch from the same place. [`archive_mirrors`](/docs/reference/options/#archive_mirrors) lists more copies, tried in order when it's down or lacks a file.
 
 To install, archix downloads the exact files in the lock, checks each against its `sha256`, and hands them to `pacman -U`. It never mixes a snapshot with your live mirrors in one transaction, so you can't end up with the partial upgrade the Arch wiki warns about.
 
@@ -101,7 +102,13 @@ nodejs-lts-iron = { version = "20.19.5-1", repo = "aur", file = "nodejs-lts-iron
 zen-browser-bin = { version = "1.16.3b-1", repo = "aur", file = "zen-browser-bin-1.16.3b-1-x86_64.pkg.tar.zst", base = "zen-browser-bin", commit = "cd6266c6847e61c71facdd7dbf869b5cf64359be", explicit = true }
 ```
 
-`version` comes from that commit's `.SRCINFO`, except for a VCS package such as a `-git` one, which sets its own version while building: the switch then writes the version the build produced into the lock and the generation, and says `recorded the versions these packages gave themselves while building: ...`. There's no `sha256`: AUR builds aren't bit-for-bit reproducible, so the commit is what's locked. Each generation records the sha256 of the file it actually built, so rollback reuses that exact file.
+`version` comes from that commit's `.SRCINFO`, except for a VCS package such as a `-git` one, which sets its own version while building: the switch then writes the version the build produced into the lock and the generation, and says `recorded the versions these packages gave themselves while building: ...`. The commit is what's locked before anything is built, since AUR builds aren't bit-for-bit reproducible. The first build then records what it made and what it built from: the switch writes the file's `sha256` into the lock, which a [package cache](#package-caches)'s copy has to match, and `sources`, the commit each git source was cloned at and the sha256 of each download whose checksums are `SKIP`:
+
+```toml
+neovim-git = { version = "0.12.0.r310.g1a2b3c4-1", repo = "aur", file = "neovim-git-0.12.0.r310.g1a2b3c4-1-x86_64.pkg.tar.zst", sha256 = "4f1c...", base = "neovim-git", commit = "8d2e...", sources = { "neovim::git+https://github.com/neovim/neovim.git" = "1a2b3c4d..." }, explicit = true }
+```
+
+A later build of the same lock, on this machine after `gc` or on another one, checks out those commits and checks those downloads, so it builds the same code. `archix update` to a newer snapshot drops them, so the next build takes upstream's newest code again. Each generation records the sha256 of the file it actually installed, so rollback reuses that exact file.
 
 Dependencies the repos can satisfy are resolved from the repos; the rest come from the AUR. A name or dependency the locked snapshot lacks but the newest snapshot's official repos have is refused instead of being taken from the AUR, since it's simply too new for the lock: `` `cadical` isn't in the 2026-08-19 snapshot, but the newest one (2026-10-17) has it in the official repos, so it isn't taken from the AUR. Run `archix update` to lock a newer snapshot; nothing was changed ``. A recipe's versioned dependency gets the same check, `` mytool needs `glibc>=2.44`, which isn't in the 2026-06-01 snapshot, but the newest one ... ``, so an AUR package providing glibc never stands in for it. An unversioned dependency that in fact needs newer libraries can't be told apart before the build.
 
@@ -166,9 +173,9 @@ package_caches = { "file:///mnt/nas/archix", "https://cache.example.org/archix" 
 What a cache does depends on the package:
 
 - **Official and third-party packages** are looked for in each cache first, and checked against the lock's `sha256` like any download; a file that doesn't match is skipped for the next source. For a third-party package the repo no longer serves, that's what keeps the locked version restorable on a fresh machine.
-- **AUR packages and builds of the config's own recipes** are reused rather than built. archix looks for the cache's build record for the same recipe commit and snapshot, fetches the files it names, checked against the record's hashes, and installs those, `:: using zen-browser-bin's build from the package cache at ...`. One machine builds, the others don't, and they all run the same build. The lock has no `sha256` for these, so the record is trusted as it is: list only caches you control.
+- **AUR packages and builds of the config's own recipes** are reused rather than built. archix looks for the cache's build record for the same recipe commit and snapshot, fetches the files it names, checked against the record's hashes and the lock's `sha256`, and installs those, `:: using zen-browser-bin's build from the package cache at ...`. One machine builds, the others don't, and they all run the same build. A build that isn't the one the lock records is passed over: `warning: the package cache at file:///mnt/nas/archix has a build of zen-browser-bin that doesn't match archix.lock; building it here instead`. Until a machine has built it, the lock has no `sha256` for it, and the record is trusted as it is: list only caches you control.
 
-A cache that's down or misbehaving only costs its speedup: archix says `warning: skipping the package cache at ...` and goes on to the archive or the repo. `switch` records the list, so `rollback`, `recover` and a rollback from the boot menu, which don't evaluate the config, try the same caches.
+To have every switch fill a cache, set [`package_cache_push`](/docs/reference/options/#package_cache_push) to its directory on the machine that builds. A cache that's down or misbehaving only costs its speedup: archix says `warning: skipping the package cache at ...` and goes on to the archive or the repo. `switch` records the list, so `rollback`, `recover` and a rollback from the boot menu, which don't evaluate the config, try the same caches.
 
 ## `lock` and `update`
 

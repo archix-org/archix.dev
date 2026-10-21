@@ -321,6 +321,22 @@ Their build dependencies are installed from the locked snapshot for the build, t
 aur = { build_on_host = { "some-driver-dkms" } },
 ```
 
+### `aur.require_locked_build`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/aur.lua` |
+
+Install only the AUR and recipe builds archix.lock records: one that no package cache has is refused instead of built here, since a build here differs from it byte for byte.
+
+The lock records the sha256 of the first build of each recipe commit, on whichever machine made it. Builds aren't bit-for-bit reproducible, so another machine building the same pinned sources gets the same code in a different file, and by default installs it and says so: `built zen-browser-bin here, which differs from the build archix.lock records (another machine's, or an earlier one); its sources are pinned, so it's the same code. aur.require_locked_build refuses that instead`. With this set, it takes the recorded build from a [package cache](#package_caches) or stops before changing anything: `archix.lock records a build of zen-browser-bin that no package cache has, and aur.require_locked_build doesn't allow building it here; nothing was changed`. A recipe nobody has built yet still builds.
+
+```lua
+aur = { require_locked_build = true },
+```
+
 ### `aur.skip_check`
 
 | | |
@@ -1027,7 +1043,7 @@ Counting needs systemd-boot to count tries for a UKI entry, which came in 258, a
 | Default | `false` |
 | Declared in | `<archix>/boot.lua` |
 
-After every switch, add the boot images archix signed and no entry uses any more to dbx, as `archix secure-boot revoke` does, so the firmware refuses them. Needs Secure Boot keys from sbctl as files, and declares efitools.
+Experimental, tested on OVMF only: after every switch, add the boot images archix signed and no entry uses any more to dbx, as `archix secure-boot revoke` does, so the firmware refuses them. Needs Secure Boot keys from sbctl as files, and declares efitools.
 
 A switch that prunes boot entries takes their UKIs off the ESP, and this puts their hashes in `dbx` right after, with every check [`archix secure-boot revoke`](/docs/reference/cli/#secure-boot-revoke) makes. If revoking fails, the switch is still done, and says why: `revoking boot images no entry uses: ...`.
 
@@ -1095,7 +1111,7 @@ The entry is `archix-<n>-protected.conf`, kept for the newest two generations li
 
 On a btrfs root, take a read-only snapshot of `/` before every switch.
 
-A snapshot is deleted along with its generation. It's a manual recovery point; booting an older generation works by reinstalling its packages, on any filesystem. This option applies whether or not `boot.loader` is set.
+A snapshot is deleted along with its generation, so they're kept as long as [`generations.keep`](#generationskeep) and [`generations.keep_days`](#generationskeep_days) keep generations. Until then each one holds every file later switches replace, an update's worth of space per snapshot; see [what they cost](/docs/concepts/atomicity/#btrfs-snapshots-and-what-they-cost). It's a manual recovery point; booting an older generation works by reinstalling its packages, on any filesystem. This option applies whether or not `boot.loader` is set.
 
 ## AppImages
 

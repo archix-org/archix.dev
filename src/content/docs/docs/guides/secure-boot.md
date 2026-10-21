@@ -150,6 +150,10 @@ Pick it in the boot menu when you want it. It covers lockdown, kexec, the BPF LS
 
 ## Revoking old boot images
 
+:::caution[Experimental]
+Revoking is tested on OVMF, QEMU's firmware, not on real machines, whose variable stores differ. Try it where you can reach the firmware settings to clear `dbx` if something goes wrong.
+:::
+
 Every UKI archix signed boots wherever it's put, including ones `gc` deleted, with the older kernel and initramfs they carry, unless the firmware's `dbx` lists them. With your own keys there's no shim to enforce SBAT, so `dbx` is what revokes: `archix secure-boot revoke` adds the hashes of the UKIs archix signed and no longer uses, and [`boot.revoke_unused = true`](/docs/reference/options/#bootrevoke_unused) does that after every switch.
 
 It only ever appends: the update is signed with your KEK and written with the firmware's append flag, so the entries Windows and Microsoft's own `dbx` updates put there stay. archix's entries carry its own owner GUID, and it caps them at 128, since `dbx` lives in the same small NVRAM store Windows needs room in for its updates. It never revokes a hash any `.efi` file on the ESP has, and once it has revoked anything, every UKI it builds gets a random `.archix` section, so a rebuild can never come out identical to a revoked one.
@@ -157,6 +161,10 @@ It only ever appends: the update is signed with your KEK and written with the fi
 It needs the KEK as a file, as sbctl creates it by default, and `efitools` for the signed write. The `dbx` from before is saved in `/var/lib/archix/boot/dbx-before-<time>`.
 
 ## TPM-bound secrets
+
+:::caution[Experimental]
+archix's tests check that every UKI carries the signed policy, but none unlocks a secret with a TPM across a switch yet. Keep a passphrase or recovery key on any volume you bind this way.
+:::
 
 A disk key or other secret sealed to PCR 11 breaks whenever the UKI changes, since a new kernel, initramfs or command line measures differently. systemd's answer is a signed PCR policy: the UKI carries a policy for its own PCR 11 values, signed with your key, and the secret is bound to the key instead of the values. archix signs one into every UKI it builds once systemd's PCR signing key exists, at `/etc/systemd/tpm2-pcr-private-key.pem` with its public half at `/etc/systemd/tpm2-pcr-public-key.pem`, where `systemd-cryptenroll` looks for the public key. Create the key yourself; `ukify genkey` needs `python-cryptography`:
 

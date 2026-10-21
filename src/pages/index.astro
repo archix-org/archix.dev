@@ -31,12 +31,12 @@ const manages = [
 
 const safety = [
 	['No reinstall', 'archix init takes over the system you already have and locks to what is installed, so the first switch changes nothing, or tells you what it would.'],
-	['Power cuts', 'Every switch builds a new deployment beside the running one and commits it in one step. Cut the power anywhere and the old one or the new one boots; there is nothing to repair.'],
-	['No live USB', 'Every kept deployment has its own boot entry. Pick an older one and it boots exactly as it was, without pacman.'],
-	['Bad updates', 'A deployment that does not finish booting is passed over for the last one that did, by systemd-boot boot counting.'],
+	['Power cuts', 'Every switch builds a new deployment beside the running one and commits it in one step, designed so a power cut leaves the old one or the new one bootable. Kill tests and VM power cuts pass on archix itself; write-level power-cut replay has passed on the prototype, and on archix itself it is in progress.'],
+	['No live USB', 'No live USB to roll back to a kept deployment: each has its own boot entry. Pick an older one and it boots exactly as it was, without pacman.'],
+	['Bad updates', 'With systemd-boot 260 or newer, a deployment that does not finish booting is passed over for the last one that did, by boot counting.'],
 	['DKMS', 'Each deployment carries its own kernel, modules and DKMS state, NVIDIA drivers included.'],
-	['Updates at boot', 'Nothing changes under running programs: a switch takes effect at the next boot, all at once.'],
-	['Tested', 'Every push boots in a QEMU VM with Secure Boot enforcing. Power cuts, kills at every step, full disks, CachyOS and NVIDIA are tested on ext4 and btrfs.'],
+	['Updates at boot', 'Packages, /etc and services change at the next boot, all at once, not under running programs. Flatpak apps and home files are written right after the switch.'],
+	['Tested', 'Tested in QEMU VMs with Secure Boot enforcing, on ext4 and btrfs: kills at every step, VM power cuts, full disks, CachyOS and NVIDIA.'],
 ];
 
 const nix = [
@@ -65,6 +65,10 @@ const nix = [
 					Declare your whole system in one Lua config: packages, AUR, services, <code>/etc</code>, dotfiles.
 					archix locks your packages to exact versions, turns every switch that changes something into a generation,
 					and rolls back in one command. Built for Arch and CachyOS.
+				</p>
+				<p>
+					Changes take effect at the next boot, even <code>archix install htop</code>. Needs systemd-boot: GRUB and Limine
+					aren't supported.
 				</p>
 				<div class="cta">
 					<CopyCommand command={install} label="Install archix from the AUR" />
@@ -127,10 +131,10 @@ mesa = {'{'} version = <span class="s">"1:25.3.0-1"</span>, repo = <span class="
 				<h2 id="atomic">Atomic updates, on ext4 too.</h2>
 				<p>
 					A switch never touches the running system. It builds the next deployment beside it, by btrfs snapshot or with
-					hardlinks on ext4, and commits it in one step. The next boot starts it. A power cut halfway leaves the old system,
-					not a mix of both.
+					hardlinks on ext4, and commits it in one step. The next boot starts it. It's designed so a power cut halfway leaves
+					the old system, not a mix of both.
 				</p>
-				<p>Keeping the previous deployment costs one update's changed files: under a gigabyte for a week of updates.</p>
+				<p>Keeping the previous deployment costs one update's changed files: about 0.9 GB in one measured week (36 packages). Weeks with a kernel, mesa or browser update take more.</p>
 			</div>
 			<Artifact title="terminal">
 				<pre><span class="m">$</span> <span class="w">sudo archix -Syu</span>

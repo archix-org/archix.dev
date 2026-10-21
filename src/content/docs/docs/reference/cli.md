@@ -311,7 +311,7 @@ It never drops the booted, current or boot-default deployment, and keeps the new
 
 ### `eject`
 
-Stop archix managing the machine. It works only before the first switch: once the system is laid out as deployments, they boot only through archix's initramfs hook, and `eject` refuses:
+Stop archix managing the machine. It works only before the first switch: once the system is laid out as deployments, they boot only through archix's initramfs hook, and `eject` refuses. A way back to plain Arch from deployments is being built, and isn't available yet:
 
 ```console
 $ sudo archix eject

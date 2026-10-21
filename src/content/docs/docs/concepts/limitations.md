@@ -21,7 +21,9 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **Hooks run before the network.** [Hooks and `on_change` scripts](/docs/guides/hooks/) run at the new deployment's first boot, before networking and before anyone logs in. A hook that needs a running service, a network connection or a user's session fails there, and runs again at every boot until it succeeds.
 
-**There's no way back from deployments yet.** [`archix eject`](/docs/reference/cli/#eject) refuses on a system laid out as deployments, since they boot only through archix's initramfs hook. Ejecting works only before the first switch.
+**There's no way back from deployments yet.** [`archix eject`](/docs/reference/cli/#eject) works only before the first switch; on a system laid out as deployments it refuses, since they boot only through archix's initramfs hook. A way back to plain Arch from deployments is being built, and isn't available yet.
+
+**Some failures still need a live USB.** Rolling back to a kept deployment needs only the boot menu. A damaged ESP, a broken systemd-boot, or a bug in archix's initramfs hook that keeps every deployment from mounting still needs a live USB to repair.
 
 ## Rollback
 
@@ -67,7 +69,8 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 ## Not yet known
 
-- **Weeks of use on real hardware.** The failure paths are exercised in VMs and containers: power cuts and kills mid-switch, a full disk, a broken glibc, a revoked key. archix with deployments hasn't yet run for weeks on real machines, which is where the failures nobody thought to test turn up.
+- **Power-cut replay on archix's own code.** Replaying every write of a switch to each flush point has passed on the prototype archix's commit order follows; on archix itself it's in progress. Kill tests and VM power cuts pass.
+- **Weeks of use on real hardware.** The failure paths are exercised in VMs and containers: VM power cuts and kills mid-switch, a full disk, a broken glibc, a revoked key. archix with deployments hasn't yet run for weeks on real machines, which is where the failures nobody thought to test turn up.
 - **Upgrading from one release with deployments to the next.** The VM suite for that waits for a second release.
 
 [Feature status](/docs/concepts/status/) lists what's shipped, partial and planned, and what tests each.

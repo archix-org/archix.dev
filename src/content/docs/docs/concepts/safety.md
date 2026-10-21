@@ -152,7 +152,7 @@ Picking an older entry in the boot menu doesn't ask: it boots that deployment as
 
 ## Interrupted switches
 
-A switch can be stopped at any point, by Ctrl-C, `kill -9`, a full disk or a power cut, and there's nothing to recover:
+A switch can be stopped at any point, by Ctrl-C, `kill -9`, a full disk or a power cut, and it's designed so there's nothing to recover. Kill tests and VM power cuts pass on archix itself; write-level power-cut replay has passed on the prototype, and on archix's own code it's in progress. See [How it's tested](/docs/concepts/atomicity/#how-its-tested).
 
 - **Before the commit**, the running system and its boot entries are as they were. What the switch staged is deleted by the failure itself or, after a kill or power cut, by the next switch.
 - **During the commit**, the steps are ordered so that whatever survives names a complete deployment: the next boot starts either the old one or the new one.

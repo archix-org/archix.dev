@@ -5,7 +5,7 @@ sidebar:
   order: 8
 ---
 
-Every `archix switch` builds a complete new system next to the one you're running, a **deployment**, and commits it in one step. The running system doesn't change. At the next boot, the new deployment starts instead of the old one. A power cut or a kill at any moment leaves the old deployment or the new one bootable, never a mix of the two, and there's nothing to repair afterwards.
+Every `archix switch` builds a complete new system next to the one you're running, a **deployment**, and commits it in one step. The running system doesn't change. At the next boot, the new deployment starts instead of the old one. It's designed so a power cut or a kill at any moment leaves the old deployment or the new one bootable, never a mix of the two, with nothing to repair afterwards; [How it's tested](#how-its-tested) says how far that's proven.
 
 This page explains how that works, what it costs in disk space, and how it's tested.
 
@@ -92,7 +92,7 @@ The first switch lays the running system out as deployment 1, and refuses before
 ## How it's tested
 
 - **Killed switches.** Container tests kill archix at every step of a switch and of its commit, on loop-mounted ext4 and btrfs, and check that only complete deployments are named and the next switch cleans up.
-- **Power cuts.** The design was tested with `dm-log-writes`: every write and flush of a switch was logged, and the disk replayed to every flush point, and to 60 evenly spaced points through the four-month update on ext4. Each replayed state was checked with `fsck`, booted, and had to start a complete old or new deployment with `pacman -Qkk` clean. That ran on the prototype whose commit order archix follows. archix's own switches are reset mid-build and between a rollback's two writes in the VM suites.
+- **Power cuts.** The design was tested with `dm-log-writes`: every write and flush of a switch was logged, and the disk replayed to every flush point, and to 60 evenly spaced points through the four-month update on ext4. Each replayed state was checked with `fsck`, booted, and had to start a complete old or new deployment with `pacman -Qkk` clean. That ran on the prototype whose commit order archix follows; replay on archix's own code is in progress. archix's own switches are killed at every step, and reset mid-build and between a rollback's two writes in the VM suites.
 - **VM suites**, on ext4 and on btrfs laid out as CachyOS does: booting an older entry, rollback by repointing and by rebuilding, Secure Boot, boot counting, a full disk, a broken glibc in a new deployment, NVIDIA's drivers per deployment and kernel, and CachyOS's own packages with its mirror unreachable. After every step they check every older deployment's files against its package database.
 
 See [Feature status](/docs/concepts/status/).

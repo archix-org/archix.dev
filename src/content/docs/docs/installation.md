@@ -74,7 +74,7 @@ $ sudo archix eject
 $ sudo pacman -Rns archix-git
 ```
 
-Once the first switch has laid the system out as deployments, `eject` refuses: the deployments boot only through archix's initramfs hook, and there's no way back to a plain layout yet. See [`eject`](/docs/reference/cli/#eject).
+Once the first switch has laid the system out as deployments, `eject` refuses: the deployments boot only through archix's initramfs hook. A way back to plain Arch from deployments is being built, and isn't available yet. See [`eject`](/docs/reference/cli/#eject).
 
 ## The static binary
 

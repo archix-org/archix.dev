@@ -23,7 +23,7 @@ const manages = [
 	['/etc', 'Any file under /etc, written atomically and tracked by hash'],
 	['systemd', 'System and user units enabled or disabled in each new deployment, so they start as it boots'],
 	['Kernel', 'Kernel parameters, sysctl, modprobe and udev rules'],
-	['Users', 'Users and groups. Passwords stay yours: archix never touches them'],
+	['Users', 'Users and groups. archix never sets passwords, but each deployment keeps its own /etc/shadow, so a rollback brings back the passwords it had'],
 	['Dotfiles', 'Copied files with recorded hashes, so edits made outside archix show up in diff, or live links into your config repo'],
 	['Apps', 'programs.* modules, six of them ported from Home Manager and checked byte for byte against its tests, plus writers for toml, json, yaml, ini, kdl and more'],
 	['Hooks', 'Activation scripts that run at the first boot of every switch and rollback, and on_change scripts for files that changed'],
@@ -31,12 +31,12 @@ const manages = [
 
 const safety = [
 	['No reinstall', 'archix init takes over the system you already have and locks to what is installed, so the first switch changes nothing, or tells you what it would.'],
-	['Power cuts', 'Every switch builds a new deployment beside the running one and commits it in one step, designed so a power cut leaves the old one or the new one bootable. Kill tests and VM power cuts pass on archix itself; write-level power-cut replay has passed on the prototype, and on archix itself it is in progress.'],
-	['No live USB', 'No live USB to roll back to a kept deployment: each has its own boot entry. Pick an older one and it boots exactly as it was, without pacman.'],
+	['Power cuts', 'Every switch builds a new deployment beside the running one and commits it in one step, designed so a power cut leaves the old one or the new one bootable. Kill tests of the staging and commit logic and VM power cuts during staging pass on archix itself; write-level power-cut replay has passed on the prototype, and on archix itself it is in progress.'],
+	['No live USB', 'No live USB to roll back to a kept deployment: each has its own boot entry. Pick an older one and it boots with the same packages, kernel and /etc, without pacman.'],
 	['Bad updates', 'With systemd-boot 260 or newer, a deployment that does not finish booting is passed over for the last one that did, by boot counting.'],
 	['DKMS', 'Each deployment carries its own kernel, modules and DKMS state, NVIDIA drivers included.'],
 	['Updates at boot', 'Packages, /etc and services change at the next boot, all at once, not under running programs. Flatpak apps and home files are written right after the switch.'],
-	['Tested', 'Tested in QEMU VMs with Secure Boot enforcing, on ext4 and btrfs: kills at every step, VM power cuts, full disks, CachyOS and NVIDIA.'],
+	['Tested', 'Tested in QEMU VMs with Secure Boot enforcing, on ext4 and btrfs: kills of the staging and commit logic, power cuts during staging, full disks, CachyOS, and NVIDIA drivers built per deployment.'],
 ];
 
 const nix = [
@@ -116,7 +116,7 @@ mesa = {'{'} version = <span class="s">"1:25.3.0-1"</span>, repo = <span class="
 					<h3>Reversible</h3>
 					<p>
 						Every switch that changes something is a generation, built as a deployment beside the running one, with a boot
-						entry signed when Secure Boot is set up. Roll back from the terminal or pick one at boot: it boots exactly as it was.
+						entry signed when Secure Boot is set up. Roll back from the terminal or pick one at boot: same packages, kernel and /etc.
 					</p>
 					<Artifact title="systemd-boot">
 						<pre><span class="w">› Arch Linux (archix, generation 42)</span>
@@ -130,8 +130,9 @@ mesa = {'{'} version = <span class="s">"1:25.3.0-1"</span>, repo = <span class="
 			<div>
 				<h2 id="atomic">Atomic updates, on ext4 too.</h2>
 				<p>
-					A switch never touches the running system. It builds the next deployment beside it, by btrfs snapshot or with
-					hardlinks on ext4, and commits it in one step. The next boot starts it. It's designed so a power cut halfway leaves
+					A switch builds the next deployment beside the running system, by btrfs snapshot or with hardlinks on ext4, and
+					commits it in one step; the next boot starts it. Packages, /etc and services on the running system stay as they
+					are, and only home files and Flatpak apps change right away. It's designed so a power cut halfway leaves
 					the old system, not a mix of both.
 				</p>
 				<p>Keeping the previous deployment costs one update's changed files: about 0.9 GB in one measured week (36 packages). Weeks with a kernel, mesa or browser update take more.</p>

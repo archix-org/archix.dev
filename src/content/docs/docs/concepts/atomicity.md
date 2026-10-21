@@ -33,7 +33,7 @@ A deployment is the part of the system a package transaction writes, kept per ge
 4. **Flatten**, on ext4: unchanged files become hardlinks to the previous deployment's, and the overlay's changes are moved in, so the result is a plain directory tree.
 5. **Commit**, in this order: flush the root filesystem; rename `.staging-<n>` to `<n>`; copy the boot image to the ESP and write the boot entry; point systemd-boot's `loader.conf` at it; repoint `/archix/current`. Every flush is checked, and nothing is renamed or pointed after one fails.
 
-The order is what makes it atomic. A boot entry or pointer that survives a crash always names a complete deployment. The ESP is FAT, where a rename isn't crash-safe, so a torn `loader.conf` or a missing entry can only make systemd-boot start another complete deployment. A staging tree that was never renamed is deleted by the next switch.
+The order is what makes it atomic. A boot entry or pointer that survives a crash always names a complete deployment. The ESP is FAT, where a rename isn't crash-safe: a torn `loader.conf` or a missing entry makes systemd-boot start another complete deployment, but a torn `loader/entries` directory can lose every entry at once. A fallback boot image that starts `current` without an entry is being added. A staging tree that was never renamed is deleted by the next switch.
 
 Then the switch ends: `switched to generation 43 (snapshot 2026-10-15); its deployment boots at the next restart`.
 
@@ -41,7 +41,7 @@ Then the switch ends: `switched to generation 43 (snapshot 2026-10-15); its depl
 
 archix's mkinitcpio hook, in systemd and busybox initramfs images alike, mounts the deployment before the real root starts. It reads which boot entry systemd-boot started from the `LoaderEntrySelected` EFI variable, and boots that entry's deployment if it's committed, complete, and the entry is one archix recorded writing. Otherwise it boots `current`. It binds the deployment's `usr`, `opt` and `boot` read-only over the root, and its `etc`, pacman database and DKMS state writable.
 
-So picking an older entry in the boot menu boots that deployment exactly as it was. Nothing is reinstalled, and pacman doesn't run at boot. `archix-boot.service` then makes it current and the boot default. With systemd-boot 260 or newer, [boot counting](/docs/reference/options/#boottries) does the same by itself when a new deployment doesn't reach `boot-complete.target`.
+So picking an older entry in the boot menu boots that deployment with the same packages, kernel and `/etc` it had; `/var` and your home are shared and stay as they are now. Nothing is reinstalled, and pacman doesn't run at boot. `archix-boot.service` then makes it current and the boot default. With systemd-boot 260 or newer, [boot counting](/docs/reference/options/#boottries) does the same by itself when a new deployment doesn't reach `boot-complete.target`.
 
 A deployment's first boot applies what its switch staged for `/var`, before services start:
 - **Accounts.** Package users and groups got their IDs while staging, against the staged `/etc`. A check for duplicate IDs runs first, then `systemd-sysusers`.
@@ -91,8 +91,8 @@ The first switch lays the running system out as deployment 1, and refuses before
 
 ## How it's tested
 
-- **Killed switches.** Container tests kill archix at every step of a switch and of its commit, on loop-mounted ext4 and btrfs, and check that only complete deployments are named and the next switch cleans up.
-- **Power cuts.** The design was tested with `dm-log-writes`: every write and flush of a switch was logged, and the disk replayed to every flush point, and to 60 evenly spaced points through the four-month update on ext4. Each replayed state was checked with `fsck`, booted, and had to start a complete old or new deployment with `pacman -Qkk` clean. That ran on the prototype whose commit order archix follows; replay on archix's own code is in progress. archix's own switches are killed at every step, and reset mid-build and between a rollback's two writes in the VM suites.
+- **Killed switches.** Container tests kill archix's staging and commit logic at every step, on loop-mounted ext4 and btrfs with the ESP step on a plain directory, and check that only complete deployments are named and the next switch cleans up.
+- **Power cuts.** The design was tested with `dm-log-writes`: every write and flush of a switch was logged, and the disk replayed to every flush point, and to 60 evenly spaced points through the four-month update on ext4. Each replayed state was checked with `fsck`, booted, and had to start a complete old or new deployment with `pacman -Qkk` clean. That ran on the prototype whose commit order archix follows; replay on archix's own code is in progress. In the VM suites, archix's own switches are reset during staging, and the state a crash between a rollback's two writes would leave is set up by hand and booted.
 - **VM suites**, on ext4 and on btrfs laid out as CachyOS does: booting an older entry, rollback by repointing and by rebuilding, Secure Boot, boot counting, a full disk, a broken glibc in a new deployment, NVIDIA's drivers per deployment and kernel, and CachyOS's own packages with its mirror unreachable. After every step they check every older deployment's files against its package database.
 
 See [Feature status](/docs/concepts/status/).

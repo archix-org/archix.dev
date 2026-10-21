@@ -23,6 +23,10 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **There's no way back from deployments yet.** [`archix eject`](/docs/reference/cli/#eject) works only before the first switch; on a system laid out as deployments it refuses, since they boot only through archix's initramfs hook. A way back to plain Arch from deployments is being built, and isn't available yet.
 
+**A torn entries directory can leave nothing to boot.** The ESP is FAT, and a crash while archix writes boot entries can lose the whole `loader/entries` directory, not just one entry. A fallback boot image that starts `current` without an entry is being added.
+
+**A rollback brings back that deployment's passwords.** archix never manages passwords, but `/etc/shadow` is part of each deployment's `/etc`, so booting or rolling back to an older deployment brings back the passwords it had, and a password changed since is undone. Carrying accounts over between deployments is planned.
+
 **Some failures still need a live USB.** Rolling back to a kept deployment needs only the boot menu. A damaged ESP, a broken systemd-boot, or a bug in archix's initramfs hook that keeps every deployment from mounting still needs a live USB to repair.
 
 ## Rollback
@@ -55,7 +59,7 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **PCR 11 bindings break when the UKI changes; signed policies are experimental.** A switch that changes the kernel, initramfs or command line writes a new UKI, which measures differently into PCR 11, so a secret sealed to PCR 11's values has to be re-sealed. With systemd's PCR signing key in place, archix signs a policy into every UKI for secrets bound to the key ([TPM-bound secrets](/docs/guides/secure-boot/#tpm-bound-secrets)), but no test unlocks such a secret with a TPM yet, so don't rely on it for a disk you can't open otherwise.
 
-**Which deployment boots isn't signed.** The UKIs and their command lines are signed. Which deployment a boot mounts comes from the boot menu entry, `loader/entries/archix-<n>.conf`, an unsigned file on the FAT ESP, which systemd-boot reports in the `LoaderEntrySelected` EFI variable. archix keeps a copy of every entry it writes on the root filesystem, and boots `current` when the entry that started isn't one it recorded, so a renamed or edited entry doesn't move the system. Someone who can write to the ESP can still change `loader.conf` or the boot menu's EFI variables so that an older entry archix wrote starts, which boots that kept deployment; the boot menu offers it anyway.
+**Which deployment boots isn't signed.** The UKIs and their command lines are signed. Which deployment a boot mounts comes from the boot menu entry, `loader/entries/archix-<n>.conf`, an unsigned file on the FAT ESP, which systemd-boot reports in the `LoaderEntrySelected` EFI variable. archix keeps a copy of every entry it writes on the root filesystem, and boots `current` when the entry that started has a name it didn't record, so a renamed entry doesn't move the system. An edited entry isn't checked against archix's copy when the deployment is mounted yet. Someone who can write to the ESP can still change `loader.conf` or the boot menu's EFI variables so that an older entry archix wrote starts, which boots that kept deployment; the boot menu offers it anyway.
 
 **The signing keys sit on the root filesystem.** sbctl's Secure Boot keys, in `/var/lib/sbctl/keys`, and systemd's PCR signing key, `/etc/systemd/tpm2-pcr-private-key.pem`, are plain files that root can read, and so can anyone who mounts an unencrypted root from another system. With the db key they can sign a boot image your firmware accepts, with the KEK they can change `db` and `dbx`, and with the PCR key they can sign a policy that unlocks a secret bound with `systemd-cryptenroll --tpm2-public-key` for any UKI they build. Every older UKI archix signed also carries a valid signed policy, so it unlocks such a secret too until it's [revoked](/docs/guides/secure-boot/#revoking-old-boot-images). Keep the root filesystem encrypted, and treat root on the machine as owning these keys; sbctl can keep its keys in a TPM or a YubiKey instead, though archix can't then sign `dbx` updates.
 
@@ -69,7 +73,7 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 ## Not yet known
 
-- **Power-cut replay on archix's own code.** Replaying every write of a switch to each flush point has passed on the prototype archix's commit order follows; on archix itself it's in progress. Kill tests and VM power cuts pass.
+- **Power-cut replay on archix's own code.** Replaying every write of a switch to each flush point has passed on the prototype archix's commit order follows; on archix itself it's in progress. Kill tests of the staging and commit logic and VM power cuts during staging pass.
 - **Weeks of use on real hardware.** The failure paths are exercised in VMs and containers: VM power cuts and kills mid-switch, a full disk, a broken glibc, a revoked key. archix with deployments hasn't yet run for weeks on real machines, which is where the failures nobody thought to test turn up.
 - **Upgrading from one release with deployments to the next.** The VM suite for that waits for a second release.
 

@@ -946,7 +946,7 @@ hooks = {
 
 ## Boot and kernel
 
-archix boots every generation as its own [deployment](/docs/concepts/atomicity/), from its own systemd-boot entry, so `boot.loader = "systemd-boot"` is required. Each entry is `loader/entries/archix-<n>.conf` on the ESP, starting a unified kernel image in `EFI/archix/`, built with `ukify` from the deployment's kernel and a fresh `mkinitcpio` initramfs; deployments whose image comes out the same share one. See [Boot entries](/docs/concepts/generations/#boot-entries). Booting an older entry boots that deployment, exactly as it was.
+archix boots every generation as its own [deployment](/docs/concepts/atomicity/), from its own systemd-boot entry, so `boot.loader = "systemd-boot"` is required. Each entry is `loader/entries/archix-<n>.conf` on the ESP, starting a unified kernel image in `EFI/archix/`, built with `ukify` from the deployment's kernel and a fresh `mkinitcpio` initramfs; deployments whose image comes out the same share one. See [Boot entries](/docs/concepts/generations/#boot-entries). Booting an older entry boots that deployment, with the same packages, kernel and `/etc`.
 
 With `boot.loader` set, archix declares the packages it needs for this itself: the `boot.kernel` package, `mkinitcpio` and `systemd-ukify`, plus `sbctl` when `boot.secure_boot = true`. You don't list them in `packages`. With the default `secure_boot = null`, signing depends on sbctl being installed with keys, so keep `sbctl` declared yourself if you rely on that.
 

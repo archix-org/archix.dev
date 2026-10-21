@@ -299,7 +299,7 @@ roll back to generation 2 (snapshot 2026-10-09)? [Y/n]
 rolled back to generation 2 (snapshot 2026-10-09); it boots at the next restart. archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-Deployment 2 is still there, so the rollback only points the boot default at it. Reboot, and you're on generation 2 exactly as it was: its packages, kernel, files, users and services. Nothing is reinstalled.
+Deployment 2 is still there, so the rollback only points the boot default at it. Reboot, and you're on generation 2 with the same packages, kernel and `/etc` it had. Nothing is reinstalled.
 
 Rollback changes the system, not your config. Your `archix.lock` still says 2026-10-15, so the next `archix switch` would apply it again. To stay back, revert the lock in git, or move it with `archix update --to 2026-10-09`.
 

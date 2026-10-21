@@ -106,7 +106,7 @@ Every kept deployment has its own boot entry. When a generation won't boot, or b
 › Arch Linux (archix, generation 41)
 ```
 
-systemd-boot records the entry it started, `archix-41.conf`, in the `LoaderEntrySelected` EFI variable. archix's initramfs hook reads it and mounts deployment 41 before the system starts, so it boots exactly as it was: its packages, `/etc`, kernel and modules, DKMS modules included. Nothing is reinstalled, and pacman doesn't run. Early in boot, `archix-boot.service` makes 41 current and systemd-boot's default, so the next reboot comes back to it:
+systemd-boot records the entry it started, `archix-41.conf`, in the `LoaderEntrySelected` EFI variable. archix's initramfs hook reads it and mounts deployment 41 before the system starts, so it boots with the same packages, `/etc`, kernel and modules it had, DKMS modules included; `/var` and your home are shared and stay as they are now. Nothing is reinstalled, and pacman doesn't run. Early in boot, `archix-boot.service` makes 41 current and systemd-boot's default, so the next reboot comes back to it:
 
 ```
 archix: booted generation 41, but 42 was current; 41 is current now

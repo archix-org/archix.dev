@@ -152,7 +152,7 @@ Picking an older entry in the boot menu doesn't ask: it boots that deployment as
 
 ## Interrupted switches
 
-A switch can be stopped at any point, by Ctrl-C, `kill -9`, a full disk or a power cut, and it's designed so there's nothing to recover. Kill tests and VM power cuts pass on archix itself; write-level power-cut replay has passed on the prototype, and on archix's own code it's in progress. See [How it's tested](/docs/concepts/atomicity/#how-its-tested).
+A switch can be stopped at any point, by Ctrl-C, `kill -9`, a full disk or a power cut, and it's designed so there's nothing to recover. Kill tests of archix's staging and commit logic and VM power cuts during staging pass; write-level power-cut replay has passed on the prototype, and on archix's own code it's in progress. See [How it's tested](/docs/concepts/atomicity/#how-its-tested).
 
 - **Before the commit**, the running system and its boot entries are as they were. What the switch staged is deleted by the failure itself or, after a kill or power cut, by the next switch.
 - **During the commit**, the steps are ordered so that whatever survives names a complete deployment: the next boot starts either the old one or the new one.
@@ -191,7 +191,7 @@ Everything archix manages on disk, from `files` and `units` to `sysctl`, `hostna
 
 archix only replaces a directory it has never managed, and only once. It refuses when an earlier backup of that path still exists, `/home/me/.config/nvim is a directory and an earlier backup of it exists; move one of them away`, and when archix managed a file at that path in the current generation: `/home/me/.config/nvim exists and is not a file or symlink; archix won't replace it`. Both `switch` and `rollback` check this before they change anything, so a refusal is a plain error. Move the directory or the old backup aside and run the command again.
 
-Users and groups archix created are removed when they leave the config, and their home directories are kept. archix never touches passwords: a new user gets a hint instead, ``created user me; set a password with `passwd me` after the reboot``, since the user exists only in the new deployment until then.
+Users and groups archix created are removed when they leave the config, and their home directories are kept. archix never touches passwords: a new user gets a hint instead, ``created user me; set a password with `passwd me` after the reboot``, since the user exists only in the new deployment until then. `/etc/shadow` belongs to each deployment, though, so a rollback to an older deployment brings back the passwords it had; see [Limitations](/docs/concepts/limitations/#switching).
 
 The same goes for the [firewall](/docs/guides/environment-and-firewall/#firewall): it lives in its own `inet archix` table, and turning it off deletes only that table, never the ones Docker, Tailscale or libvirt manage.
 

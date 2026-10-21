@@ -5,9 +5,9 @@ sidebar:
   order: 8
 ---
 
-When archix manages booting, every generation gets a unified kernel image on the ESP. With Secure Boot, the firmware only starts images signed by a key it trusts. archix signs every entry, and systemd-boot itself, with your own keys through `sbctl`, and it won't make an entry the default if the firmware would refuse it.
+archix boots every generation as its own deployment, from a unified kernel image on the ESP. With Secure Boot, the firmware only starts images signed by a key it trusts. archix signs every entry, and systemd-boot itself, with your own keys through `sbctl`, and it won't make an entry the default if the firmware would refuse it.
 
-This page needs [`boot.loader = "systemd-boot"`](/docs/reference/options/#bootloader). Without it, archix doesn't write boot entries and leaves Secure Boot alone.
+This needs [`boot.loader = "systemd-boot"`](/docs/reference/options/#bootloader), which every switch does.
 
 ## Set up your keys
 
@@ -23,7 +23,7 @@ enrolled your Secure Boot keys; the next `archix switch` signs its boot entries 
 then turn Secure Boot on in the firmware settings
 ```
 
-Your keys go into the firmware's own `db`, together with Microsoft's, with `sbctl enroll-keys --microsoft`. Run `sudo archix switch` to write signed entries, then reboot into the firmware settings and turn Secure Boot on.
+Your keys go into the firmware's own `db`, together with Microsoft's, with `sbctl enroll-keys --microsoft`. Run `sudo archix switch` to build a deployment with signed entries, then reboot into the firmware settings and turn Secure Boot on.
 
 ### Firmware not in setup mode
 
@@ -58,7 +58,7 @@ archix enrolls your keys directly in the firmware. It doesn't use shim or a Mach
 
 With Secure Boot enforcing, which means on and not in setup mode, a boot entry that isn't signed would be refused by the firmware. archix checks this twice.
 
-Before a switch changes anything, archix checks that the new entry will be signed. If it won't be, because `boot.secure_boot = false` or because `sbctl` has no keys, the switch stops:
+Before a switch builds anything, archix checks that the new entry will be signed. If it won't be, because `boot.secure_boot = false` or because `sbctl` has no keys, the switch stops:
 
 ```console
 error: Secure Boot is on, but this switch's boot entry wouldn't be signed (sbctl has no keys), so the firmware would refuse it; nothing was changed. Run `sudo archix secure-boot setup`, or set boot.secure_boot = true if sbctl already has keys
@@ -66,13 +66,13 @@ error: Secure Boot is on, but this switch's boot entry wouldn't be signed (sbctl
 
 With `boot.secure_boot = false`, the parenthesis reads `(boot.secure_boot = false)`.
 
-As a backstop, in the `:: writing the boot entry` step, archix checks every entry it built, and the systemd-boot loader on the ESP, for a signature before copying the entry to the ESP, which is what would make it the default. An unsigned one stops the step:
+As a backstop, once the new deployment's boot image is built and before it's committed, archix checks the image, and the systemd-boot loader on the ESP, for a signature. An unsigned one stops the build:
 
 ```console
-error: writing the boot entry failed; the switch is unfinished, run `archix recover`: Secure Boot is on, but 7.2.9-arch1-1-aedff12d49d2.efi isn't signed, so the firmware would refuse it; nothing was moved. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)
+error: Secure Boot is on, but 7.2.9-arch1-1-aedff12d49d2.efi isn't signed, so the firmware would refuse it; nothing was committed. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)
 ```
 
-The entry is built from the kernel the switch installs, so it can't be checked earlier, and the check before the switch already refuses every case where archix knows it won't sign. By then the packages and files are in place, but the old generation is still current and still the default boot entry. Fix the keys, then finish with `sudo archix recover`, or go back with `sudo archix recover --rollback`. See [Safety](/docs/concepts/safety/#secure-boot).
+The image is built from the kernel in the new deployment, so it can't be checked earlier, and the check before the switch already refuses every case where archix knows it won't sign. The staging tree is deleted, and the running system and its boot entries are as they were. Fix the keys and switch again. See [Safety](/docs/concepts/safety/#secure-boot).
 
 ### In a chroot
 
@@ -80,10 +80,10 @@ Inside a chroot, such as `arch-chroot` from a live USB, the firmware belongs to 
 
 ### Other boot entries
 
-[`boot.extra_entries`](/docs/reference/options/#bootextra_entries) adds systemd-boot entries archix doesn't build, such as memtest86+. archix writes the entry file but doesn't sign what it starts, and the firmware refuses an unsigned image like any other. Sign it with `sbctl`; `-s` also adds it to the files `sbctl` re-signs:
+[`boot.extra_entries`](/docs/reference/options/#bootextra_entries) adds systemd-boot entries archix doesn't build, such as memtest86+. archix writes the entry file but doesn't sign what it starts, and the firmware refuses an unsigned image like any other. The image has to be on the ESP. Sign it with `sbctl`; `-s` also adds it to the files `sbctl` re-signs:
 
 ```console
-$ sudo sbctl sign -s /boot/memtest86+/memtest.efi
+$ sudo sbctl sign -s /efi/memtest86+/memtest.efi
 ```
 
 ## Check the state
@@ -140,7 +140,7 @@ return {
 }
 ```
 
-Next to its normal entry, each of the newest two generations then gets `archix-<n>-protected.conf`, titled "Arch Linux (archix protected, generation 43)", signed like the others. Its command line adds:
+Next to its normal entry, each kept deployment then gets `archix-<n>-protected.conf`, titled "Arch Linux (archix protected, generation 43)", signed like the others. Its command line adds:
 
 ```
 lockdown=integrity sysctl.kernel.kexec_load_disabled=1 lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0
@@ -172,7 +172,7 @@ A disk key or other secret sealed to PCR 11 breaks whenever the UKI changes, sin
 $ sudo ukify genkey --pcr-private-key=/etc/systemd/tpm2-pcr-private-key.pem --pcr-public-key=/etc/systemd/tpm2-pcr-public-key.pem
 ```
 
-From the next switch that makes a generation on, UKIs carry `.pcrsig` and `.pcrpkey` sections, since the key is part of what a UKI's name hashes; a switch with nothing to do builds none. Then bind the secret to the key, for a LUKS volume:
+From the next switch that builds a deployment on, UKIs carry `.pcrsig` and `.pcrpkey` sections, since the key is part of what a UKI's name hashes; a switch with nothing to do builds none. Then bind the secret to the key, for a LUKS volume:
 
 ```console
 $ sudo systemd-cryptenroll --tpm2-device=auto --tpm2-public-key=/etc/systemd/tpm2-pcr-public-key.pem --tpm2-public-key-pcrs=11 /dev/nvme0n1p2

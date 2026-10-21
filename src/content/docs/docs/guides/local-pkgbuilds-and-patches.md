@@ -109,9 +109,10 @@ Local recipes build exactly like AUR packages: with `makechrootpkg` in the [clea
 $ sudo archix switch
 install    backup-scripts 1.2.0-1
 install    restic 0.18.1-1
-apply 2 changes? [Y/n]
+a new deployment with its own boot entry; it boots at the next restart
+apply 3 changes? [Y/n]
 :: building local:backup-scripts 1.2.0-1 (in a clean chroot)
-:: installing packages
+:: building deployment 12 from deployment 11
 ...
 ```
 
@@ -127,7 +128,8 @@ resolving 87 declared packages against the 2026-10-09 snapshot
 214 packages locked
 wrote /etc/archix/archix.lock
 reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)
-apply 1 change? [Y/n]
+a new deployment with its own boot entry; it boots at the next restart
+apply 2 changes? [Y/n]
 ```
 
 The package is built from the new recipe and reinstalled at the same version. A package installed at the locked version that archix never built from this recipe, such as one you installed by hand, is replaced the same way.
@@ -162,7 +164,8 @@ The first switch replaces Arch's build with yours:
 ```console
 $ sudo archix switch
 upgrade    hyprland 0.51.1-2 -> 0.51.1-2.1
-apply 1 change? [Y/n]
+a new deployment with its own boot entry; it boots at the next restart
+apply 2 changes? [Y/n]
 :: building patch:hyprland 0.51.1-2.1 (in a clean chroot)
 ...
 ```
@@ -196,7 +199,7 @@ Editing a patch, adding one or removing one makes the lock out of date, and the 
 
 The patches follow the package. When `archix update` moves the snapshot to a new version of hyprland, the lock gets the new version, archix clones Arch's recipe at that version's tag, applies your patches to it, and builds `0.52.0-1.1`. A patch upstream has merged, or that no longer fits the new source, stops the build; drop or refresh it and switch again.
 
-A plain `pacman -Syu` replaces your patched build whenever Arch has a newer version: pacman sees `0.52.0-1` as newer than `0.51.1-2.1`. The patches aren't lost. The next switch sees the system is newer than the lock and offers to [adopt](/docs/concepts/pacman-and-yay/#adopting) it:
+A plain `pacman -Syu` before the first switch, which can still change the system then, replaces your patched build whenever Arch has a newer version: pacman sees `0.52.0-1` as newer than `0.51.1-2.1`. The patches aren't lost. The next switch sees the system is newer than the lock and offers to [adopt](/docs/concepts/pacman-and-yay/#adopting) it:
 
 - **Yes** moves the lock to the transaction's snapshot, as for any adopted upgrade, then applies your patches to the new version. The switch upgrades from Arch's build to yours, `upgrade    hyprland 0.52.0-1 -> 0.52.0-1.1`.
 - **No** reverts to the lock, which puts your patched build of the locked version back, `downgrade  hyprland 0.52.0-1 -> 0.51.1-2.1`.
@@ -205,7 +208,7 @@ Either way, the patched build is what ends up installed.
 
 ## When it fails
 
-Everything here fails before the system changes, in [prepare](/docs/concepts/safety/#prepare-then-apply), so a failed build leaves the packages, files and services as they were.
+Everything here fails before anything is built, in [prepare](/docs/concepts/safety/#prepare-then-build), so a failed build leaves the packages, files and services as they were.
 
 - **A build fails.** The switch stops with `local:backup-scripts 1.2.0-1 can't be built: ...` and makechrootpkg's output above it. Unlike an AUR package, there's no nearest version to fall back to: the recipe is yours, so fix it and switch again.
 - **A patch applies nowhere.** The build fails, after `archix: archix-0-0001-fix-cursor-warp.patch applies to no directory in $srcdir`. archix copies each patch into the recipe as `archix-<n>-<file name>`, numbered in your list's order.

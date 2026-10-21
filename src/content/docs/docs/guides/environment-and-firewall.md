@@ -81,7 +81,7 @@ return {
 }
 ```
 
-The switch adds the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes, enables and starts `archix-firewall.service`, which loads them before the network comes up at boot:
+The switch adds the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network comes up. Like everything in the new deployment, the firewall takes effect at the next boot:
 
 ```console
 $ sudo archix switch
@@ -89,7 +89,8 @@ install    nftables 1:1.1.5-1
 create     /etc/nftables-archix.conf
 create     /etc/systemd/system/archix-firewall.service
 enable     archix-firewall.service
-apply 4 changes? [Y/n]
+a new deployment with its own boot entry; it boots at the next restart
+apply 5 changes? [Y/n]
 ```
 
 The rules are an `inet archix` table, for IPv4 and IPv6 alike:
@@ -124,7 +125,7 @@ In order, the input chain accepts replies to connections the machine made, every
 
 The `rpfilter` chain checks reverse paths: a packet whose source address wouldn't be routed back out the interface it arrived on is dropped, which stops spoofed traffic. DHCPv4 is let through it, since a client asking for an address has none yet. `check_reverse_path = "loose"` only requires a route back out of any interface, and `"off"` leaves the chain out.
 
-When you change the firewall options, the next switch writes the new rules and reloads the service with `systemctl try-reload-or-restart archix-firewall.service`, as an [`on_change`](/docs/guides/hooks/#on_change) script. The new table replaces the old one in one step, so there's no moment without rules. Setting `enable = false`, or removing the options, stops and disables the service, which deletes only the `archix` table.
+When you change the firewall options, the next switch writes the new rules into its deployment, and they load when it boots. The running system keeps the rules it booted with until then. Setting `enable = false`, or removing the options, disables the service, so the next boot has no `archix` table.
 
 ### Tailscale and a port range
 
@@ -183,7 +184,7 @@ Here port 8080 is open to the local network only. `extra_rules` adds more sets a
 error: the firewall rules don't load (check extra_input_rules and extra_rules); nothing was changed:
 ```
 
-That needs `nft`, so the very first switch that turns the firewall on, before `nftables` is installed, can't check. A bad rule then makes the service fail to load the file, which the switch reports as a [soft failure](/docs/concepts/safety/#hard-and-soft-failures); fix it and switch again, and from then on it's checked first. A rollback doesn't check again: the generation's rules already passed when you switched to it.
+That needs `nft` on the running system, so the very first switch that turns the firewall on, before `nftables` is installed, can't check. A bad rule then makes the service fail to load the file at boot, and the machine starts without the `archix` table; fix it and switch again, and from then on it's checked first. A rollback doesn't check again: the generation's rules already passed when you switched to it.
 
 ### Other tables are left alone
 
@@ -195,7 +196,7 @@ Each table's input chain still applies to every packet, though, so a packet anot
 warning: nftables.service is enabled too, so /etc/nftables.conf (on Arch: drop everything but SSH) still applies on top of the archix firewall; set services["nftables.service"] = false
 ```
 
-Setting it in your config disables and stops `nftables.service` on the next switch, and the warning goes away:
+Setting it in your config disables `nftables.service` in the next deployment, and the warning goes away:
 
 ```lua
 services = { ["nftables.service"] = false },

@@ -284,7 +284,7 @@ Two escape hatches are declared:
 local motd = archix.read_file("files/motd")
 ```
 
-Anything with side effects, like running a command, belongs in a systemd unit you declare with `units` and `services`, in a [hook](/docs/guides/hooks/) that runs at the end of every switch, or in an `on_change` script that runs when a file changed. They run at switch time, after evaluation, so they can't make two evaluations disagree.
+Anything with side effects, like running a command, belongs in a systemd unit you declare with `units` and `services`, in a [hook](/docs/guides/hooks/) that runs after every switch, or in an `on_change` script that runs when a file changed. They run at the new deployment's first boot, long after evaluation, so they can't make two evaluations disagree.
 
 ## Where the config lives
 
@@ -295,7 +295,7 @@ $ archix --config ~/src/archix diff
 $ export ARCHIX_CONFIG=~/src/archix
 ```
 
-`archix init` lets you keep the config in any directory, such as a repo you own, with `/etc/archix` linked to it. That way you edit as yourself, and `sudo archix switch` still finds it.
+`archix init` lets you keep the config in any directory, such as a repo you own, with `/etc/archix` linked to it. That way you edit as yourself, and `sudo archix switch` still finds it. A config in `/etc/archix` itself is part of `/etc`, so each deployment has its own copy, and edits you make to it between a switch and the reboot don't carry over; a config elsewhere is shared by every deployment. See [Changes to `/etc` before the reboot](/docs/concepts/safety/#changes-to-etc-before-the-reboot).
 
 `eval`, `options`, `diff`, `status`, `generations` and `search` don't need root, and neither do `lock` and `update` if you can write to the config directory. Only commands that change the system do.
 

@@ -44,7 +44,7 @@ home = {
 | `link` | Make the path a symlink to this target. |
 | `url`, `sha256` | Download the file, and refuse it unless it has this sha256. See [Files from a URL](#files-from-a-url). |
 | `executable` | Mode `0755` instead of `0644`. |
-| `on_change` | A bash script run as the user when a switch or rollback changed the file. See [Reload apps when a file changes](#reload-apps-when-a-file-changes). |
+| `on_change` | A bash script run as the user at the next boot, when a switch or rollback changed the file. See [Run a script when a file changes](#run-a-script-when-a-file-changes). |
 | `mutable` | `false` writes the file read-only, `true` keeps it writable; by default as `mutable_files` says. See [Read-only files](#read-only-files). |
 | `merge` | Set only some keys in a file the app also writes. See [Setting single keys](#setting-single-keys). |
 
@@ -58,9 +58,11 @@ The switch then writes the declared version, and saves yours under `/var/lib/arc
 
 When archix first takes over a path that already exists, it backs up the original to `/var/lib/archix/backups`. If the entry later leaves the config, archix deletes the file, or puts that original back. See [Safety](/docs/concepts/safety/).
 
-## Reload apps when a file changes
+## Run a script when a file changes
 
-Most apps read their config when they start. For a running app to pick up a new one, give the file an `on_change` script, Home Manager's `onChange`. It runs as `home.user`, only when a switch or rollback changed that file:
+Home files live outside the [deployments](/docs/concepts/atomicity/), so a switch writes them as soon as its deployment is committed, without waiting for the reboot. Apps that watch their config pick the change up then; others read it when they next start.
+
+For work that should follow a changed file, give it an `on_change` script, Home Manager's `onChange`. It runs as `home.user`, only when a switch or rollback changed that file, at the first boot of the deployment that switch made, before you log in:
 
 ```lua title="lua/modules/desktop.lua"
 return {
@@ -68,19 +70,15 @@ return {
   home = {
     user = "me",
     files = {
-      [".config/waybar/config.jsonc"] = { source = "home/waybar/config.jsonc", on_change = "pkill -SIGUSR2 -x waybar || true" },
-      [".config/kitty/kitty.conf"] = { on_change = "pkill -USR1 -x kitty || true" },
+      [".config/fontconfig/fonts.conf"] = { source = "home/fonts.conf", on_change = "fc-cache -f" },
     },
-  },
-  programs = {
-    kitty = { enable = true, settings = { font_size = 11 } },
   },
 }
 ```
 
-A file a `programs.*` module writes is a `home.files` entry too, so `on_change` works on `kitty.conf` above without repeating its contents. The script runs with `set -e`, so `|| true` keeps an app that isn't running from failing it.
+A file a `programs.*` module writes is a `home.files` entry too, so `on_change` works on it without repeating its contents, as `[".config/kitty/kitty.conf"] = { on_change = ... }`. The script runs with `set -e`. Nothing is running yet at that point in the boot, so a signal to reload a running app, such as `pkill -USR1 -x kitty`, reaches nothing: send it yourself after the switch if you want the change right away.
 
-"Changed" means the file's entry differs from the previous generation's, such as new contents, mode or link target, or that archix had to write it again because the file on disk didn't match, such as putting back a file you edited by hand. So it runs on the first switch that writes the file, but never for edits behind a [live link](#live-links-for-app-written-configs): archix doesn't write what's behind the link. A failing script doesn't undo the switch; it's listed and archix exits non-zero. For scripts that should run on every switch, such as `systemctl --user` commands, see [Activation hooks](/docs/guides/hooks/).
+"Changed" means the file's entry differs from the previous generation's, such as new contents, mode or link target, or that archix had to write it again because the file on disk didn't match, such as putting back a file you edited by hand. So it runs after the first switch that writes the file, but never for edits behind a [live link](#live-links-for-app-written-configs): archix doesn't write what's behind the link. A failing script doesn't undo the switch; it's reported at boot and at your next login, and runs again at the next boot. For scripts that should run after every switch, see [Activation hooks](/docs/guides/hooks/).
 
 ## Files from a URL
 

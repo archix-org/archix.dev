@@ -14,30 +14,29 @@ const flags = [
 	['archix <terms>', 'Search the repos and the AUR, pick from a numbered list, install and declare the picks'],
 	['archix -S <pkg>', 'Install from the repos or the AUR, and add it to your config'],
 	['archix -Ss <query>', 'Search the repos and the AUR'],
-	['archix -Syu', 'Update from live mirrors and adopt the result into the lock'],
+	['archix -Syu', 'Move the lock to the newest archive snapshot and AUR recipes, then switch'],
 	['archix -R <pkg>', 'Remove it from the system and from your config'],
 ];
 
 const manages = [
 	['Packages', 'Official repos, the AUR, third-party repos like CachyOS, your own PKGBUILDs, and official packages with your patches'],
 	['/etc', 'Any file under /etc, written atomically and tracked by hash'],
-	['systemd', 'System units enabled and started, user units enabled, and units still running replaced code restarted, except the ones that would end your session'],
+	['systemd', 'System and user units enabled or disabled in each new deployment, so they start as it boots'],
 	['Kernel', 'Kernel parameters, sysctl, modprobe and udev rules'],
 	['Users', 'Users and groups. Passwords stay yours: archix never touches them'],
 	['Dotfiles', 'Copied files with recorded hashes, so edits made outside archix show up in diff, or live links into your config repo'],
 	['Apps', 'programs.* modules, six of them ported from Home Manager and checked byte for byte against its tests, plus writers for toml, json, yaml, ini, kdl and more'],
-	['Hooks', 'Activation scripts that run on every switch and rollback, and on_change scripts for files that changed'],
+	['Hooks', 'Activation scripts that run at the first boot of every switch and rollback, and on_change scripts for files that changed'],
 ];
 
 const safety = [
 	['No reinstall', 'archix init takes over the system you already have and locks to what is installed, so the first switch changes nothing, or tells you what it would.'],
-	['Power cuts', 'Every switch is journaled. The initramfs repairs one cut off inside pacman, and archix recover continues it, rolls it back or abandons it.'],
-	['No live USB', 'With systemd-boot, the newest two generations get a rescue boot entry that restores pacman and the core packages from cache.'],
-	['Dropped ssh', 'A switch started over ssh runs in a systemd scope of its own and keeps going when the connection drops.'],
-	['DKMS', 'NVIDIA and other DKMS modules roll back with their kernel, and go when you roll back to a generation without them.'],
-	['Upgrading archix', 'A switch or rollback that changes archix itself can be cut off and still be finished, by either version.'],
-	['A way out', 'archix eject hands booting back to plain systemd-boot or mkinitcpio and takes archix off. Your packages and files stay.'],
-	['Tested', 'Every push boots in a QEMU VM with Secure Boot enforcing. Power-cut, CachyOS, NVIDIA and upgrade suites run before releases.'],
+	['Power cuts', 'Every switch builds a new deployment beside the running one and commits it in one step. Cut the power anywhere and the old one or the new one boots; there is nothing to repair.'],
+	['No live USB', 'Every kept deployment has its own boot entry. Pick an older one and it boots exactly as it was, without pacman.'],
+	['Bad updates', 'A deployment that does not finish booting is passed over for the last one that did, by systemd-boot boot counting.'],
+	['DKMS', 'Each deployment carries its own kernel, modules and DKMS state, NVIDIA drivers included.'],
+	['Updates at boot', 'Nothing changes under running programs: a switch takes effect at the next boot, all at once.'],
+	['Tested', 'Every push boots in a QEMU VM with Secure Boot enforcing. Power cuts, kills at every step, full disks, CachyOS and NVIDIA are tested on ext4 and btrfs.'],
 ];
 
 const nix = [
@@ -112,37 +111,33 @@ mesa = {'{'} version = <span class="s">"1:25.3.0-1"</span>, repo = <span class="
 				<article>
 					<h3>Reversible</h3>
 					<p>
-						Every switch that changes something is a generation. With systemd-boot, the newest five get a boot entry, signed
-						when Secure Boot is set up. Roll back from the terminal or pick one at boot: archix reinstalls its exact packages.
+						Every switch that changes something is a generation, built as a deployment beside the running one, with a boot
+						entry signed when Secure Boot is set up. Roll back from the terminal or pick one at boot: it boots exactly as it was.
 					</p>
 					<Artifact title="systemd-boot">
 						<pre><span class="w">› Arch Linux (archix, generation 42)</span>
-  Arch Linux (archix, generation 41)
-  Arch Linux (archix, generation 40)
-  <span class="m">Arch Linux (archix rescue, generation 42)</span>
-  <span class="m">Arch Linux (archix rescue, generation 41)</span></pre>
+  Arch Linux (archix, generation 41)</pre>
 					</Artifact>
 				</article>
 			</div>
 		</section>
 
-		<section class="split wrap" aria-labelledby="pacman">
+		<section class="split wrap" aria-labelledby="atomic">
 			<div>
-				<h2 id="pacman">pacman and yay keep working.</h2>
+				<h2 id="atomic">Atomic updates, on ext4 too.</h2>
 				<p>
-					No lockdown. Run <code>pacman -Syu</code> when you feel like it. A pacman hook records what changed, and the next
-					switch asks whether to keep it. Say yes and the lock moves forward; say no and the system goes back to the lock.
+					A switch never touches the running system. It builds the next deployment beside it, by btrfs snapshot or with
+					hardlinks on ext4, and commits it in one step. The next boot starts it. A power cut halfway leaves the old system,
+					not a mix of both.
 				</p>
-				<p>Or skip the question: <code>archix -Syu</code> updates and adopts in one go.</p>
+				<p>Keeping the previous deployment costs one update's changed files: under a gigabyte for a week of updates.</p>
 			</div>
 			<Artifact title="terminal">
-				<pre><span class="m">$</span> <span class="w">sudo pacman -Syu</span>
-<span class="m">:: Starting full system upgrade...</span>
-<span class="m">$</span> <span class="w">sudo archix switch</span>
-the system is newer than the lock for 3 packages
-(firefox, linux, mesa), probably from pacman or an AUR helper
-adopt them into the lock? (no reverts them to the lock) [Y/n] <span class="w">y</span>
-<span class="ok">switched to generation 43 (snapshot 2026-10-15); no package changes were needed</span></pre>
+				<pre><span class="m">$</span> <span class="w">sudo archix -Syu</span>
+upgrade    mesa 1:25.3.0-1 -&gt; 1:25.3.1-1
+<span class="m">:: building deployment 43 from deployment 42</span>
+<span class="ok">switched to generation 43 (snapshot 2026-10-15);
+its deployment boots at the next restart</span></pre>
 			</Artifact>
 		</section>
 
@@ -245,7 +240,7 @@ adopt them into the lock? (no reverts them to the lock) [Y/n] <span class="w">y<
 				<li>
 					<h3>Switch</h3>
 					<CopyCommand command="sudo archix switch" label="Run archix switch" />
-					<p>Generation 1. From here on, every switch is a generation you can go back to.</p>
+					<p>Lays the system out as deployment 1. From here on, every switch is a generation you can boot back into.</p>
 				</li>
 			</ol>
 		</section>

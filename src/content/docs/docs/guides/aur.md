@@ -26,7 +26,7 @@ The pacman-style aliases do the same:
 | `archix -S <pkg>` | `archix install <pkg>` |
 | `archix -Ss <terms>` | `archix search <terms>` |
 | `archix -R <pkg>` | `archix remove <pkg>` |
-| `archix -Syu` | `archix upgrade`: `pacman -Syu`, adopt, newest AUR recipes, switch |
+| `archix -Syu` | `archix upgrade`: newest snapshot and AUR recipes, then switch |
 | `archix` | `archix -Syu` |
 | `archix <terms>` | Search, pick from a numbered list, and install, like `yay <terms>` |
 
@@ -36,7 +36,7 @@ Search covers the locked snapshot's repos and the AUR's package list, with votes
 
 ## Where `archix install` writes
 
-`archix install` doesn't just install. It declares. The package name goes into `lua/hosts/<host>/installed.lua`, a plain Lua file archix imports automatically and you can edit too, and then archix switches. The next switch, on this machine or a fresh one, installs it again. If you abort or the switch fails, the file is put back as it was.
+`archix install` doesn't just install. It declares. The package name goes into `lua/hosts/<host>/installed.lua`, a plain Lua file archix imports automatically and you can edit too, and then archix switches, so the package is there after the next reboot. The next switch, on this machine or a fresh one, installs it again. If you abort or the switch fails, the file is put back as it was.
 
 To put a package somewhere shared instead, pass a directory under the config's `lua/`:
 
@@ -57,7 +57,7 @@ return {
 }
 ```
 
-To try a package without declaring it, `sudo archix install --temp <pkg>` installs it, built and reviewed the same way, and the next switch removes it unless you've declared it by then.
+To try a package without declaring it, `sudo archix install --temp <pkg>` installs it into a new deployment, built and reviewed the same way, and the next switch leaves it out unless you've declared it by then.
 
 ## How AUR packages are locked
 
@@ -136,7 +136,7 @@ The chroot only has the official repos. Your third-party repos stay out of it, s
 
 ### `build_on_host`
 
-Some packages don't build in a chroot: they need hardware access, a running service, or files the chroot doesn't have. List them in [`aur.build_on_host`](/docs/reference/options/), and archix builds them with `makepkg` on the host instead. Their build dependencies are installed from the locked snapshot and removed again afterwards. Use it as an escape hatch, not a default: a host build depends on the state of your machine.
+Some packages don't build in a chroot: they need hardware access, a running service, or files the chroot doesn't have. List them in [`aur.build_on_host`](/docs/reference/options/#aurbuild_on_host), and archix builds them with `makepkg` on the host instead, in a throwaway copy of the current deployment staged like a new one: their build dependencies are installed into that copy from the locked snapshot, and the copy is discarded afterwards, so the running system doesn't change. Use it as an escape hatch, not a default: a host build depends on the state of your machine.
 
 ```lua
 aur = { build_on_host = { "some-driver-dkms" } },
@@ -162,4 +162,4 @@ When a locked commit can't be built any more, because it's gone from the package
 
 ## How installs run
 
-archix reads pacman's local database directly and runs every transaction through the `pacman` binary. It doesn't reimplement pacman, so hooks, `pacman.conf` options and the local database behave as you expect.
+archix reads pacman's local database directly and runs every transaction through the `pacman` binary, inside the new [deployment](/docs/concepts/atomicity/) it's building. It doesn't reimplement pacman, so hooks, `pacman.conf` options and the local database behave as you expect.

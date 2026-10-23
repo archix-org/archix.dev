@@ -5,7 +5,15 @@ sidebar:
   order: 4
 ---
 
-Once archix has made its first switch, the running system's `/usr`, `/opt` and `/boot` are read-only: each switch builds a new [deployment](/docs/concepts/atomicity/) beside the running one, and the next boot starts it. So plain pacman and yay can't change the system any more. Everything that reads keeps working, `pacman -Q`, `-Ss`, `-Si` and `-F` among them, but `pacman -S`, `pacman -Syu`, `pacman -R` and `yay` fail, since they'd write into the running deployment, which older deployments share files with.
+Once archix has made its first switch, the running system's `/usr`, `/opt` and `/boot` are read-only: each switch builds a new [deployment](/docs/concepts/atomicity/) beside the running one, and the next boot starts it. So plain pacman and yay can't change the system any more. Everything that reads keeps working, `pacman -Q`, `-Ss`, `-Si`, `-F` and `-Sw` among them, but `pacman -S`, `pacman -Syu`, `pacman -R` and `yay` fail, since they'd write into the running deployment, which older deployments share files with. A pacman hook archix installs in every deployment, `00-archix-deployment.hook`, stops them before they start and says what to run instead:
+
+```console
+$ sudo pacman -S htop
+...
+archix: this system runs from a deployment whose /usr, /opt and /boot are read-only, so pacman, and AUR helpers like yay that run it, can't change its packages. Change them with archix, which builds a new deployment that boots at the next restart: `archix install <package>` (or `archix -S`) to add one, `archix remove <package>` (or `archix -R`) to take one out, `archix upgrade` (or `archix -Syu`) to update everything, and `archix switch` to apply your config. pacman -Q, -Ss, -Si, -F and -Sw work as before. See https://archix.dev/docs/concepts/pacman-and-yay/
+```
+
+pacman's own disk space check, `CheckSpace`, would otherwise stop the transaction first with `Partition /usr is mounted read only`, so a deployment's `pacman.conf` has it commented out; archix checks space itself. [`eject`](/docs/reference/cli/#eject) turns it back on.
 
 Change packages through archix instead. It has the commands you already type:
 

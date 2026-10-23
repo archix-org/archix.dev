@@ -158,7 +158,7 @@ imports = { "hosts." .. archix.hostname }
 archix.read_file("relative/path") -- returns a string
 ```
 
-Reads a file inside the config directory and returns its content. The path is relative to the directory containing `init.lua`. Absolute paths, and paths that resolve outside the config directory, are errors. This keeps evaluation pure: the config can only depend on files that are part of it.
+Reads a file inside the config directory and returns its content. The path is relative to the directory containing `init.lua`. Absolute paths, and paths that resolve outside the config directory, through `../` or a symlink, are errors. This keeps evaluation pure: the config can only depend on files that are part of it. `require` and `init.lua` follow the same rule: a module under `lua/` that's a link to a file elsewhere stops evaluation with `module "leak": lua/leak.lua leaves the config directory`, and a linked `init.lua` with `init.lua leaves the config directory`.
 
 Use it when you want to process a file's content in Lua. To install a file as it is, `source` in `files` or `home.files` is simpler.
 
@@ -305,7 +305,7 @@ Config tables are checked before merging:
 | --- | --- |
 | `table`, `string`, `utf8`, `math`, `coroutine` | `io`, `os`, `debug`, `package` |
 | `require`, for modules under `lua/` | `load`, `loadfile`, `dofile`, `collectgarbage` |
-| `pairs`, iterating keys in sorted order | `math.random`, `math.randomseed` |
+| `pairs`, iterating keys in sorted order | `math.random`, `math.randomseed`, `string.dump` |
 | `print`, writing `trace:` lines to stderr | |
 
 `pairs` is sorted so that evaluation is reproducible; plain Lua's iteration order changes from run to run. Numbers come first, then strings, then booleans. A table or function used as a key sorts last, but two of them in one table have no order that holds from run to run, so `pairs` stops with `two keys are tables or functions, which have no reproducible order; key the table by strings or numbers`. The `archix.formats` writers take only string, number and boolean keys. `print` is for debugging and doesn't affect the result:

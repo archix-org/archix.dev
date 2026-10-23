@@ -452,7 +452,7 @@ generations = { keep = 5, keep_days = 14 },
 
 How many deployments gc keeps, newest first, counting the booted, current and boot-default ones, which it never drops; each kept one boots from its own entry and rolls back instantly. 1 keeps the previous deployment only until the new one has booted.
 
-It's at least 1; `0` is an error. With `2`, the deployment you run and the one before it stay, so a rollback is a repoint and booting the previous entry works. A kept deployment costs the files the next one changed: about one update's worth, 0.9 GB for a week of updates and 2.9 GB for four months on ext4 or btrfs, less with btrfs compression. With `1`, older generations are rebuilt from the package cache when you roll back to them, as slowly as an update. Raise it to keep more instant rollbacks. See [Storage](/docs/concepts/atomicity/#storage).
+It's at least 1; `0` is an error. With `2`, the deployment you run and the one before it stay, so a rollback is a repoint and booting the previous entry works. A kept deployment costs the files the next one changed: about one update's worth, 0.9 GB for a week of updates and 2.9 GB for four months on ext4 or btrfs, less with btrfs compression. With `1`, older generations are rebuilt from the package cache when you roll back to them, as slowly as an update. Raise it to keep more instant rollbacks, and mind the ESP: each kept deployment has its boot images there. See [Storage](/docs/concepts/atomicity/#storage).
 
 ```lua
 deployments = { keep = 3 },
@@ -470,7 +470,7 @@ Every setting in this section renders to files archix manages. Their contents ar
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Files archix writes, keyed by absolute path; give one of `text`, `source`, `link`, `url` or `merge`. Files archix replaces are backed up and restored when they leave the config.
+Files archix writes, keyed by absolute path; give one of `text`, `source`, `link`, `url` or `merge`. Files in `/etc`, `/usr`, `/opt` and `/boot` go into the new deployment and take effect at the next boot; files elsewhere are written once the switch commits. Files archix replaces are backed up and restored when they leave the config.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -482,13 +482,13 @@ Files archix writes, keyed by absolute path; give one of `text`, `source`, `link
 | `mode` | `str` | `"0644"` | Octal permissions. |
 | `owner` | `str` | `"root"` | |
 | `group` | `str` | `"root"` | |
-| `on_change` | `null or lines` | `null` | A bash script run as root at the first boot of a deployment whose switch or rollback changed this file, before the [hooks](#hooks). |
+| `on_change` | `null or lines` | `null` | A bash script run as root when a switch or rollback changed this file: for a file in `/etc`, `/usr`, `/opt` or `/boot`, at the new deployment's first boot, before networking and before the [hooks](#hooks); for a file elsewhere, which is written right away, right after it's written. |
 | `mutable` | `null or bool` | `null` | Write the file read-only (`false`) or writable (`true`); by default as [`mutable_files`](#mutable_files) says. |
 | `merge` | `null or submodule` | `null` | Set only these keys in a file the app also writes, keeping the rest of it, like plasma-manager. Leaving the config leaves the keys as they are. `format` is one of `"ini"`, `"kconfig"` or `"json"`, *required*; `values` (`attrs of any`, default `{}`) holds the keys: sections (kconfig groups nest) of keys, or a JSON object deep-merged into the file. |
 
 Give exactly one of `text`, `source`, `link`, `url` and `merge`; otherwise it's an error, `files.<path>: give exactly one of text, source, link, url or merge`. `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
 
-`on_change` runs when the switch or rollback changed the file: when its entry differs from the one in the generation the system is leaving (the first switch that manages it, new contents, mode, owner, group or link target, a rollback to a generation where it was different), or when the file on disk didn't match and archix wrote it again, such as a hand-edited file put back or a deleted one recreated. It doesn't run when only the script changes, or when the file leaves the config. It runs at the first boot of the new deployment, before the network starts, and again at the next boot if it or a hook failed. Make the script idempotent. A failing script is a soft failure, listed as `failed: on_change of <path>: ...`. See [Activation hooks](/docs/guides/hooks/#on_change).
+`on_change` runs when the switch or rollback changed the file: when its entry differs from the one in the generation the system is leaving (the first switch that manages it, new contents, mode, owner, group or link target, a rollback to a generation where it was different), or when the file on disk didn't match and archix wrote it again, such as a hand-edited file put back or a deleted one recreated. It doesn't run when only the script changes, or when the file leaves the config. For a file in the deployment, it runs at the first boot of the new deployment, before the network starts, and again at the next boot if it or a hook failed, up to three boots. For a file outside it, such as in `/srv`, it runs on the running system right after the switch writes the file. Make the script idempotent. A failing script is a soft failure, listed as `failed: on_change of <path>: ...`. See [Activation hooks](/docs/guides/hooks/#on_change).
 
 A `url` needs a `sha256` of 64 hex digits; without one, `diff` and `switch` stop with `files.<path>: url needs sha256`. The hash is what's locked: `diff` compares the file on disk against it without downloading anything, and `switch` downloads the file after you confirm, before it changes anything. A download whose hash differs stops the switch: `<url> has sha256 <actual>, but the config says <sha256>`. The contents go into the same store as every other managed file, so rollback restores them even after the URL is gone.
 
@@ -587,7 +587,7 @@ services = { ["sshd.service"] = true, ["bluetooth.service"] = true, ["cups.servi
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-User units to enable (`true`) or disable (`false`) for every user, with `systemctl --global`.
+User units to enable (`true`) or disable (`false`) for every user in the next deployment, with `systemctl --global`; they start or stop at the next boot.
 
 ```lua
 user_services = { ["pipewire-pulse.socket"] = true },
@@ -752,7 +752,7 @@ See [Environment and firewall](/docs/guides/environment-and-firewall/) for a wal
 | Default | `{}` |
 | Declared in | `<archix>/environment.lua` |
 
-Environment variables for every user: login shells get them from `/etc/profile.d/archix-environment.sh`, and systemd user services and graphical sessions from `/etc/environment.d/90-archix.conf`. Lists are joined with `:`.
+Environment variables for every user: login shells get them from `/etc/profile.d/archix-environment.sh`, and systemd user services and graphical sessions from `/etc/environment.d/90-archix.conf`, from the next boot on. Lists are joined with `:`.
 
 The shell file has `export NAME="value"` lines and `environment.d` has `NAME=value` lines, and both expand `$VAR` and `${VAR}`; numbers and other values are written as text.
 
@@ -770,7 +770,7 @@ environment = {
 | Default | `{}` |
 | Declared in | `<archix>/environment.lua` |
 
-Shell aliases for every user's login shells, from `/etc/profile.d/archix-aliases.sh`; [`programs.zsh.shell_aliases`](#programszsh) covers every interactive zsh.
+Shell aliases for every user's login shells, from `/etc/profile.d/archix-aliases.sh`, from the next boot on; [`programs.zsh.shell_aliases`](#programszsh) covers every interactive zsh.
 
 Each one is written as `alias ll='ls -l'`.
 
@@ -790,7 +790,7 @@ An nftables firewall in its own table. See [Environment and firewall](/docs/guid
 | Default | `false` |
 | Declared in | `<archix>/firewall.lua` |
 
-An nftables firewall in its own `inet archix` table, loaded by `archix-firewall.service`. Incoming traffic is dropped unless it answers outgoing traffic or something below allows it; other tables (Docker's, Tailscale's) are left alone.
+An nftables firewall in its own `inet archix` table, loaded by `archix-firewall.service`; like every change to it, it applies at the next boot. Incoming traffic is dropped unless it answers outgoing traffic or something below allows it; other tables (Docker's, Tailscale's) are left alone.
 
 With `true`, archix declares the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network starts. Rule changes take effect at the next boot, like the rest of the deployment; turning it off disables the service, so the next boot has no `archix` table. archix doesn't use `nftables.service`, whose stop flushes every table.
 
@@ -922,19 +922,19 @@ Scripts archix runs at the first boot of every deployment a switch or rollback m
 | Default | `{}` |
 | Declared in | `<archix>/hooks.lua` |
 
-Scripts run after every switch and rollback, like Home Manager's activation. They run every time, so make them idempotent; a failing hook is reported without undoing the switch.
+Scripts run at the first boot of the deployment every switch or rollback commits, like NixOS activation scripts: early, once its users exist and its /var changes are applied, before networking, D-Bus and logins. A switch with nothing to build runs them right away. They run once per switch, so make them idempotent; a failing hook is reported on the console and at the next login, runs again at the next boot, and doesn't undo the switch.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `run` | `lines` | *required* | The bash script to run; it runs with `set -e` and `pipefail`. |
-| `user` | `null or str` | `null` | Run as this user, in their home with their session bus when they're logged in; root by default. |
+| `user` | `null or str` | `null` | Run as this user, in their home; root by default. At boot nobody is logged in, so there's no session bus; a switch with nothing to build gives them theirs if they're logged in. |
 | `after` | `list of str` | `[]` | Hooks that must run before this one. |
 
 Hooks run at the first boot of the deployment, after the [`on_change`](#files) scripts, from `archix-deploy-activate.service`: after local filesystems are mounted and `systemd-sysusers` has run, before `sysinit.target`, so before the network and before anyone logs in. They also run right away on a switch that has nothing to build. Every switch and rollback that makes a deployment current records them for its boot, and the preview shows them on a `run hooks` line, in order: by `after`, then by name. An `after` that names no hook is an error, `hooks.<name>.after names "<hook>", which isn't a hook`, and so is a cycle, which names the hooks in it, such as `hooks b -> c -> b wait on each other in a cycle`, or `hook a lists itself in after`.
 
 Each script runs as `bash -e -o pipefail -c` in a clean environment: `PATH=/usr/local/sbin:/usr/local/bin:/usr/bin`, `HOME`, `USER` and `LOGNAME`, and `LANG` if archix has one. Root hooks run in `/`. With `user`, the hook runs as that user without opening a login session, in their home (or `/` if it doesn't exist), with `XDG_RUNTIME_DIR` and `DBUS_SESSION_BUS_ADDRESS` set while they're logged in, which at boot they aren't.
 
-A failing hook is a soft failure: nothing is undone, the boot goes on, and archix prints `archix: hook <name>: exited with exit status: 1; it runs again at the next boot` on the console and leaves the same note for your next login. Until all of them succeed, every hook and `on_change` script waiting for that deployment runs again at each boot.
+A failing hook is a soft failure: nothing is undone, the boot goes on, and archix prints `archix: at boot, hook <name>: exited with exit status: 1; it runs again at the next boot (try 1 of 3)` on the console and leaves the same note for your next login. Until all of them succeed, every hook and `on_change` script waiting for that deployment runs again at the next boot, up to three boots; then they wait for [`archix hooks retry` or `archix hooks skip`](/docs/reference/cli/#hooks).
 
 ```lua
 users = { alice = { groups = { "wheel" } } },
@@ -946,7 +946,7 @@ hooks = {
 
 ## Boot and kernel
 
-archix boots every generation as its own [deployment](/docs/concepts/atomicity/), from its own systemd-boot entry, so `boot.loader = "systemd-boot"` is required. Each entry is `loader/entries/archix-<n>.conf` on the ESP, starting a unified kernel image in `EFI/archix/`, built with `ukify` from the deployment's kernel and a fresh `mkinitcpio` initramfs; deployments whose image comes out the same share one. See [Boot entries](/docs/concepts/generations/#boot-entries). Booting an older entry boots that deployment, with the same packages, kernel and `/etc`.
+archix boots every generation as its own [deployment](/docs/concepts/atomicity/), from its own systemd-boot entry, so `boot.loader = "systemd-boot"` is required. Each entry is `loader/entries/archix-<n>.conf` on the ESP, starting a unified kernel image in `EFI/archix/`, built with `ukify` from the deployment's kernel and a fresh `mkinitcpio` initramfs; deployments whose image comes out the same share one. Every other kernel package installed beside `boot.kernel`, such as `linux-lts`, gets an entry and image of its own, `archix-<n>-linux-lts.conf`. See [Boot entries](/docs/concepts/generations/#boot-entries). Booting an older entry boots that deployment, with the same packages, kernel and `/etc`.
 
 With `boot.loader` set, archix declares the packages it needs for this itself: the `boot.kernel` package, `mkinitcpio` and `systemd-ukify`, plus `sbctl` when `boot.secure_boot = true`. You don't list them in `packages`. With the default `secure_boot = null`, signing depends on sbctl being installed with keys, so keep `sbctl` declared yourself if you rely on that.
 
@@ -1003,6 +1003,8 @@ The first switch refuses an ESP at or inside `/boot`: ``the ESP is mounted at /b
 
 The kernel package boot entries use, such as `linux-lts`, `linux-zen` or `linux-cachyos`. archix declares it for you, and `archix init` sets it to the package of the kernel you're running. Each deployment has its own kernel and modules, so an older entry boots with its own after the kernel package was upgraded.
 
+This kernel's entry is the main one, the one boot counting, the protected entry and the fallback image use. Any other kernel package you declare gets its own entry too, titled "Arch Linux (archix, generation 42, linux-lts)". When the lock has `dkms`, it also gets the `-headers` package of every `linux*` kernel in it that the repos have headers for, so DKMS builds its modules for each kernel.
+
 ### `boot.microcode`
 
 | | |
@@ -1027,7 +1029,44 @@ How many boots systemd-boot tries a new deployment's entry before it falls back 
 
 A new deployment's entry is written as `archix-12+3.conf`, and `loader.conf` names it as `preferred`, with `default` left on the newest deployment that has booted. systemd-boot counts a try down at every boot of it, and once a boot reaches `boot-complete.target`, `systemd-bless-boot` renames it `archix-12.conf` and it counts as good. After three boots that never got that far, it's `archix-12+0-3.conf`, which systemd-boot passes over for `default`. That boot starts deployment 11 as it was, archix makes it current, and leaves a note at the next login: `archix: generation 12 didn't finish booting in the tries it had, so systemd-boot started generation 11, which is current now`.
 
-Counting needs systemd-boot to count tries for a UKI entry, which came in 258, and `preferred`, which came in 260; archix reads what the running systemd-boot supports from its `LoaderFeatures` variable, and with an older one writes plain entries as before. A deployment that boots far enough but is broken past that point, such as a desktop that doesn't start, counts as good.
+Counting needs systemd-boot to count tries for a UKI entry, which came in 258, and `preferred`, which came in 260; archix reads what the running systemd-boot supports from its `LoaderFeatures` variable, and with an older one writes plain entries as before. A deployment that boots far enough but is broken past that point, such as a desktop that doesn't start, counts as good, unless [`boot.health_check`](#boothealth_check) says otherwise.
+
+On a counted try, if the initramfs can't mount the deployment or its first-boot steps fail, archix reboots after 10 seconds, so the next try or the fallback happens without anyone at the machine.
+
+### `boot.health_check`
+
+| | |
+| --- | --- |
+| Type | options, below |
+| Declared in | `<archix>/boot.lua` |
+
+What a new deployment's boot has to pass, besides reaching `boot-complete.target`, before it counts as good. For servers and headless machines; off by default.
+
+| Option | Type | Default | Description |
+| --- | --- | --- | --- |
+| `boot.health_check.units` | `list of str` | `[]` | For servers and headless machines, off by default: systemd units that must be active, such as "sshd.service", before a new deployment's boot counts as good. Every target here needs boot.tries > 0. A target that still fails after boot.health_check.timeout marks the deployment's entry bad, so the next boot starts the previous deployment, and the login notes and `archix status` say which target failed and when. |
+| `boot.health_check.listening` | `list of int` | `[]` | TCP ports something on this machine must listen on, such as 22 for sshd, before a new deployment's boot counts as good. |
+| `boot.health_check.reachable` | `list of str` | `[]` | Hosts that must answer before a new deployment's boot counts as good: "host:port" must accept a TCP connection, a bare host must answer a ping, and "gateway" is the default IPv4 gateway. A host that's down for a reason outside the deployment (the router, a captive portal, a laptop on a train) fails the check just the same and falls back from a good update, so list only what is always up when this machine boots; switching again once it answers brings the update back. |
+| `boot.health_check.login` | `bool` | `false` | Each user archix declares must be able to log in: `su -s <shell> <user> -c true` must succeed. Without it, a new deployment's boot still doesn't count as good while a declared user's login shell is missing or not in /etc/shells. |
+| `boot.health_check.timeout` | `int` | `120` | Seconds the health check keeps retrying its targets after boot before it fails. |
+| `boot.health_check.reboot_on_failure` | `bool` | `false` | Reboot as soon as the health check fails, so the previous deployment starts with nobody at the machine; otherwise the failed deployment keeps running until the next restart. |
+
+`archix-health-check.service` runs before `boot-complete.target`, on counted boots only, and retries every target every two seconds until `timeout`. With `reachable` set, it waits for `network-online.target`. The declared users' login shells are always checked, with or without other targets. A target that still fails marks the entry bad, as `systemd-bless-boot` would, so the next boot starts the previous deployment:
+
+```
+archix: deployment 7 failed its health check "TCP port 22 listening" (nothing listens on TCP port 22); its entry is marked bad, so the next boot starts the previous deployment
+```
+
+That boot makes the previous deployment current, and says why at the next login and in `archix status`: `archix: deployment 7 fell back to 6 because the health check "TCP port 22 listening" failed at 2026-10-21 10:03:05 UTC (nothing listens on TCP port 22); switch again once it passes`. If the failed boot ran newer versions of packages that migrate their data, the note adds a `WARNING` naming them, as their services may have migrated data the older versions can't read; see [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data).
+
+Any target needs [`boot.tries`](#boottries) above 0, since the fallback is systemd-boot's boot counting: ``boot.health_check needs boot.tries > 0: a failed check falls back by systemd-boot's boot counting; nothing was changed``.
+
+```lua
+boot = {
+  loader = "systemd-boot",
+  health_check = { units = { "sshd.service" }, listening = { 22 }, reachable = { "gateway" }, reboot_on_failure = true },
+},
+```
 
 ### `boot.revoke_unused`
 
@@ -1161,7 +1200,7 @@ archix installs Flatpak apps system-wide and locks each one to a commit in [`arc
 | Default | `[]` |
 | Declared in | `<archix>/flatpak.lua` |
 
-Flatpak app ids to install system-wide, such as `org.mozilla.firefox`; write `remote:id` for a remote other than `flatpak.remote`. Each is locked to a commit in `archix.lock`.
+Flatpak app ids to install system-wide, such as `org.mozilla.firefox`; write `remote:id` for a remote other than `flatpak.remote`. Each is locked to a commit in `archix.lock` and installed in `/var/lib/flatpak` once the switch commits; when that switch brings flatpak itself, the new deployment's first boot installs them, once the network is up.
 
 Apps that leave the list are uninstalled, but only ones archix managed in the current generation. Apps you installed by hand, and every `--user` installation, are left alone.
 
@@ -1244,7 +1283,7 @@ That user's home directory; defaults to `users.<user>.home`, else `/home/<user>`
 | Default | `{}` |
 | Declared in | `<archix>/home.lua` |
 
-Files in the user's home, keyed by path relative to it (a leading `~/` is allowed).
+Files in the user's home, keyed by path relative to it (a leading `~/` is allowed); written once a switch commits, without waiting for the boot.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -1255,7 +1294,7 @@ Files in the user's home, keyed by path relative to it (a leading `~/` is allowe
 | `url` | `null or str` | `null` | Download the file from here; needs `sha256`. `archix.fetchurl { url, sha256 }` builds both. |
 | `sha256` | `null or str` | `null` | The sha256 the download from `url` must have; `archix prefetch <url>` prints it. |
 | `executable` | `bool` | `false` | Write the file with mode `0755` instead of `0644`. |
-| `on_change` | `null or lines` | `null` | A bash script run as `home.user` at the first boot of a deployment whose switch or rollback changed this file, before the [hooks](#hooks). |
+| `on_change` | `null or lines` | `null` | A bash script run as `home.user` right after a switch or rollback writes a change to this file, which it does once the deployment is committed, so a reload signal reaches the running app; when the same switch creates `home.user`, it runs at the new deployment's first boot instead. |
 | `mutable` | `null or bool` | `null` | Write the file read-only (`false`) or writable (`true`); by default as [`mutable_files`](#mutable_files) says. |
 | `merge` | `null or submodule` | `null` | Set only these keys in a file the app also writes, keeping the rest of it, like plasma-manager. Leaving the config leaves the keys as they are. `format` is one of `"ini"`, `"kconfig"` or `"json"`, *required*; `values` (`attrs of any`, default `{}`) holds the keys: sections (kconfig groups nest) of keys, or a JSON object deep-merged into the file. |
 
@@ -1263,9 +1302,9 @@ Give exactly one of `text`, `source`, `link`, `url` and `merge`. A `source` is c
 
 `mutable` and `merge` work as in [`files`](#files): a read-only file is written `0444`, or `0555` with `executable`, and a merged file is owned by `home.user`. A `live` link stays writable, since it points into your config.
 
-When a path is a directory archix didn't manage before, such as an existing `~/.config/nvim` you now link into the config, it's moved to `/var/lib/archix/backups` and comes back when the entry leaves the config. See [Dotfiles and apps](/docs/guides/dotfiles-and-apps/).
+When a path is a directory archix didn't manage before, such as an existing `~/.config/nvim` you now link into the config, it's moved to `/var/lib/archix/users/<user>/backups` and comes back when the entry leaves the config. See [Dotfiles and apps](/docs/guides/dotfiles-and-apps/).
 
-Home files are written once the switch's deployment is committed, without waiting for the reboot. `on_change` runs when the switch or rollback changed the file, at the next boot, as in [`files`](#files), but as `home.user`, in the environment of a [user hook](/docs/guides/hooks/#user-hooks). A `live` entry is a link, and archix never writes what's behind it, so editing that file never runs `on_change`.
+Home files are written once the switch's deployment is committed, without waiting for the reboot, by a process running as `home.user`, so links in the home can't redirect root's writes. Merged `kconfig` files take KDE's `<file>.lock` while archix sets their keys, and every merged file is swapped in at once, so an app that saves in between gets its change merged again rather than lost. `on_change` runs when the switch or rollback changed the file, as in [`files`](#files), but right after the write, as `home.user`, in the environment of a [user hook](/docs/guides/hooks/#user-hooks). A `live` entry is a link, and archix never writes what's behind it, so editing that file never runs `on_change`.
 
 ```lua
 home = {

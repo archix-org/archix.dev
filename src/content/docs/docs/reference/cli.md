@@ -43,7 +43,7 @@ Commands always win over terms: `archix status` runs `status`, and a typo such a
 
 ## Root
 
-Commands that change the system need root: `install`, `remove`, `switch`, `upgrade` (and `-Syu` and bare `archix`), `rollback`, `gc`, `eject`, `init`, `secure-boot setup` and `secure-boot revoke` (but not `--dry-run`). Run as your user, they stop before touching anything, `installed.lua` included, and give you the line to run, the way you typed it:
+Commands that change the system need root: `install`, `remove`, `switch`, `upgrade` (and `-Syu` and bare `archix`), `rollback`, `gc`, `hooks`, `verify`, `eject`, `init`, `secure-boot setup`, `secure-boot revoke` (but not `--dry-run`) and `secure-boot rotate-pcr-key`. Run as your user, they stop before touching anything, `installed.lua` included, and give you the line to run, the way you typed it:
 
 ```console
 $ archix -S htop
@@ -52,7 +52,7 @@ error: `archix install` changes the system, so it needs root; run it with sudo: 
 
 Only one of these runs at a time; see [Commands that change the system](#commands-that-change-the-system). Any other error that comes from a missing permission gets the same hint, such as `archix lock` on a root-owned `/etc/archix`: `hint: that needs root; run it with sudo: sudo archix lock`. Reading doesn't need root: `archix <terms>`, `search`, `diff`, `status`, `eval`, `options`, `generations` and `secure-boot check` work as your user, and so do `lock` and `update` on a config you own. `archix <terms>` asks sudo for the install itself.
 
-Every command except `init`, `options`, `rollback`, `gc`, `generations`, `eject`, `prefetch`, `cache push` and `secure-boot` reads the config. `options` works without one, listing every option against an empty config. With no `init.lua` in the config directory, the others stop with:
+Every command except `init`, `options`, `rollback`, `gc`, `hooks`, `verify`, `generations`, `eject`, `prefetch`, `cache push` and `secure-boot` reads the config. `options` works without one, listing every option against an empty config. With no `init.lua` in the config directory, the others stop with:
 
 ```console
 error: there's no archix config at /etc/archix yet; run `sudo archix init` to write one that describes this machine, or point --config at yours
@@ -157,11 +157,12 @@ apply 2 changes? [Y/n]
 downloading htop-3.4.1-1-x86_64.pkg.tar.zst
 :: building deployment 2 from deployment 1
 ...
+hibernation is off until you reboot into deployment 2: resuming would start its kernel on the running system's memory image; suspend still works
 switched to generation 2 (snapshot 2026-10-09); its deployment boots at the next restart
-deployment 2 is committed and boots at the next restart; changes to /etc made before then don't carry over to it, except archix's own config
+deployment 2 is committed and boots at the next restart; changes to /etc made before then are carried over to it
 ```
 
-`switch` re-locks at the locked date if the config changed, lists the package, file, user, group, service and Flatpak changes, and asks before building. A package built from a recipe in the config that changed while its version didn't is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and rebuilt and reinstalled at the same version. Then it downloads files declared with a `url` into the store (each checked against its `sha256`), builds AUR packages and the config's own [recipes and patched packages](/docs/guides/local-pkgbuilds-and-patches/) in a clean chroot, downloads every package to `/var/cache/archix/pkg` (each file checked against the lock's `sha256`, and hard-linked rather than copied when pacman's cache already has it), and builds the deployment: packages, users, groups, services, managed `/etc` files and the boot entry. Once it's committed, `switch` writes the files outside the deployment, such as dotfiles, syncs Flatpak apps and runs `gc`. Nothing is restarted: the new generation takes effect when you reboot. See [Safety](/docs/concepts/safety/#what-takes-effect-when).
+`switch` re-locks at the locked date if the config changed, lists the package, file, user, group, service and Flatpak changes, and asks before building. A package built from a recipe in the config that changed while its version didn't is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and rebuilt and reinstalled at the same version. Then it downloads files declared with a `url` into the store (each checked against its `sha256`), builds AUR packages and the config's own [recipes and patched packages](/docs/guides/local-pkgbuilds-and-patches/) in a clean chroot, downloads every package to `/var/cache/archix/pkg` (each file checked against the lock's `sha256`, and hard-linked rather than copied when pacman's cache already has it), and builds the deployment: packages, users, groups, services, managed `/etc` files and the boot entry. Once it's committed, `switch` writes the files outside the deployment, such as dotfiles, and runs their `on_change` scripts, starts the [`/etc` merge](/docs/concepts/safety/#changes-to-etc-before-the-reboot), which carries changes you make to `/etc` into the new deployment until the reboot, turns hibernation off until then, syncs Flatpak apps and runs `gc`. Nothing is restarted: the new generation takes effect when you reboot. See [Safety](/docs/concepts/safety/#what-takes-effect-when).
 
 The very first switch lays the running system out as deployment 1 first, `lay out   the system as deployment 1: /usr, /etc, /opt, /boot and pacman's database move into /archix/deploy/1, with a boot entry of its own`, then builds deployment 2 if the config changes anything. It refuses before changing anything when archix doesn't manage booting, the ESP is in `/boot`, or `/boot`, `/usr`, `/opt`, `/var`, `/var/lib`, `/var/lib/pacman` or `/archix` is a separate filesystem; see [Requirements](/docs/concepts/atomicity/#requirements).
 
@@ -175,7 +176,9 @@ flatpak    com.spotify.Client 5f8806197a2b -> 81c2d4e6f0a3
 flatpak    remove org.gimp.GIMP
 ```
 
-A Flatpak step that fails is a soft failure, like a unit that can't be enabled. Before it asks, `switch` also checks that no managed file would replace something it can't back up, and stops with a plain error if one would; see [Safety](/docs/concepts/safety/#managed-files-backups-and-hand-edits). Once everything is downloaded and built, and before it builds the deployment, it refuses packages that ship the same file or a file that's already there with no owner, packages pacman's signature check rejects, and a deployment the root filesystem has no room for; see [Signatures and disk space](/docs/concepts/safety/#signatures-and-disk-space). A switch that fails or is killed while building leaves the running system and its boot entries as they were.
+When the same switch brings the `flatpak` package, which the running system doesn't have yet, the apps wait for the new deployment: `flatpak    install org.mozilla.firefox at the new deployment's first boot, which brings flatpak`, and once committed, `flatpak comes with deployment 2, so deployment 2's first boot installs them once the network is up: org.mozilla.firefox`. `archix-flatpak.service` then adds the remotes, installs, locks and pins them after `network-online.target`, and tries again at the next boot if that fails.
+
+A Flatpak step that fails is a soft failure, like a unit that can't be enabled. Before it asks, `switch` also checks that no managed file would replace something it can't back up, and stops with a plain error if one would; see [Safety](/docs/concepts/safety/#managed-files-backups-and-hand-edits). Once everything is downloaded and built, and before it builds the deployment, it refuses packages that ship the same file or a file that's already there with no owner, packages pacman's signature check rejects, and a deployment the root filesystem or the ESP has no room or inodes for; see [Signatures and disk space](/docs/concepts/safety/#signatures-and-disk-space). A switch that fails or is killed while building leaves the running system and its boot entries as they were.
 
 If the system already matches, it prints `nothing to do: the system matches generation 2 (snapshot 2026-10-09)`, builds nothing and runs the hooks right away, like NixOS runs activation scripts on every switch. Any other change, even to a setting such as `ignored_packages`, builds a new deployment.
 
@@ -286,9 +289,9 @@ roll back to generation 41 (snapshot 2026-10-09)? [Y/n]
 rolled back to generation 41 (snapshot 2026-10-09); it boots at the next restart. archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-When the generation's deployment is kept, rollback makes it systemd-boot's default entry and current, and nothing is reinstalled. When it was dropped, rollback builds it again from the nearest kept deployment, the newer one on a tie, and the generation's exact package files, from the cache or the Arch Linux Archive, and commits it like a switch: `generation 38 (snapshot 2026-09-18)'s deployment was dropped: rebuilding it from deployment 41 and the package cache`. Packages go back by the sha256 the generation pinned, without checking their signatures against today's keyring again, so a key revoked since doesn't block the rollback, and like `switch`, a rebuild checks first that no two packages ship the same file and that the disk has room. A package built from one of the config's recipes at the same version, but from a different recipe, is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and that generation's cached build goes back.
+When the generation's deployment is kept, rollback checks its files against its packages as [`verify`](#verify) does, repairing what differs from the package cache or stopping with `nothing was rolled back` when it can't, then makes it systemd-boot's default entry and current, and nothing is reinstalled. When it was dropped, rollback builds it again from the nearest kept deployment, the newer one on a tie, and the generation's exact package files, from the cache or the Arch Linux Archive, and commits it like a switch: `generation 38 (snapshot 2026-09-18)'s deployment was dropped: rebuilding it from deployment 41 and the package cache`. Packages go back by the sha256 the generation pinned, without checking their signatures against today's keyring again, so a key revoked since doesn't block the rollback, and like `switch`, a rebuild checks first that no two packages ship the same file and that the disk has room. A package built from one of the config's recipes at the same version, but from a different recipe, is listed as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`, and that generation's cached build goes back.
 
-Either way, files outside the deployment, fetched ones included, come back from the store right away, and Flatpak apps are pinned back to the generation's commits, which are downloaded from their remote, with apps the newer generation added uninstalled. The generation's [hooks](/docs/guides/hooks/) run when it boots. Downgrades that may break data are listed and asked about first, `downgrade anyway? [y/N]`, as on a switch. `rollback` doesn't evaluate the config, so it works even when the config is broken. `archix rollback 42` moves forward again. Naming the current generation prints `generation 42 is current already; nothing was changed`. See [Generations and rollback](/docs/concepts/generations/).
+Either way, the running system's users and passwords are carried into the generation's `/etc` by name (see [Users and passwords across deployments](/docs/concepts/safety/#users-and-passwords-across-deployments)), the `/etc` merge carries later changes to `/etc` until the reboot, files outside the deployment, fetched ones included, come back from the store right away, and Flatpak apps are pinned back to the generation's commits, which are downloaded from their remote, with apps the newer generation added uninstalled. The generation's [hooks](/docs/guides/hooks/) run when it boots. Downgrades that may break data are listed and asked about first, `downgrade anyway? [y/N]`, as on a switch. `rollback` doesn't evaluate the config, so it works even when the config is broken. `archix rollback 42` moves forward again. Naming the current generation prints `generation 42 is current already; nothing was changed`. See [Generations and rollback](/docs/concepts/generations/).
 
 | Argument or flag | Description |
 | --- | --- |
@@ -307,30 +310,77 @@ deleted generation records 30, 31
 freed 812.4 MiB: 46 cached package files, 3 snapshot databases
 ```
 
-It never drops the booted, current or boot-default deployment, and keeps the newest others up to `deployments.keep` (2). Records go when they have no deployment and fall outside the newest [`generations.keep`](/docs/reference/options/#generationskeep) (10) and `generations.keep_days` (30), using the limits the current generation was applied with.
+It never drops the booted, current or boot-default deployment, the one the [fallback image](/docs/concepts/atomicity/#the-fallback-boot-image) boots, or the one the last switch or rollback chose, and keeps the newest others up to `deployments.keep` (2). Like `switch` and `rollback`, it refuses unless `boot.esp` is a mounted FAT filesystem.
+
+### `hooks`
+
+Run again, or drop, the [hooks](/docs/guides/hooks/#failures) of a deployment that failed at three boots, which no longer run at boot. Both take a deployment number, the running one by default.
+
+```console
+$ sudo archix hooks retry
+deployment 46's hooks ran
+$ sudo archix hooks skip
+dropped the hooks waiting for deployment 46; they won't run
+```
+
+`retry` runs them on the running deployment, and only that one: `deployment 47 isn't the one running, so its hooks run at its boot`. If one fails again, they stay waiting: `hook link: exited with exit status: 1; they stay waiting, `archix hooks skip` drops them`. With none waiting, both say `no hooks wait for deployment 46`.
+
+### `verify`
+
+Check each kept deployment's `/usr`, `/opt` and `/boot` against its packages, file by file: type, link target, mode, owner, size and sha256, as `pacman -Qkk` does. Files a package lists as `backup` aren't checked.
+
+```console
+$ sudo archix verify
+deployment 41: matches its packages
+deployment 42: 1 files differ from its packages:
+  /usr/bin/sudo (sudo): mode 4777, not 4755
+error: deployment 42 changed; `sudo archix verify --repair` restores them
+```
+
+Up to 20 files are listed per deployment. Packaged files that are missing, as pacman.conf's `NoExtract` leaves them, are counted on their own line and don't fail the check. While the last check found differences, `archix status` says so: ``deployment 42 differs from its packages in 1 files at the last check; `sudo archix verify --repair` restores them``. A [rollback](#rollback) to a kept deployment runs the same check first.
+
+| Flag | Description |
+| --- | --- |
+| `--repair` | Restore what differs from the package files in archix's cache, pacman's cache or archix's own AUR builds, each written under a new name and renamed into place. A package that isn't cached stops it before anything changes: ``sudo-1.9.17.p2-1-x86_64 isn't in the package cache, so it can't be repaired; download it into /var/cache/archix/pkg and try again``. | Records go when they have no deployment and fall outside the newest [`generations.keep`](/docs/reference/options/#generationskeep) (10) and `generations.keep_days` (30), using the limits the current generation was applied with.
 
 ### `eject`
 
-Stop archix managing the machine. It works only before the first switch: once the system is laid out as deployments, they boot only through archix's initramfs hook, and `eject` refuses. A way back to plain Arch from deployments is being built, and isn't available yet:
+Stop archix managing the machine, and leave plain Arch behind. On a system laid out as deployments, the deployment you're running becomes the root's own `/usr`, `/etc`, `/opt`, `/boot` and pacman database, at once and without a reboot, and `/archix` goes:
 
 ```console
 $ sudo archix eject
-error: /archix/deploy holds deployments, which boot only through archix's initramfs hook, so ejecting would leave the machine unbootable
+archix eject: archix stops managing this machine, which becomes plain Arch
+  system    deployment 42, which runs now, becomes the root's own /usr, /etc, /opt, /boot and pacman database; the running system switches to them at once
+  boot      a UKI that mkinitcpio's preset writes to EFI/Linux, signed with sbctl, the default instead of archix's entries, which go with the fallback UKI
+  deletes   /archix and every deployment in it
+  removes   archix's boot units, the deployment initramfs hook and units, the pacman hooks and the login notices; pacman.conf's CheckSpace is back on
+  files     stay as they are, made writable again (--restore-originals puts the originals back)
+  keeps     packages, users, groups, services and pacman.conf
+  keeps     /var/lib/archix and /var/cache/archix (--purge deletes them)
+eject? [Y/n]
+...
+this machine is plain Arch now and archix no longer manages it; restart when convenient. `pacman -Rns archix` removes archix itself; `archix switch` would lay the machine out as deployments again
 ```
 
-Before that, it lists what it does and asks first: it takes off archix's boot services, initramfs hook, pacman hook and login notices, makes managed files writable again, and leaves packages, users, groups, services, the firewall and `pacman.conf` as they are. `eject` doesn't evaluate the config.
+It copies the deployment's trees into the root's own, as hardlinks on ext4 and reflinks on btrfs, takes archix's integration out of them, then hands the ESP over: it adds a `default_uki` line for `EFI/Linux/arch-<kernel>.efi` to the kernel's mkinitcpio preset, runs `mkinitcpio -p`, signs the UKI when sbctl has keys, makes it `loader.conf`'s default, and deletes archix's entries, boot images and fallback image. With the ESP mounted at `/boot`, it writes plain `arch-<kernel>.conf` entries instead. Then the running system moves off the deployment's mounts onto the root's own trees, and `/archix` is deleted.
+
+The deployment that runs has to be `current`, since that's what you've been using: with a switch waiting for its reboot, it refuses with ``deployment 43 is current, but this boot runs deployment 42; restart into 43 (or `archix rollback 42`) and eject then; nothing was changed``. It also refuses when this boot didn't come from a deployment.
+
+`eject` records how far it got in `/var/lib/archix/eject`. If it's cut off, by a kill or a power cut, the machine still boots, and `sudo archix eject` again finishes it: `archix eject: finishing the eject to plain Arch from deployment 42 that was cut off`. A failure says the same: `the eject stopped partway; the machine still boots, and running `sudo archix eject` again finishes it`.
+
+On a system not laid out as deployments yet, before the first switch, it does the rest: hands the ESP over the same way, takes off archix's boot services, initramfs hook, pacman hooks and login notices, makes managed files writable again, and leaves packages, users, groups, services, the firewall and `pacman.conf` as they are. `eject` doesn't evaluate the config.
 
 | Flag | Description |
 | --- | --- |
 | `--noconfirm` | Don't ask. |
-| `--restore-originals` | Put back the files archix replaced, from `/var/lib/archix/backups`, and delete the ones it created, as taking them out of the config would. |
+| `--restore-originals` | Put back the files archix replaced, from its backups, and delete the ones it created, as taking them out of the config would; `/etc/kernel/cmdline` stays, as mkinitcpio reads the kernel command line from it. An eject that was cut off keeps the choice it started with. |
 | `--purge` | Also delete `/var/lib/archix` and `/var/cache/archix`. |
 
 `archix recover` and `archix rescue` were removed with the move to deployments; running either says why and exits.
 
 ### `secure-boot`
 
-Set up, check and revoke. None of the subcommands evaluates the config. See [Secure Boot](/docs/guides/secure-boot/).
+Set up, check, revoke and rotate the PCR key. None of the subcommands evaluates the config. See [Secure Boot](/docs/guides/secure-boot/).
 
 #### `secure-boot setup`
 
@@ -383,6 +433,23 @@ archix records the Authenticode hash of every UKI it signs, and revokes the ones
 | `--dry-run` | List what it would revoke and stop. Without `dbx` to read, it lists as if `dbx` were empty. |
 | `--noconfirm` | Don't ask before writing `dbx`. |
 
+#### `secure-boot rotate-pcr-key`
+
+Experimental, tested with swtpm only: replace systemd's PCR policy signing key in every deployment, and bind the TPM2 slot of each LUKS2 volume you name to the new key. Needs root and `openssl`.
+
+```console
+$ sudo archix secure-boot rotate-pcr-key /dev/nvme0n1p2
+wrote a new PCR policy signing key to /etc/systemd in all 2 deployments
+bound /dev/nvme0n1p2's TPM2 slot to the new key
+run `archix switch` before the next restart: until a UKI built with the new key boots, TPM2-bound volumes unlock only with a passphrase or recovery key, and UKIs built with the old key no longer unlock them
+```
+
+It makes a new 2048-bit RSA key, writes `/etc/systemd/tpm2-pcr-private-key.pem`, readable by root only from the start, and `tpm2-pcr-public-key.pem` into every deployment's `/etc`, and re-enrolls each volume with `systemd-cryptenroll --wipe-slot=tpm2 --tpm2-public-key-pcrs=11`, which asks for its passphrase or recovery key, or reads `$PASSWORD`. A volume that fails to bind is named, with the `systemd-cryptenroll` line to run for it; the key stays in place. The next `switch` builds a new deployment even if nothing else changed, `update     the PCR policy key: the new deployment's UKIs carry policies signed with the one in /etc/systemd`, and its UKIs carry policies signed with the new key. See [TPM-bound secrets](/docs/guides/secure-boot/#tpm-bound-secrets).
+
+| Argument | Description |
+| --- | --- |
+| `[devices]...` | LUKS2 volumes to re-enroll, such as `/dev/nvme0n1p2`. Without any, it only replaces the key. |
+
 ## Commands that read the system or the config
 
 These don't change the system and don't need root. As a normal user, archix keeps its download cache in `~/.cache/archix` (or `$XDG_CACHE_HOME/archix`); as root it uses `/var/cache/archix`.
@@ -426,13 +493,19 @@ Show the current generation, the booted one when they differ, changes made outsi
 $ archix status
 current generation: 42 (snapshot 2026-10-15)
 booted generation: 41; generation 42 boots at the next restart
-deployment 42 is committed and boots at the next restart; changes to /etc made before then don't carry over to it, except archix's own config
+deployment 42 is committed and boots at the next restart; changes to /etc made before then are carried over to it
+3 updates are waiting for a reboot (deployment 42): linux 7.2.8.arch1-1 -> 7.2.9.arch1-1, mesa 1:25.3.0-1 -> 1:25.3.1-1, htop 3.4.1-1; security-relevant, so reboot soon: linux
+hibernation is off until you reboot into deployment 42: resuming would start its kernel on the running system's memory image; suspend still works
+2 /etc changes carried into the pending deployment 42, 0 conflicts (.pacnew)
+  last pass: 2026-10-15 09:12:40 UTC
 Secure Boot: on
 desktop is locked to snapshot 2026-10-15 (214 packages, 1 pinned off the snapshot)
 the system matches the lock
 ```
 
-The `booted generation` line and the note under it appear while a committed deployment waits for the next boot. The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
+The `booted generation` line and the notes under it appear while a committed deployment waits for the next boot: the updates waiting for it, with kernels, `glibc`, `openssl`, `openssh`, `systemd` and `sudo` named as security-relevant, the [hibernation guard](/docs/concepts/atomicity/#a-switch), and what the [`/etc` merge](/docs/concepts/safety/#changes-to-etc-before-the-reboot) has carried into it, with a line for each conflict and each change it couldn't carry. Once the deployment has booted, the same lines say what was carried from the one before, and whether its last pass at shutdown was cut off.
+
+Other lines appear when they apply: a verify that found changed files (see [`verify`](#verify)), hooks or `systemd-sysusers` failing at boot (`deployment 46's hooks failed at 2 of 3 boots; the next boot runs them again`), a [health check](/docs/reference/options/#boothealth_check) or boot count that fell back to the previous deployment, and ``warning: systemd-boot's LoaderEntryDefault variable (the boot menu's default, or `bootctl set-default`) names archix-40.conf and overrides archix's default; the next switch clears it, or `sudo bootctl set-default ''` now``. The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
 
 On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. The last line compares the lock with the current deployment: `the system matches the lock`, or `2 changes pending; see `archix diff``. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 
@@ -575,7 +648,7 @@ It copies everything in `/var/cache/archix/pkg`, the files archix downloaded and
 
 ## Internal commands
 
-Hidden commands are run by files archix installs, not by you: `archix hook-record`, from the pacman hook; `archix boot-check` and `archix boot-complete`, from `archix-boot.service` and `archix-boot-complete.service`; `archix deploy-mount`, from the initramfs hook, which mounts the deployment the boot belongs to; and `archix deploy-activate`, from `archix-deploy-activate.service`, which applies a deployment's `/var` changes at its first boot and runs its hooks.
+Hidden commands are run by files archix installs, not by you: `archix hook-record`, from the pacman hook; `archix boot-check` and `archix boot-complete`, from `archix-boot.service` and `archix-boot-complete.service`; `archix deploy-mount`, from the initramfs hook, which mounts the deployment the boot belongs to; `archix deploy-activate`, from `archix-deploy-activate.service`, which applies a deployment's `/var` changes at its first boot and runs its hooks; `archix etc-merge`, from `archix-etc-merge.service` and, with `--boot`, `archix-etc-merge-boot.service`; `archix health-check`, from `archix-health-check.service`; `archix deploy-flatpak`, from `archix-flatpak.service`; `archix pacman-guard`, from the pacman hook that stops plain pacman on a deployment; and `archix eject-here`, which `eject` runs in a private mount namespace.
 
 ## Exit behaviour
 

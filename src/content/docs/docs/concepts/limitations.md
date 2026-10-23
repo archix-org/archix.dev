@@ -77,7 +77,7 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 ## Not yet known
 
-- **Power-cut replay across every update.** Replaying every write to each flush point now covers archix's own switch, kept rollback, rebuild of a dropped generation and first boots, and the flaws it found are fixed. It replays one prepared update per filesystem, not every kind of transaction.
+- **Power-cut replay across every update.** Replaying every write to each flush point now covers archix's own switch, kept rollback, rebuild of a dropped generation and first boots, and the flaws it found are fixed. It has passed on an ext4 root; the btrfs replay hasn't completed yet. It replays one prepared update, not every kind of transaction, and replays writes in the order they were logged: writes between two flushes that reach the disk in another order or only in part aren't tried yet.
 - **Weeks of use on real hardware.** The failure paths are exercised in VMs and containers: power-cut replay of archix's own switches, rollbacks and first boots, kills mid-switch, a full disk, a broken glibc, a revoked key, and a year of weekly switches with a reboot each. archix with deployments hasn't yet run for weeks on real machines, which is where the failures nobody thought to test turn up.
 - **Upgrading from one release with deployments to the next.** A VM suite upgrades archix from an older build to a newer one through a switch, killed once halfway, and boots both; between releases it waits for a second release.
 

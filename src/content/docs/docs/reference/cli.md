@@ -257,6 +257,7 @@ install 1 package without declaring them, in a new deployment that boots at the 
 :: building deployment 43 from deployment 42
 ...
 installed sl without declaring it, in deployment 43, which boots at the next restart; the next `archix switch` drops it unless it's declared
+deployment 43 is committed and boots at the next restart; changes to /etc made before then are carried over to it
 ```
 
 ### `remove`, `-R`

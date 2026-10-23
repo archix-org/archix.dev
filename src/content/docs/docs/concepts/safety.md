@@ -120,11 +120,13 @@ A failure in those is a [soft failure](#hard-and-soft-failures): the deployment 
 
 ### Changes to `/etc` before the reboot
 
-The new deployment has its own copy of `/etc`, made when the switch built it. Changes you make to the running `/etc` after that, until you reboot, are carried into it: a password changed with `passwd`, a Wi-Fi network saved, a file edited by hand. `switch`, `rollback` and `archix status` say when a deployment is waiting:
+The new deployment has its own copy of `/etc`, made when the switch built it. Changes you make to the running `/etc` after that, until you reboot, are carried into it: a password changed with `passwd`, a Wi-Fi network saved, a file edited by hand. `switch`, `rollback`, `install --temp` and `archix status` say when a deployment is waiting:
 
 ```
 deployment 42 is committed and boots at the next restart; changes to /etc made before then are carried over to it
 ```
+
+They say so only while the merge runs. Where it couldn't start, they say ``no /etc merge is running, so changes to /etc made before then don't reach it`` instead, after a warning with the reason.
 
 Before it stages anything, a switch takes a copy of the running `/etc` as the base, and once it has committed, it starts `archix-etc-merge.service`, which watches the running `/etc` with inotify until shutdown. Within about two seconds of a change, it merges it into the waiting deployment's `/etc`, three ways, against that base:
 

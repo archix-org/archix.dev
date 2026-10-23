@@ -36,7 +36,7 @@ const safety = [
 	['Bad updates', 'With systemd-boot 260 or newer, a deployment that does not finish booting is passed over for the last one that did, by boot counting.'],
 	['DKMS', 'Each deployment carries its own kernel, modules and DKMS state, NVIDIA drivers included.'],
 	['Updates at boot', 'Packages, /etc and services change at the next boot, all at once, not under running programs. Flatpak apps and home files are written right after the switch.'],
-	['Tested', 'Tested in QEMU VMs with Secure Boot enforcing, on ext4 and btrfs: kills of the staging and commit logic, power cuts during staging, full disks, CachyOS, and NVIDIA drivers built per deployment.'],
+	['Tested', 'VM-only so far, not yet on real hardware. Tested in QEMU VMs with Secure Boot enforcing, on ext4 and btrfs: kills of the staging and commit logic, power cuts during staging, full disks, CachyOS, and NVIDIA drivers built per deployment.'],
 ];
 
 const nix = [

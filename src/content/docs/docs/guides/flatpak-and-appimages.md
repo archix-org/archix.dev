@@ -60,7 +60,15 @@ Only `switch` adds remotes, and only after you confirm; `diff` and `lock` never 
 flatpak    install org.mozilla.firefox: flatpak isn't installed yet
 ```
 
-The same switch puts the `flatpak` package in the new deployment, but the running system doesn't have it until you reboot, so the switch after the reboot adds the remote, locks the app, writes it to `archix.lock` and installs it.
+The same switch puts the `flatpak` package in the new deployment, but the running system doesn't have it until you reboot, so the switch leaves the apps for the new deployment's first boot:
+
+```console
+flatpak    install org.mozilla.firefox at the new deployment's first boot, which brings flatpak
+...
+flatpak comes with deployment 44, so deployment 44's first boot installs them once the network is up: org.mozilla.firefox
+```
+
+At that boot, `archix-flatpak.service` waits for `network-online.target`, then adds the remotes, locks the apps at their remote's current commit, installs and pins them, and writes the commits to the generation and `archix.lock`. If that fails, it's tried again at the next boot, with a note at your next login: `archix: at boot, flatpak: ...; it's tried again at the next boot`. A switch or rollback that syncs Flatpak itself before then drops the waiting apps.
 
 A Flatpak step that fails, such as a remote that can't be reached, doesn't undo the switch. The deployment is committed, the failure is listed, and archix exits non-zero, as with a service that doesn't start. See [Hard and soft failures](/docs/concepts/safety/#hard-and-soft-failures).
 

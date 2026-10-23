@@ -44,7 +44,7 @@ home = {
 | `link` | Make the path a symlink to this target. |
 | `url`, `sha256` | Download the file, and refuse it unless it has this sha256. See [Files from a URL](#files-from-a-url). |
 | `executable` | Mode `0755` instead of `0644`. |
-| `on_change` | A bash script run as the user at the next boot, when a switch or rollback changed the file. See [Run a script when a file changes](#run-a-script-when-a-file-changes). |
+| `on_change` | A bash script run as the user right after a switch or rollback writes a change to the file. See [Run a script when a file changes](#run-a-script-when-a-file-changes). |
 | `mutable` | `false` writes the file read-only, `true` keeps it writable; by default as `mutable_files` says. See [Read-only files](#read-only-files). |
 | `merge` | Set only some keys in a file the app also writes. See [Setting single keys](#setting-single-keys). |
 
@@ -54,15 +54,17 @@ Copies are real files, not links into a store, so apps see ordinary files they c
 update     /home/me/.config/kitty/kitty.conf (edited outside archix; your version gets saved)
 ```
 
-The switch then writes the declared version, and saves yours under `/var/lib/archix/edited/` so nothing is lost. Move the change into your config to keep it.
+The switch then writes the declared version, and saves yours under `/var/lib/archix/users/<user>/edited/` so nothing is lost. Move the change into your config to keep it.
 
-When archix first takes over a path that already exists, it backs up the original to `/var/lib/archix/backups`. If the entry later leaves the config, archix deletes the file, or puts that original back. See [Safety](/docs/concepts/safety/).
+When archix first takes over a path that already exists, it backs up the original to `/var/lib/archix/users/<user>/backups`, a directory only you and root can read. If the entry later leaves the config, archix deletes the file, or puts that original back; originals an older archix kept in `/var/lib/archix/backups` come back too. See [Safety](/docs/concepts/safety/).
+
+archix writes your home files as you, not as root: a process running with your user and groups writes each through a new temporary file with an unguessable name and renames it into place, so a link you or a program put in the way can't make root write or chown a file elsewhere. A file that fails is listed, and the others are still written.
 
 ## Run a script when a file changes
 
 Home files live outside the [deployments](/docs/concepts/atomicity/), so a switch writes them as soon as its deployment is committed, without waiting for the reboot. Apps that watch their config pick the change up then; others read it when they next start.
 
-For work that should follow a changed file, give it an `on_change` script, Home Manager's `onChange`. It runs as `home.user`, only when a switch or rollback changed that file, at the first boot of the deployment that switch made, before you log in:
+For work that should follow a changed file, give it an `on_change` script, Home Manager's `onChange`. It runs as `home.user`, only when a switch or rollback changed that file, right after the file is written, on the running system:
 
 ```lua title="lua/modules/desktop.lua"
 return {
@@ -76,9 +78,9 @@ return {
 }
 ```
 
-A file a `programs.*` module writes is a `home.files` entry too, so `on_change` works on it without repeating its contents, as `[".config/kitty/kitty.conf"] = { on_change = ... }`. The script runs with `set -e`. Nothing is running yet at that point in the boot, so a signal to reload a running app, such as `pkill -USR1 -x kitty`, reaches nothing: send it yourself after the switch if you want the change right away.
+A file a `programs.*` module writes is a `home.files` entry too, so `on_change` works on it without repeating its contents, as `[".config/kitty/kitty.conf"] = { on_change = ... }`. The script runs with `set -e`. Since it runs on the running system, a signal to reload a running app, such as `pkill -USR1 -x kitty`, reaches it. When the same switch creates `home.user`, the user exists only in the new deployment, so the script waits for its first boot, before you log in.
 
-"Changed" means the file's entry differs from the previous generation's, such as new contents, mode or link target, or that archix had to write it again because the file on disk didn't match, such as putting back a file you edited by hand. So it runs after the first switch that writes the file, but never for edits behind a [live link](#live-links-for-app-written-configs): archix doesn't write what's behind the link. A failing script doesn't undo the switch; it's reported at boot and at your next login, and runs again at the next boot. For scripts that should run after every switch, see [Activation hooks](/docs/guides/hooks/).
+"Changed" means the file's entry differs from the previous generation's, such as new contents, mode or link target, or that archix had to write it again because the file on disk didn't match, such as putting back a file you edited by hand. So it runs after the first switch that writes the file, but never for edits behind a [live link](#live-links-for-app-written-configs): archix doesn't write what's behind the link. A failing script doesn't undo the switch; it's listed as a failed step, and the switch exits non-zero. For scripts that should run after every switch, see [Activation hooks](/docs/guides/hooks/).
 
 ## Files from a URL
 
@@ -132,7 +134,7 @@ home = {
 },
 ```
 
-If the path is already a directory, such as the `~/.config/nvim` you had before you moved it into the config, the switch moves that directory to `/var/lib/archix/backups`, contents and all, and puts the link in its place. When the entry leaves the config, the link goes and the directory comes back. This works with a separate `/home` or a btrfs `@home` subvolume too. archix only does this once per path: if an earlier backup of it still exists, the switch stops before changing anything, with `/home/me/.config/nvim is a directory and an earlier backup of it exists; move one of them away`. See [Safety](/docs/concepts/safety/#managed-files-backups-and-hand-edits).
+If the path is already a directory, such as the `~/.config/nvim` you had before you moved it into the config, the switch moves that directory to `/var/lib/archix/users/<user>/backups`, contents and all, and puts the link in its place. When the entry leaves the config, the link goes and the directory comes back. This works with a separate `/home` or a btrfs `@home` subvolume too. archix only does this once per path: if an earlier backup of it still exists, the switch stops before changing anything, with `/home/me/.config/nvim is a directory and an earlier backup of it exists; move one of them away`. See [Safety](/docs/concepts/safety/#managed-files-backups-and-hand-edits).
 
 A `source` that's a directory has to be live; archix only copies single files. `live` needs a `source` to link to, so `live = true` with `text`, `link` or `url` makes `diff` and `switch` stop:
 
@@ -405,7 +407,7 @@ return {
 }
 ```
 
-The first switch moves the originals, directories included, to `/var/lib/archix/backups` and replaces them with links into the config, so from then on editing a dotfile through a link edits your repo. A copy, like `kdeglobals` above, doesn't: what the app saves there is [flagged as edited](#home-files) by `archix diff`, and the next switch puts the declared version back. To keep only some of its settings, switch it to [`merge`](#setting-single-keys). That makes imported dotfiles the one thing the first switch after `init` changes. init's Result section lists them:
+The first switch moves the originals, directories included, to `/var/lib/archix/users/<user>/backups` and replaces them with links into the config, so from then on editing a dotfile through a link edits your repo. A copy, like `kdeglobals` above, doesn't: what the app saves there is [flagged as edited](#home-files) by `archix diff`, and the next switch puts the declared version back. To keep only some of its settings, switch it to [`merge`](#setting-single-keys). That makes imported dotfiles the one thing the first switch after `init` changes. init's Result section lists them:
 
 ```
 ── Result ──────────────────────────────────────

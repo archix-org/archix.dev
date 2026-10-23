@@ -67,14 +67,14 @@ Don't update it with `makepkg` again. See [Upgrading archix itself](/docs/concep
 
 ## Removing archix
 
-Before the first switch, `sudo archix eject` takes archix's hooks and services off, and leaves your packages, files and services as they are. Then remove the package:
+`sudo archix eject` leaves plain Arch behind: the deployment you're running becomes the root's own `/usr`, `/etc`, `/opt` and `/boot`, a UKI that mkinitcpio's preset writes becomes the boot default, and archix's entries, hooks, services and `/archix` go. Your packages, files and services stay as they are. Then remove the package:
 
 ```console
 $ sudo archix eject
 $ sudo pacman -Rns archix-git
 ```
 
-Once the first switch has laid the system out as deployments, `eject` refuses: the deployments boot only through archix's initramfs hook. A way back to plain Arch from deployments is being built, and isn't available yet. See [`eject`](/docs/reference/cli/#eject).
+The deployment you run has to be the current one, so reboot into a waiting switch first. An eject that's cut off finishes when you run it again. See [`eject`](/docs/reference/cli/#eject).
 
 ## The static binary
 

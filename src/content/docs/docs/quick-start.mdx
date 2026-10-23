@@ -257,11 +257,12 @@ apply 2 changes? [Y/n]
 downloading htop-3.4.1-1-x86_64.pkg.tar.zst
 :: building deployment 2 from deployment 1
 ...
+hibernation is off until you reboot into deployment 2: resuming would start its kernel on the running system's memory image; suspend still works
 switched to generation 2 (snapshot 2026-10-09); its deployment boots at the next restart
-deployment 2 is committed and boots at the next restart; changes to /etc made before then don't carry over to it, except archix's own config
+deployment 2 is committed and boots at the next restart; changes to /etc made before then are carried over to it
 ```
 
-`switch` updated the lock for you, showed the changes, and built deployment 2 once you said yes. The running system doesn't change: reboot, and `htop` is there. Until you do, leave `/etc` alone, since changes to it don't carry over to the new deployment. `sudo archix install htop` would have done the same, writing the name to `installed.lua` instead of your host file. Commit the change:
+`switch` updated the lock for you, showed the changes, and built deployment 2 once you said yes. The running system doesn't change: reboot, and `htop` is there. Until you do, changes you make to `/etc` are carried into the new deployment, and hibernating is off. `sudo archix install htop` would have done the same, writing the name to `installed.lua` instead of your host file. Commit the change:
 
 ```console
 $ git commit -am "Add htop"

@@ -116,7 +116,7 @@ Review happens wherever recipes enter the lock: `install`, `lock`, `update`, `up
 
 ## Clean chroot builds
 
-Every AUR package is built with devtools' `makechrootpkg` in a clean chroot at `/var/lib/archix/chroot`, as the unprivileged `archix-build` user. The chroot is created with `base-devel` at the host's locked snapshot date, and moved whenever the lock's date changes. It's created again from scratch when devtools changes its chroot format. AUR dependencies are built first and passed in. AUR builds need `devtools` and `git` installed.
+Every AUR package is built with devtools' `makechrootpkg` in a clean chroot at `/var/lib/archix/chroot`, as the unprivileged `archix-build` user. The chroot is created with `base-devel` at the host's locked snapshot date, running the chroot's own pacman hooks rather than the running system's, and moved whenever the lock's date changes. It's created again from scratch when devtools changes its chroot format. AUR dependencies are built first and passed in. AUR builds need `devtools` and `git` installed.
 
 ```console
 :: creating the build chroot at the 2026-10-09 snapshot

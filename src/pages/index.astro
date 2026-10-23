@@ -23,7 +23,7 @@ const manages = [
 	['/etc', 'Any file under /etc, written atomically and tracked by hash'],
 	['systemd', 'System and user units enabled or disabled in each new deployment, so they start as it boots'],
 	['Kernel', 'Kernel parameters, sysctl, modprobe and udev rules'],
-	['Users', 'Users and groups. archix never sets passwords, but each deployment keeps its own /etc/shadow, so a rollback brings back the passwords it had'],
+	['Users', 'Users and groups. archix never sets passwords, and a rollback carries the passwords you have now into the deployment it goes back to'],
 	['Dotfiles', 'Copied files with recorded hashes, so edits made outside archix show up in diff, or live links into your config repo'],
 	['Apps', 'programs.* modules, six of them ported from Home Manager and checked byte for byte against its tests, plus writers for toml, json, yaml, ini, kdl and more'],
 	['Hooks', 'Activation scripts that run at the first boot of every switch and rollback, and on_change scripts for files that changed'],
@@ -31,7 +31,7 @@ const manages = [
 
 const safety = [
 	['No reinstall', 'archix init takes over the system you already have and locks to what is installed, so the first switch changes nothing, or tells you what it would.'],
-	['Power cuts', 'Every switch builds a new deployment beside the running one and commits it in one step, designed so a power cut leaves the old one or the new one bootable. Kill tests of the staging and commit logic and VM power cuts during staging pass on archix itself; write-level power-cut replay has passed on the prototype, and on archix itself it is in progress.'],
+	['Power cuts', 'Every switch builds a new deployment beside the running one and commits it in one step, designed so a power cut leaves the old one or the new one bootable. Kill tests of the staging and commit logic and VM power cuts during staging pass on archix itself; write-level power-cut replay runs on the switches, rollbacks and first boots of archix itself, and the flaws it found are fixed.'],
 	['No live USB', 'No live USB to roll back to a kept deployment: each has its own boot entry. Pick an older one and it boots with the same packages, kernel and /etc, without pacman.'],
 	['Bad updates', 'With systemd-boot 260 or newer, a deployment that does not finish booting is passed over for the last one that did, by boot counting.'],
 	['DKMS', 'Each deployment carries its own kernel, modules and DKMS state, NVIDIA drivers included.'],

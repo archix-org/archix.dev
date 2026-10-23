@@ -50,7 +50,7 @@ Many graphics cards and network cards carry firmware (option ROMs) signed by Mic
 
 ## Signing
 
-[`boot.secure_boot`](/docs/reference/options/#bootsecure_boot) decides whether archix signs. With the default, `null`, it signs whenever `sbctl` has keys; `true` always signs and declares `sbctl`; `false` never signs. Every entry archix writes is signed with `sbctl sign`, and so is systemd-boot's own binary, `EFI/systemd/systemd-bootx64.efi` and `EFI/BOOT/BOOTX64.EFI`.
+[`boot.secure_boot`](/docs/reference/options/#bootsecure_boot) decides whether archix signs. With the default, `null`, it signs whenever `sbctl` has keys; `true` always signs and declares `sbctl`; `false` never signs. Every entry archix writes is signed with `sbctl sign`, one UKI per installed kernel, and so is systemd-boot's own binary, `EFI/systemd/systemd-bootx64.efi` and `EFI/BOOT/BOOTX64.EFI`. The [fallback image](/docs/concepts/atomicity/#the-fallback-boot-image) is a copy of the signed UKI of `current`.
 
 archix enrolls your keys directly in the firmware. It doesn't use shim or a Machine Owner Key (MOK). Booting through shim needs a kernel signed by a distribution key that Microsoft's shim trusts, and Arch doesn't ship one, so there's nothing for shim to chain to; with your own keys in `db`, archix's signed entries boot directly.
 
@@ -163,7 +163,7 @@ It needs the KEK as a file, as sbctl creates it by default, and `efitools` for t
 ## TPM-bound secrets
 
 :::caution[Experimental]
-archix's tests check that every UKI carries the signed policy, but none unlocks a secret with a TPM across a switch yet. Keep a passphrase or recovery key on any volume you bind this way.
+A VM suite unlocks a LUKS volume bound this way with swtpm, a software TPM, under every UKI archix signs with the key, an older kept deployment's included, but no test has used a real TPM yet. Keep a passphrase or recovery key on any volume you bind this way.
 :::
 
 A disk key or other secret sealed to PCR 11 breaks whenever the UKI changes, since a new kernel, initramfs or command line measures differently. systemd's answer is a signed PCR policy: the UKI carries a policy for its own PCR 11 values, signed with your key, and the secret is bound to the key instead of the values. archix signs one into every UKI it builds once systemd's PCR signing key exists, at `/etc/systemd/tpm2-pcr-private-key.pem` with its public half at `/etc/systemd/tpm2-pcr-public-key.pem`, where `systemd-cryptenroll` looks for the public key. Create the key yourself; `ukify genkey` needs `python-cryptography`:
@@ -178,5 +178,19 @@ From the next switch that builds a deployment on, UKIs carry `.pcrsig` and `.pcr
 $ sudo systemd-cryptenroll --tpm2-device=auto --tpm2-public-key=/etc/systemd/tpm2-pcr-public-key.pem --tpm2-public-key-pcrs=11 /dev/nvme0n1p2
 ```
 
-Every later switch signs the new UKI's policy with the same key, so the secret keeps unlocking. Anyone who can read the private key can sign a policy for any UKI, so it's as sensitive as your Secure Boot keys.
+Every later switch signs the new UKI's policy with the same key, so the secret keeps unlocking. Anyone who can read the private key can sign a policy for any UKI, so it's as sensitive as your Secure Boot keys. Package scriptlets and hooks don't see it while a switch stages a deployment; only `ukify` does.
+
+### Rotating the PCR key
+
+Every UKI signed with the key carries a valid policy for as long as the volume is bound to it, older ones included. To retire them, or a key that may have leaked, replace the key and bind the volume to the new one:
+
+```console
+$ sudo archix secure-boot rotate-pcr-key /dev/nvme0n1p2
+wrote a new PCR policy signing key to /etc/systemd in all 2 deployments
+bound /dev/nvme0n1p2's TPM2 slot to the new key
+run `archix switch` before the next restart: until a UKI built with the new key boots, TPM2-bound volumes unlock only with a passphrase or recovery key, and UKIs built with the old key no longer unlock them
+$ sudo archix switch
+```
+
+`systemd-cryptenroll` asks for each volume's passphrase or recovery key, and replaces its TPM2 slot. The switch after builds a new deployment whose UKIs carry policies signed with the new key, even when nothing else changed. Until you boot it, the volume asks for its passphrase. See [`secure-boot rotate-pcr-key`](/docs/reference/cli/#secure-boot-rotate-pcr-key).
 

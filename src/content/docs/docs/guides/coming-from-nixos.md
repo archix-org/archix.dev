@@ -106,13 +106,13 @@ Home Manager's files are symlinks into the read-only Nix store. archix writes re
 
 ### Mutable passwords
 
-archix never manages passwords. That matches NixOS's default of `users.mutableUsers = true`: users and groups are declared, passwords are set with `passwd`. When archix creates a user, it reminds you to run `passwd`. There's no equivalent of `hashedPassword`.
+archix never manages passwords. That matches NixOS's default of `users.mutableUsers = true`: users and groups are declared, passwords are set with `passwd`. When archix creates a user, it reminds you to run `passwd`. There's no equivalent of `hashedPassword`. Each deployment has its own `/etc/shadow`, but a password you change before the reboot is carried into the waiting deployment, and a rollback carries today's passwords into the one it goes back to.
 
 Encrypted secrets, agenix- or sops-style, are not supported.
 
 ### pacman reads, archix writes
 
-On NixOS, imperative changes mostly don't stick. On archix, they can't be made: `/usr`, `/opt` and `/boot` are read-only, so `pacman -S` and `yay` fail, while `pacman -Q`, `-Ss` and `-F` work as usual. Install through archix, `archix -S`, `archix -Syu` or `archix install --temp` to try something undeclared, which, like everything else, takes effect at the next boot. See [pacman and yay](/docs/concepts/pacman-and-yay/).
+On NixOS, imperative changes mostly don't stick. On archix, they can't be made: `/usr`, `/opt` and `/boot` are read-only, so `pacman -S` and `yay` stop with a message pointing to archix, while `pacman -Q`, `-Ss` and `-F` work as usual. Install through archix, `archix -S`, `archix -Syu` or `archix install --temp` to try something undeclared, which, like everything else, takes effect at the next boot. See [pacman and yay](/docs/concepts/pacman-and-yay/).
 
 ### One machine at a time
 
@@ -124,7 +124,7 @@ systemd-boot only, and archix needs it: every generation boots as its own deploy
 
 ### Switches take effect at the next boot
 
-`nixos-rebuild switch` activates the new generation on the running system and restarts what changed. archix never changes the running system: a switch builds the next deployment and commits it, and the machine runs the old one until you reboot, like `nixos-rebuild boot`. There's no `restartIfChanged`, `stopIfChanged` or `reloadIfChanged` to get right, and no window where new binaries meet old config. The exceptions are files in your home and Flatpak apps, which a switch writes right away. See [Atomic deployments](/docs/concepts/atomicity/).
+`nixos-rebuild switch` activates the new generation on the running system and restarts what changed. archix never changes the running system: a switch builds the next deployment and commits it, and the machine runs the old one until you reboot, like `nixos-rebuild boot`. There's no `restartIfChanged`, `stopIfChanged` or `reloadIfChanged` to get right, and no window where new binaries meet old config. The exceptions are files in your home and Flatpak apps, which a switch writes right away. Changes you make to `/etc` before the reboot are merged into the new deployment, so nothing you set in between is lost. See [Atomic deployments](/docs/concepts/atomicity/).
 
 ### Rollback asks before unsafe downgrades
 
@@ -132,9 +132,9 @@ NixOS rolls back without asking, even when an older PostgreSQL can't read the da
 
 ### Activation hooks run at boot
 
-`hooks` are archix's activation scripts. Like `system.activationScripts`, they run after every switch, including one that changes nothing, so they have to be idempotent, and `after` orders them like `deps`. Each one is a bash script that runs as root, or as a `user` you name, which also covers what Home Manager's `home.activation` does. `on_change` on a `files` or `home.files` entry is Home Manager's `onChange`: it runs only when that file changed.
+`hooks` are archix's activation scripts. Like `system.activationScripts`, they run after every switch, including one that changes nothing, so they have to be idempotent, and `after` orders them like `deps`. Each one is a bash script that runs as root, or as a `user` you name, which also covers what Home Manager's `home.activation` does. `on_change` on a `files` or `home.files` entry is Home Manager's `onChange`: it runs only when that file changed, right after the switch writes it for home files, at the first boot for files in `/etc`.
 
-They run at the new deployment's first boot, before the network and before anyone logs in, so a hook can't reach a service, a network or a user session. A failure doesn't stop the boot or undo anything: archix runs the rest of the hooks, prints the failure on the console and at your next login, and runs them all again at the next boot, where Home Manager stops activation at the first failing script. See [Activation hooks](/docs/guides/hooks/).
+They run at the new deployment's first boot, before the network and before anyone logs in, so a hook can't reach a service, a network or a user session. A failure doesn't stop the boot or undo anything: archix runs the rest of the hooks, prints the failure on the console and at your next login, and runs them all again at the next boot, up to three boots, where Home Manager stops activation at the first failing script. See [Activation hooks](/docs/guides/hooks/).
 
 ### Deployments instead of a store
 

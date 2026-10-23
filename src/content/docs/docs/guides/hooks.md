@@ -54,9 +54,17 @@ archix: running deployment 45's hooks
 
 ## When they run
 
-A switch records the hooks and `on_change` scripts its deployment is due to run, and `archix-deploy-activate.service` runs them at that deployment's first boot: after local filesystems are mounted and `systemd-sysusers` has run, once the deployment's `/var` changes are applied, and before `sysinit.target`. So users the same switch declared exist, but no service has started: no network, no D-Bus, no session. A hook that needs those, such as `tailscale set` or `gsettings set`, fails there.
+A switch records the hooks, and the `on_change` scripts of files in the deployment, `/etc`, `/usr`, `/opt` and `/boot`, that its deployment is due to run, and `archix-deploy-activate.service` runs them at that deployment's first boot: after local filesystems are mounted and `systemd-sysusers` has run, once the deployment's `/var` changes are applied, and before `sysinit.target`. So users the same switch declared exist, but no service has started: no network, no D-Bus, no session. A hook that needs those, such as `tailscale set` or `gsettings set`, fails there.
 
-They run once per deployment. A record is cleared only once every script in it succeeded; until then all of them run again at each boot.
+They run once per deployment. A record is cleared only once every script in it succeeded; until then all of them run again at the next boot, up to three boots (see [Failures](#failures)).
+
+`on_change` scripts of files outside the deployment, such as home files and files in `/srv` or `/var`, run on the running system instead, right after the switch writes those files once it has committed, so a signal to reload a running app reaches it:
+
+```console
+:: running the on_change scripts of files written now
+```
+
+One whose user only the new deployment has, or whose file couldn't be written, waits for the boot like the rest.
 
 - **A switch** records the generation's hooks, and the `on_change` scripts of files it changed. A switch built on a deployment that never booted carries that deployment's pending `on_change` scripts along, so none are lost.
 - **A switch that has nothing to build** runs the hooks right away, on the running system, like NixOS runs its activation scripts on every `nixos-rebuild switch`:
@@ -154,7 +162,7 @@ return {
 
 `dconf update` compiles the file into the database GNOME reads, offline, so it works before anything has started.
 
-On a [`files`](/docs/reference/options/#files) entry, `on_change` runs as root. On a [`home.files`](/docs/reference/options/#homefiles) entry, it runs as [`home.user`](/docs/reference/options/#homeuser), in the same environment as a [user hook](#user-hooks). It works on files a `programs.*` module writes too, since those are `home.files` entries. Home files themselves are written as soon as the switch commits, but their `on_change` waits for the boot like the rest, so a signal to reload a running app reaches nothing there; see [Run a script when a file changes](/docs/guides/dotfiles-and-apps/#run-a-script-when-a-file-changes).
+On a [`files`](/docs/reference/options/#files) entry, `on_change` runs as root. On a [`home.files`](/docs/reference/options/#homefiles) entry, it runs as [`home.user`](/docs/reference/options/#homeuser), in the same environment as a [user hook](#user-hooks). It works on files a `programs.*` module writes too, since those are `home.files` entries. Home files are written as soon as the switch commits, and their `on_change` runs right after, on the running system, so `pkill -USR1 -x kitty` reaches the running kitty; see [Run a script when a file changes](/docs/guides/dotfiles-and-apps/#run-a-script-when-a-file-changes). An `on_change` on a file in `/etc`, `/usr`, `/opt` or `/boot` runs at the new deployment's first boot, where nothing is running yet.
 
 ### When it runs
 
@@ -170,7 +178,7 @@ It doesn't run:
 - when the file leaves the config;
 - when you edit a file behind a [live link](/docs/guides/dotfiles-and-apps/#live-links-for-app-written-configs). The entry is the link, and archix never writes what's behind it.
 
-`on_change` scripts run before any hook, in path order, so hooks see whatever they rebuilt.
+At boot, `on_change` scripts run before any hook, in path order, so hooks see whatever they rebuilt.
 
 ## Failures
 
@@ -180,11 +188,19 @@ A failing hook or `on_change` script is a soft failure. The rest of the hooks st
 archix: running deployment 46's hooks
    hook media
    hook link
-archix: hook link: exited with exit status: 1; it runs again at the next boot
+archix: at boot, hook link: exited with exit status: 1; it runs again at the next boot (try 1 of 3)
 ```
 
 An `on_change` script is listed by its file, `on_change of /etc/dconf/db/local.d/00-archix: exited with exit status: 1`, and a user hook whose user doesn't exist as `hook link: user alice doesn't exist`. Every script in that deployment's record runs again at the next boot, until all of them succeed; a fixed config needs a new switch.
 
-On a switch with nothing to build, where hooks run right away, a failure is listed as `failed: hook link: exited with exit status: 1` and the switch ends with `error: nothing was changed, but 1 step failed (listed above)`.
+After three boots that failed, they stop running at boot, so a broken hook doesn't run at every boot from then on:
+
+```
+archix: at boot, hook link: exited with exit status: 1; it failed at 3 boots, so it doesn't run at boot any more: `archix hooks retry` runs it again, `archix hooks skip` drops it
+```
+
+`archix status` says the same, `deployment 46's hooks failed at 3 boots and no longer run at boot: `archix hooks retry` runs them again, `archix hooks skip` drops them`. Once you've fixed what they need, such as the network being up, `sudo archix hooks retry` runs them on the running deployment and clears the record if they all succeed; `sudo archix hooks skip` drops them without running them. See [`hooks`](/docs/reference/cli/#hooks).
+
+On a switch with nothing to build, where hooks run right away, and for `on_change` scripts run on the running system after a switch, a failure is listed as `failed: hook link: exited with exit status: 1`, and the switch ends with `error: nothing was changed, but 1 step failed (listed above)`, or says the generation is committed.
 
 This is where archix differs from Home Manager, which stops activation when an `onChange` script or activation script fails. Undoing a whole generation because a script failed would be worse than the failure.

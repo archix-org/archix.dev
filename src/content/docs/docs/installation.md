@@ -5,14 +5,15 @@ sidebar:
   order: 2
 ---
 
-archix ships as one AUR package, `archix-git`, which builds the newest commit on `main` from source. It installs the tool, plus the static `archix` binary that [rescue mode](/docs/concepts/safety/#rescue-mode) puts in the initramfs. There's no release package or prebuilt binary yet.
+archix ships as one AUR package, `archix-git`, which builds the newest commit on `main` from source. It installs the tool, plus the static `archix` binary that the initramfs uses to mount [deployments](/docs/concepts/atomicity/). There's no release package or prebuilt binary yet.
 
 ## Requirements
 
 - **An Arch-based system on x86_64.** Arch Linux and CachyOS are tested, each in its own VM suite. Other Arch-based systems such as EndeavourOS should work but aren't tested. Boot entries build their own initramfs with mkinitcpio, which archix installs, even where the system's own boot uses dracut. CachyOS is the primary target, so its repos get special care (see [Third-party repos](/docs/guides/third-party-repos/)).
-- **systemd-boot**, if you want a boot entry per generation, rollback from the boot menu and rescue entries. Entries are unified kernel images (UKIs) built with `mkinitcpio` and `ukify`. You don't install those yourself: with `boot.loader` set, archix declares the kernel, `mkinitcpio` and `systemd-ukify`, plus `sbctl` with `boot.secure_boot = true`, and the next switch installs whatever is missing. GRUB and Limine are not supported: on those bootloaders archix still manages your system and `archix rollback` still works from a running system, but you don't get generation boot entries.
+- **systemd-boot**, installed with `bootctl install`. archix boots every generation as its own deployment from its own systemd-boot entry, and refuses to switch without it. Entries are unified kernel images (UKIs) built with `mkinitcpio` and `ukify`. You don't install those yourself: with `boot.loader` set, archix declares the kernel, `mkinitcpio`, `systemd-ukify` and `dosfstools` (so the ESP is checked at boot after a power cut), plus `sbctl` with `boot.secure_boot = true`. GRUB and Limine are not supported.
+- **The ESP outside `/boot`**, at `/efi` by default, since each deployment has its own `/boot`. Many installs mount it at `/boot`; move it before the first switch, which refuses otherwise. See [`boot.esp`](/docs/reference/options/#bootesp).
 - **sbctl keys**, optional. If `sbctl` has keys, or you set `boot.secure_boot = true`, archix signs every UKI and systemd-boot itself, so Secure Boot stays on. `sudo archix secure-boot setup` creates the keys and enrolls them; see [Secure Boot](/docs/guides/secure-boot/).
-- **Any filesystem.** Rollback reinstalls a generation's exact packages and files from the cache, which works the same on ext4, btrfs or anything else. On a btrfs root, archix also takes a read-only snapshot of `/` before every switch, as an extra recovery point you can use by hand. See [Generations and rollback](/docs/concepts/generations/#btrfs-snapshots).
+- **ext4 or btrfs**, with `/boot`, `/usr`, `/opt`, `/var`, `/var/lib` and `/var/lib/pacman` on the root filesystem. On btrfs, deployments are snapshots; on ext4, unchanged files are shared as hardlinks. Caches and logs on their own btrfs subvolumes, as CachyOS lays them out, are fine. See [Requirements](/docs/concepts/atomicity/#requirements).
 - **base-devel and git** for the bootstrap below, and **devtools** for AUR builds later, which run in a clean chroot with `makechrootpkg`.
 
 ## Bootstrap from the AUR
@@ -24,7 +25,7 @@ $ sudo pacman -S --needed base-devel git devtools
 $ git clone https://aur.archlinux.org/archix-git.git && cd archix-git && makepkg -si
 ```
 
-`archix-git` builds the newest commit on `main`. If you already have yay or paru, `yay -S archix-git` works too. Once archix has made its first switch, it replaces them.
+`archix-git` builds the newest commit on `main`. If you already have yay or paru, `yay -S archix-git` works too. Once archix has made its first switch, it replaces them: plain pacman and yay can't change a system laid out as deployments.
 
 Check that it runs:
 
@@ -60,39 +61,26 @@ $ ARCHIX_BRANCH=<branch> makepkg -si
 
 ## Updates to archix itself
 
-archix is an AUR package on your system, so `archix init` declares it in `installed.lua` like your other explicitly installed packages, and locks it by AUR commit. From then on it updates like everything else: `archix update` and `archix switch`, or `archix -Syu`, build the new version in a clean chroot and install it in the same transaction as the rest. If an archix update turns out bad, rolling back the generation rolls back archix too.
+archix is an AUR package on your system, so `archix init` declares it in `installed.lua` like your other explicitly installed packages, and locks it by AUR commit. From then on it updates like everything else: `archix update` and `archix switch`, or `archix -Syu`, build the new version in a clean chroot and install it into the next deployment with the rest. Each deployment has its own archix, so booting an older one boots the archix it had.
 
-Don't update it with `makepkg` again.
-
-Each switch or rollback keeps a copy of the archix that started it next to its journal, so if it's cut off after installing an older archix, that older one can still hand the unfinished switch back; see [Upgrading archix itself](/docs/concepts/safety/#upgrading-archix-itself).
+Don't update it with `makepkg` again. See [Upgrading archix itself](/docs/concepts/safety/#upgrading-archix-itself).
 
 ## Removing archix
 
-`sudo archix eject` hands the machine back to plain pacman, mkinitcpio and systemd-boot: it writes ordinary boot entries for your kernels, makes one the default, and takes archix's own entries, hooks and boot service off. Your packages, files and services stay as they are. Then remove the package:
+`sudo archix eject` leaves plain Arch behind: the deployment you're running becomes the root's own `/usr`, `/etc`, `/opt` and `/boot`, a UKI that mkinitcpio's preset writes becomes the boot default, and archix's entries, hooks, services and `/archix` go. Your packages, files and services stay as they are. Then remove the package:
 
 ```console
 $ sudo archix eject
 $ sudo pacman -Rns archix-git
 ```
 
-See [`eject`](/docs/reference/cli/#eject) for what it changes, and its flags for putting original files back and deleting archix's state.
+The deployment you run has to be the current one, so reboot into a waiting switch first. An eject that's cut off finishes when you run it again. See [`eject`](/docs/reference/cli/#eject).
 
-## The static rescue binary
+## The static binary
 
-All three AUR packages also install a statically linked archix at `/usr/lib/archix/archix-static`. When archix manages booting, it adds an mkinitcpio hook that copies that binary into the initramfs, and gives the newest two generations an `archix rescue` boot entry. That entry repairs a system pacman can't repair, without a live USB.
-
-Rescue entries are only built when `/usr/lib/archix/archix-static` exists. All three AUR packages, `archix-git` included, install it. If you built archix by hand, build the static binary from the source tree yourself. With Arch's `rust` package, the musl target comes from `rust-musl`:
+All three AUR packages also install a statically linked archix at `/usr/lib/archix/archix-static`. archix's mkinitcpio hook copies it into every initramfs it builds, where it mounts the deployment the boot entry belongs to before the system starts. The first switch refuses without it. If you built archix by hand, build the static binary from the source tree yourself, before the first switch makes `/usr` read-only. With Arch's `rust` package, the musl target comes from `rust-musl`:
 
 ```console
 $ cargo build --release --target x86_64-unknown-linux-musl
 $ sudo install -Dm755 target/x86_64-unknown-linux-musl/release/archix /usr/lib/archix/archix-static
 ```
-
-The same binary also works from a live USB against the mounted system, since it has no dependencies:
-
-```console
-# mount /dev/nvme0n1p2 /mnt
-# /mnt/usr/lib/archix/archix-static rescue --root /mnt
-```
-
-You should rarely need that. See [Safety](/docs/concepts/safety/#rescue-mode).

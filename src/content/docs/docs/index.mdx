@@ -23,7 +23,7 @@ return {
 $ sudo archix switch
 ```
 
-That's the loop: edit Lua, switch, and roll back if you don't like the result. You don't start from an empty file, either: `sudo archix init` captures the machine you already have into a config and a lock that match it exactly.
+That's the loop: edit Lua, switch, reboot into the result, and roll back if you don't like it. You don't start from an empty file, either: `sudo archix init` captures the machine you already have into a config and a lock that match it exactly.
 
 ## Three pillars
 
@@ -58,11 +58,11 @@ You move forward when you choose to, with `archix update`. Read more in [The loc
 
 ### Reversible
 
-A switch first prepares everything (the lock, AUR builds, downloads, rendered files) without touching the system. Only then does it apply, step by step from a journal, so an interrupted switch can always be continued or rolled back. The result is a generation: the exact package set, the managed files, users and services, and the git commit of your config. If a generation turns out bad, `archix rollback` takes you back. If it won't boot, pick the previous entry in systemd-boot, and archix rolls back to it early in boot. Read more in [Generations and rollback](/docs/concepts/generations/) and [Safety](/docs/concepts/safety/), and see [Limitations and failure modes](/docs/concepts/limitations/) for where the guarantees stop. [Feature status](/docs/concepts/status/) says which features are shipped, partial or planned, and what tests each.
+A switch first prepares everything (the lock, AUR builds, downloads, rendered files) without touching the system. Then it builds a complete new deployment beside the running one and commits it in one step, designed so a power cut at any moment leaves the old system or the new one, never a mix; the new one starts at the next boot. The result is a generation: the exact package set, the managed files, users and services, and the git commit of your config. If a generation turns out bad, `archix rollback` takes you back. If it won't boot, pick the previous entry in systemd-boot, and it boots with the same packages, kernel and `/etc` it had, with nothing reinstalled. Read more in [Atomic deployments](/docs/concepts/atomicity/), [Generations and rollback](/docs/concepts/generations/) and [Safety](/docs/concepts/safety/), and see [Limitations and failure modes](/docs/concepts/limitations/) for where the guarantees stop. [Feature status](/docs/concepts/status/) says which features are shipped, partial or planned, and what tests each.
 
 ## How it relates to pacman, yay and NixOS
 
-**pacman** still does the installing. archix reads pacman's local database and runs every transaction through the `pacman` binary. You can keep using `pacman -Syu` whenever you like. A pacman hook notices, and the next switch asks whether to adopt the change into the lock or revert to it. See [pacman and yay](/docs/concepts/pacman-and-yay/).
+**pacman** still does the installing. archix runs every transaction through the `pacman` binary, inside the deployment it's building. The running system's `/usr` is read-only, so plain `pacman -S` and `-Syu` don't change it any more; `pacman -Q` and `-Ss` work as always. See [pacman and yay](/docs/concepts/pacman-and-yay/).
 
 **yay and paru** are replaced. archix is an AUR helper with the flags you already type: `archix -S`, `archix -Ss`, `archix -Syu`, `archix -R`, and bare `archix` for a full update. The difference is that AUR build recipes are shown for review, locked by commit, built in a clean chroot and added to your config. See [The AUR](/docs/guides/aur/).
 

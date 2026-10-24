@@ -993,6 +993,15 @@ Where the EFI system partition is mounted; not /boot, which each deployment keep
 
 The first switch refuses an ESP at or inside `/boot`: ``the ESP is mounted at /boot, in /boot, which each deployment keeps its own copy of; mount it at /efi instead (in /etc/fstab, and boot.esp = "/efi"), then switch again``. To move it, mount the ESP at `/efi` in `/etc/fstab` instead of `/boot`, and copy the kernel, initramfs and microcode images it held into the now empty `/boot` on the root filesystem, where their packages expect them; `EFI/` and `loader/` stay on the ESP.
 
+archix writes the ESP's line in each deployment's `/etc/fstab` so that a power cut can't leave it broken or readable by everyone:
+
+- It's mounted on access and unmounted after a minute idle (`x-systemd.automount,x-systemd.idle-timeout=60`), so a forced reboot rarely catches it mounted.
+- It's checked at boot (`fs_passno` 2), so `fsck.fat` repairs a cluster chain a power cut left half freed. Without the check, the kernel remounts the ESP read-only at the first broken chain.
+- It's readable by root only (`fmask=0077,dmask=0077`), unless the line already sets `umask`, `fmask` or `dmask`. systemd-boot's random seed lives on the ESP.
+- An ESP with no line gets one, `UUID=… /efi vfat umask=0077,x-systemd.automount,x-systemd.idle-timeout=60 0 2`, as systemd's own automatic mount can't put it at `/efi` once each deployment binds its own `/boot`.
+
+When the config manages `/etc/fstab`, archix leaves it alone and the switch warns instead, for each of these it finds missing.
+
 ### `boot.kernel`
 
 | | |

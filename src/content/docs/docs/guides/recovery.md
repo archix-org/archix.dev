@@ -22,13 +22,16 @@ It boots the kernel of the newest deployment that booted fine, with an initramfs
 | `password USER [--all]` | Sets a new password for USER in current's `/etc`, or in every deployment's with `--all`. |
 | `restore-etc PATH` | Puts a packaged file such as a PAM or sudoers file back from the package cache. |
 | `eject` | Ejects to plain Arch, as `archix eject` does. |
+| `open DEVICE [NAME]` | Opens a LUKS volume by its passphrase, never a TPM or other token. |
 | `shell`, `reboot`, `poweroff` | |
 
-An encrypted root has to be opened first: run `shell`, `cryptsetup open`, then give the mapped device to any command with `--root /dev/mapper/…`. The rescue entry never gets a TPM policy, so a TPM-bound volume always asks for its passphrase there.
+Before its prompt, the rescue entry asks for a login: the password of root or of a member of `wheel` (or `sudo`), checked against the current deployment's `/etc/shadow`. Arch locks root by default, so on most machines that's your own user's password. It allows three tries per boot, two and then four seconds apart, then restarts the machine; nothing in it falls back to a shell. If root is locked and no wheel user has a password, it opens nothing and says so; boot a deployment and set one with `passwd`, or use a live USB as below.
 
-The rescue entry is a root shell for whoever sits at the console, as a live USB would be; with Secure Boot it's signed like every other entry. Turn it off with [`boot.rescue_entry = false`](/docs/reference/options/#bootrescue_entry), for example on a machine whose firmware is locked against other boot media.
+On an encrypted root it asks for the LUKS passphrase first, then still asks for the login, because on a locked-down machine knowing the disk passphrase shouldn't make someone root. It never unlocks with a TPM, FIDO2 or PKCS#11 token: the rescue image has no token plugins and its boot image no PCR policy, so a volume a TPM opens, even one bound only to PCR 7, asks for its passphrase there. `open DEVICE [NAME]` opens other volumes the same way.
 
-It's tested by the `rescue` VM suite on every release: every deployment's systemd is broken, then every deployment's root password replaced and an entry deleted, and the machine is brought back through the rescue prompt alone each time.
+Whoever logs in can do anything, including resetting passwords in every deployment. With Secure Boot on, the rescue entry's kernel command line is part of its signed image and can't be changed from the boot menu. Without Secure Boot anyone at the console can edit it, as they could boot a live USB. If root and wheel passwords are shared more widely than you'd like, turn it off with [`boot.rescue_entry = false`](/docs/reference/options/#bootrescue_entry).
+
+It's tested by the `rescue` VM suite on every release: every deployment's systemd broken, then root's password lost and an entry deleted, each repaired through the rescue alone; then, under Secure Boot with root locked, a wrong and an empty password get no prompt or shell, a wheel user's password gets in, and a volume the TPM opens asks the rescue for its passphrase.
 
 ## With a live USB
 

@@ -383,7 +383,7 @@ On a system not laid out as deployments yet, before the first switch, it does th
 
 ### `rescue`
 
-The prompt the [rescue entry](/docs/guides/recovery/#without-a-live-usb-the-rescue-entry) opens, from an initramfs that mounts nothing; on a running system it refuses. Its commands are `list`, `use N`, `check [--repair-btrfs]`, `verify [--repair]`, `password USER [--all]`, `restore-etc PATH`, `eject`, `shell`, `reboot` and `poweroff`; each takes `--root`, `--rootflags` and `--esp` when the defaults it finds don't fit, such as a root opened with `cryptsetup` in the shell. See [Recovering a broken system](/docs/guides/recovery/).
+The prompt the [rescue entry](/docs/guides/recovery/#without-a-live-usb-the-rescue-entry) opens, from an initramfs that mounts nothing; on a running system it refuses. It first asks for the password of root or of a wheel or sudo user from the current deployment's `/etc/shadow` (three tries, then the machine restarts), and on an encrypted root for the LUKS passphrase before that. Its commands are `list`, `use N`, `check [--repair-btrfs]`, `verify [--repair]`, `password USER [--all]`, `restore-etc PATH`, `eject`, `open DEVICE [NAME]` (a LUKS volume by passphrase, never a token), `shell`, `reboot` and `poweroff`; each takes `--root`, `--rootflags` and `--esp` when the defaults don't fit, such as `--root /dev/mapper/NAME` after `open`. Run from a live USB with `--root-dir`, it asks for no login. See [Recovering a broken system](/docs/guides/recovery/).
 
 ### `mount-deployment`
 

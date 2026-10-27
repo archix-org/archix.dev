@@ -31,7 +31,7 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **A rollback keeps today's people, not package accounts.** `/etc/shadow` is part of each deployment's `/etc`. A rollback, and booting a deployment other than `current`, carry root's and regular users' entries and passwords into it by name, but package accounts stay as that deployment has them, and an account whose number another name has there isn't carried; the rollback names it.
 
-**Some failures still need a live USB.** Rolling back to a kept deployment needs only the boot menu. A damaged ESP, a broken systemd-boot, or a bug in archix's initramfs hook that keeps every deployment from mounting still needs a live USB to repair.
+**Some failures still need a live USB.** Rolling back to a kept deployment needs only the boot menu, and when no deployment boots, the [rescue entry](/docs/guides/recovery/#without-a-live-usb-the-rescue-entry) repairs filesystems, repoints current, resets passwords or ejects, without one. A live USB is still needed when the rescue entry can't start: an ESP the firmware can't read or that was wiped, a broken systemd-boot, Secure Boot refusing everything, or a machine that hasn't completed a switch since the rescue entry shipped. The steps are in [With a live USB](/docs/guides/recovery/#with-a-live-usb).
 
 ## Rollback
 
@@ -59,7 +59,7 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 ## Secure Boot and the TPM
 
-**Old signed boot entries stay bootable unless you revoke them, and revoking is experimental.** A copy of any UKI archix signed boots wherever it's put. [`archix secure-boot revoke`](/docs/guides/secure-boot/#revoking-old-boot-images) adds the ones archix no longer uses to `dbx`; it's tested on OVMF, not on real firmware, whose variable stores vary. It needs sbctl's KEK as a file, adds at most 128 entries, and leaves old signed copies of systemd-boot alone. SBAT isn't used: without shim, nothing enforces it.
+**Old signed boot entries stay bootable unless you revoke them, and revoking is experimental.** A copy of any UKI archix signed boots wherever it's put. [`archix secure-boot revoke`](/docs/guides/secure-boot/#revoking-old-boot-images) adds the ones archix no longer uses to `dbx`; it's tested on OVMF, not on real firmware, whose variable stores vary. It needs sbctl's KEK as a file, adds at most 128 entries, about a year or two of weekly kernel updates, past which old images stay bootable until a new db key retires them ([The dbx ceiling](/docs/guides/secure-boot/#the-dbx-ceiling)), and leaves old signed copies of systemd-boot alone. SBAT can't stand in: only shim enforces it ([Why not SBAT](/docs/guides/secure-boot/#why-not-sbat)).
 
 **PCR 11 bindings break when the UKI changes; signed policies are experimental.** A switch that changes the kernel, initramfs or command line writes a new UKI, which measures differently into PCR 11, so a secret sealed to PCR 11's values has to be re-sealed. With systemd's PCR signing key in place, archix signs a policy into every UKI for secrets bound to the key ([TPM-bound secrets](/docs/guides/secure-boot/#tpm-bound-secrets)). A VM suite unlocks a LUKS volume bound that way with swtpm, under every UKI archix signed with the key and, after `archix secure-boot rotate-pcr-key`, only under those signed with the new one, but no test has used a real TPM yet, so don't rely on it for a disk you can't open otherwise.
 

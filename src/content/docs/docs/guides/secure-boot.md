@@ -154,11 +154,21 @@ Pick it in the boot menu when you want it. It covers lockdown, kexec, the BPF LS
 Revoking is tested on OVMF, QEMU's firmware, not on real machines, whose variable stores differ. Try it where you can reach the firmware settings to clear `dbx` if something goes wrong.
 :::
 
-Every UKI archix signed boots wherever it's put, including ones `gc` deleted, with the older kernel and initramfs they carry, unless the firmware's `dbx` lists them. With your own keys there's no shim to enforce SBAT, so `dbx` is what revokes: `archix secure-boot revoke` adds the hashes of the UKIs archix signed and no longer uses, and [`boot.revoke_unused = true`](/docs/reference/options/#bootrevoke_unused) does that after every switch.
+Every UKI archix signed boots wherever it's put, including ones `gc` deleted, with the older kernel and initramfs they carry, unless the firmware's `dbx` lists them. There's no shim to enforce SBAT ([why not SBAT](#why-not-sbat)), so `dbx` is what revokes: `archix secure-boot revoke` adds the hashes of the UKIs archix signed and no longer uses, and [`boot.revoke_unused = true`](/docs/reference/options/#bootrevoke_unused) does that after every switch.
 
 It only ever appends: the update is signed with your KEK and written with the firmware's append flag, so the entries Windows and Microsoft's own `dbx` updates put there stay. archix's entries carry its own owner GUID, and it caps them at 128, since `dbx` lives in the same small NVRAM store Windows needs room in for its updates. It never revokes a hash any `.efi` file on the ESP has, and once it has revoked anything, every UKI it builds gets a random `.archix` section, so a rebuild can never come out identical to a revoked one.
 
 It needs the KEK as a file, as sbctl creates it by default, and `efitools` for the signed write. The `dbx` from before is saved in `/var/lib/archix/boot/dbx-before-<time>`.
+
+### The dbx ceiling
+
+Each revoked hash takes 48 bytes, plus a 28-byte header per write, so archix's 128 entries take about 6 KiB: a year or two of weekly kernel updates. It writes only while 64 KiB of variable space would be left over, since firmware often keeps the old copy of a variable until it reclaims space, usually at a reboot. On QEMU's firmware, free space went from 99,524 to 74,248 bytes while archix went from 0 to 128 entries. A per-variable size limit can bite first, and Linux doesn't show it.
+
+`revoke` warns from 96 entries. At the cap, or short of space, it refuses and changes nothing, and a switch with `revoke_unused` still commits. archix never drops an entry to make room, since that would make any kept copy of that image bootable again. Past the cap, images archix stops using stay bootable for anyone who kept a copy; only a new db key retires them all, and archix doesn't rotate the db key for you yet. If you rotate keys by hand, `sbctl rotate-keys` doesn't re-sign archix's files: sign every `.efi` under `EFI/archix`, `EFI/archix-rescue`, `EFI/Linux` and `EFI/systemd`, and `EFI/BOOT/BOOTX64.EFI`, before rebooting with Secure Boot on.
+
+### Why not SBAT
+
+SBAT revokes by generation number instead of hash, without a size ceiling, but only shim enforces it: the `SbatLevel` variable is boot-services-only and written by shim from levels built into it, and systemd-boot and systemd-stub declare `.sbat` sections without ever checking one. archix's chain is firmware → systemd-boot → UKI, signed with your own keys and no shim, so bumping a generation there would revoke nothing. The UKIs still carry the `.sbat` section `ukify` adds.
 
 ## TPM-bound secrets
 

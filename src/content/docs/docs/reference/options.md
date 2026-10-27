@@ -1143,6 +1143,16 @@ Also write an 'archix protected' entry for each deployment with the kernel comma
 
 The entry is `archix-<n>-protected.conf`, kept with its deployment and signed like the rest. It adds `lockdown=integrity sysctl.kernel.kexec_load_disabled=1 lsm=landlock,lockdown,yama,integrity,bpf iommu.passthrough=0` to the command line. See [The protected entry](/docs/guides/secure-boot/#the-protected-entry).
 
+### `boot.rescue_entry`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `true` |
+| Declared in | `<archix>/boot.lua` |
+
+Keep an 'archix rescue' entry in the boot menu, after the deployments and never the default. It boots the kernel of the newest deployment that booted fine, with an initramfs of its own that mounts no deployment and opens [`archix rescue`](/docs/reference/cli/#rescue), so a system no deployment boots can be repaired without a live USB. It's refreshed at each switch when its source changes, kept in `EFI/archix-rescue/`, signed with Secure Boot like the rest, never given a TPM policy, and never removed by `gc` or revoked while in use. It's a root shell for whoever is at the console, as a live USB is; turn it off on a machine whose firmware is locked against other boot media. See [Recovering a broken system](/docs/guides/recovery/).
+
 ## Removed options
 
 These options are gone. Setting one is a config error that names what replaced it, such as `option was removed (set in lua/hosts/desktop/init.lua): every switch builds a new deployment beside the running one, so no snapshot is taken; deployments.keep sets how many stay bootable`.

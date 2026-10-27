@@ -280,6 +280,8 @@ archix only edits `installed.lua`, never your own Lua. A package declared elsewh
 
 Make an earlier generation current, the previous one or the one you name. It boots at the next restart.
 
+Rolling back to the current generation rewrites its boot entry, default and fallback boot image when the ESP has none, as after the ESP was lost, and changes nothing else.
+
 ```console
 $ sudo archix rollback
 generation 41 (snapshot 2026-10-09) still has its deployment: rolling back points current and the boot default at it, nothing is reinstalled
@@ -377,7 +379,15 @@ On a system not laid out as deployments yet, before the first switch, it does th
 | `--restore-originals` | Put back the files archix replaced, from its backups, and delete the ones it created, as taking them out of the config would; `/etc/kernel/cmdline` stays, as mkinitcpio reads the kernel command line from it. An eject that was cut off keeps the choice it started with. |
 | `--purge` | Also delete `/var/lib/archix` and `/var/cache/archix`. |
 
-`archix recover` and `archix rescue` were removed with the move to deployments; running either says why and exits.
+`archix recover` was removed with the move to deployments; running it says why and exits.
+
+### `rescue`
+
+The prompt the [rescue entry](/docs/guides/recovery/#without-a-live-usb-the-rescue-entry) opens, from an initramfs that mounts nothing; on a running system it refuses. Its commands are `list`, `use N`, `check [--repair-btrfs]`, `verify [--repair]`, `password USER [--all]`, `restore-etc PATH`, `eject`, `shell`, `reboot` and `poweroff`; each takes `--root`, `--rootflags` and `--esp` when the defaults it finds don't fit, such as a root opened with `cryptsetup` in the shell. See [Recovering a broken system](/docs/guides/recovery/).
+
+### `mount-deployment`
+
+Run from a live USB as a deployment's static archix, `ROOT/archix/deploy/<n>/usr/lib/archix/archix-static mount-deployment ROOT [N]`: binds deployment N's `/usr`, `/opt` and `/boot` read-only and its `/etc`, pacman database and DKMS state read-write over the mounted root, so `arch-chroot ROOT` can run archix. N defaults to current; a deployment missing a tree is refused, with the complete ones listed. `umount -R ROOT` undoes it. See [With a live USB](/docs/guides/recovery/#with-a-live-usb).
 
 ### `secure-boot`
 

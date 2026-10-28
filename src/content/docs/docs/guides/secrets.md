@@ -118,7 +118,7 @@ files = {
 },
 ```
 
-**A path under `/run`.** For apps that won't follow a link, `path` puts the secret at a file under `/run` at each boot, the ramfs file bound over it, so the value still never sits on `/run`'s swappable tmpfs. NetworkManager reads profiles from `/run/NetworkManager/system-connections`, and an edit in nmcli stays there instead of writing plain text into `/etc`:
+**A path under `/run`.** For apps that won't follow a link, `path` puts the secret at a file under `/run` at each boot, in a ramfs mounted on that file's directory, so the value never sits on `/run`'s swappable tmpfs, and an app that saves by writing a new file and renaming it over the old one edits it in place. NetworkManager reads profiles from `/run/NetworkManager/system-connections`, and an edit with nmcli stays there, in the ramfs, instead of writing plain text into `/etc`. A directory that already holds other files at boot gets the ramfs file bound over the path instead, which an app can read but not replace:
 
 ```lua
 secrets.items.home_wifi = {
@@ -160,7 +160,7 @@ $ sudo archix switch
 error: secret wg0 isn't encrypted to this machine (age1qyqszqgp...3290gq); run `archix secrets rekey` where an admin key is available, or switch with --without-secrets; nothing was changed
 ```
 
-With the values in memory, it also refuses a managed file that holds one, and, just before it commits, looks for each value of 8 bytes or more in the new deployment's `/etc` and its UKIs and initramfs images, compressed streams opened. A find in a boot image or a managed file fails the switch; in `/etc`, a value of 16 bytes or more fails it and a shorter one only warns, since it may be chance: `secret pin's value, under 16 bytes, also occurs in /etc/archix-test-pin; that may be chance, but check that nothing copied it there, and prefer a longer secret`. The deployment's `/etc/shadow` is the exception for password hashes. That catches a value copied into the initramfs by mkinitcpio's `FILES`, or written into a config file by hand.
+The decryption and these scans run with all of archix's memory locked, the age library's own buffers included, so none of it can be swapped out. With the values in memory, it also refuses a managed file that holds one, and, just before it commits, looks for each value of 8 bytes or more in the new deployment's `/etc` and its UKIs and initramfs images, compressed streams opened. A find in a boot image or a managed file fails the switch; in `/etc`, a value of 16 bytes or more fails it and a shorter one only warns, since it may be chance: `secret pin's value, under 16 bytes, also occurs in /etc/archix-test-pin; that may be chance, but check that nothing copied it there, and prefer a longer secret`. The deployment's `/etc/shadow` is the exception for password hashes. That catches a value copied into the initramfs by mkinitcpio's `FILES`, or written into a config file by hand.
 
 `archix diff` and the switch name each secret and what uses it, never its value: `secret     wg0: new (/etc/wireguard/wg0.conf)`, `changed`, `re-encrypted only` (the same value, encrypted again) or `removed`. Telling `changed` from `re-encrypted only` needs root and the machine's key; without them `diff` says it can't tell.
 
@@ -170,7 +170,7 @@ A regular file already at a secret's path, as on a machine you set up by hand, i
 
 Each deployment carries its secrets' ciphertexts and a manifest in `/usr/lib/archix/secrets`, and needs nothing else to boot: a rollback, an older entry in the boot menu, or a rebuilt dropped generation decrypts the values that deployment was built with. Rebuilding one needs no identity, so it works from a live USB.
 
-`archix-secrets.service` runs early, after `/var` is mounted, swap is on and system users exist, and before `sysinit.target`, so services and first-boot hooks find the secrets in place. It mounts a `ramfs` at `/run/archix/secrets` (0711, so names can't be listed), which never swaps, writes each secret whole or not at all, owner and mode set before a byte is in it, renders the templates, binds the `path` files and sets the password hashes. It runs with its memory locked, out of core dumps, and with no core file limit, so a crash leaves nothing behind. Nothing is decrypted again until the next boot.
+`archix-secrets.service` runs early, after `/var` is mounted, swap is on and system users exist, and before `sysinit.target`, so services and first-boot hooks find the secrets in place. It mounts a `ramfs` at `/run/archix/secrets` (0711, so names can't be listed), which never swaps, writes each secret whole or not at all, owner and mode set before a byte is in it, renders the templates, puts the `path` files in place and sets the password hashes. It runs with its memory locked, out of core dumps, and with no core file limit, so a crash leaves nothing behind. Nothing is decrypted again until the next boot.
 
 A secret that can't be decrypted is left out and named, and the others are written; what uses it fails closed: a dangling link, a missing `EnvironmentFile=` or credential. The unit fails, a login note and `archix status` say why:
 
@@ -223,6 +223,10 @@ Plain Arch has nothing to decrypt secrets at boot, so [`archix eject`](/docs/ref
 - `--secrets materialize` writes each secret, as this boot decrypted it, to its path as a real file with its owner and mode, as plain Arch keeps credentials. Units that read `/run/archix/secrets` lose theirs.
 
 The [rescue entry](/docs/guides/recovery/#without-a-live-usb-the-rescue-entry) never decrypts anything, so its `eject` drops them.
+
+## Builds never see them
+
+An AUR package's PKGBUILD is code from the internet that runs during a switch. Every build, in the clean chroot, on the host as the build user, or in the build view of a laid-out system, runs where `/run/archix/secrets` and `/var/lib/archix/secrets` are covered by an empty, unreadable tmpfs or don't exist, whatever their permissions, and no value is ever in a build's environment or command line.
 
 ## Testing
 

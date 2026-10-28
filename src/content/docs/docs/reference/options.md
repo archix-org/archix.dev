@@ -1006,7 +1006,7 @@ Secrets by name (letters, digits, `-` and `_`), each decrypted at every boot of 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
 | `file` | `str` | *required* | The age file in the config directory, such as `secrets/wg0.age`; [`archix secrets edit`](/docs/reference/cli/#secrets) writes it. |
-| `path` | `null or str` | `null` | Also put the secret at this file under `/run` (outside `/run/archix`) at each boot, the ramfs file bound over it, for apps that refuse a link, such as a NetworkManager profile in `/run/NetworkManager/system-connections`. |
+| `path` | `null or str` | `null` | Also put the secret at this file under `/run` (outside `/run/archix`) at each boot, in a ramfs mounted on its directory (so an app's save by rename stays there), for apps that refuse a link, such as a NetworkManager profile in `/run/NetworkManager/system-connections`. |
 | `owner` | `str` | `"root"` | |
 | `group` | `str` | `"root"` | |
 | `mode` | `str` | `"0400"` | Octal permissions. |

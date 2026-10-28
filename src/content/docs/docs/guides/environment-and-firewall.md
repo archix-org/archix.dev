@@ -151,6 +151,48 @@ Everything arriving on `tailscale0` is accepted, so your tailnet reaches every s
 
 VPNs that route asymmetrically, such as Tailscale with an exit node or subnet routes, need `check_reverse_path = "loose"`; with `"strict"`, their replies can look spoofed. Ports have to be 1 to 65535, and a range needs `from` no greater than `to`; otherwise `diff` and `switch` stop with `firewall ports must be 1-65535, not 70000` or `firewall port ranges need from <= to, both 1-65535`.
 
+### Services by name
+
+Instead of looking up ports, name the services, as NixOS's `openFirewall` options do:
+
+```lua title="lua/hosts/desktop/init.lua"
+return {
+  firewall = {
+    enable = true,
+    allowed_services = { "ssh", "syncthing", "kdeconnect", "steam" },
+  },
+}
+```
+
+archix knows the ports of two dozen common services ([the list](/docs/reference/options/#firewallservice_ports)), and each one's rules carry its name, so `sudo nft list ruleset` says why a port is open. Unlike NixOS's, the ones meant for your own network, here Syncthing, KDE Connect and Steam's Remote Play and game transfers, answer only private and link-local addresses, over IPv4 and IPv6; SSH answers everyone:
+
+```nft
+    ip saddr @archix_lan4 tcp dport { 1714-1764 } accept comment "kdeconnect"
+    ip6 saddr @archix_lan6 tcp dport { 1714-1764 } accept comment "kdeconnect"
+    tcp dport { 22 } accept comment "ssh"
+    ip saddr @archix_lan4 tcp dport { 27036, 27037, 27040 } accept comment "steam"
+    ip6 saddr @archix_lan6 tcp dport { 27036, 27037, 27040 } accept comment "steam"
+    ip saddr @archix_lan4 tcp dport { 22000 } accept comment "syncthing"
+    ip6 saddr @archix_lan6 tcp dport { 22000 } accept comment "syncthing"
+    ...
+```
+
+That keeps them off the internet, but not off a café's wifi, whose other guests have private addresses too; [the reference](/docs/reference/options/#firewallservice_ports) says what `"lan"` covers and how to change a service's `sources`.
+
+A service of your own, such as a game server, goes in `service_ports` beside the built-in ones, open to any source unless it says `sources = "lan"`, and the same name in `service_ports` replaces a built-in one, say for sshd on another port:
+
+```lua
+firewall = {
+  allowed_services = { "ssh", "valheim" },
+  service_ports = {
+    valheim = { udp_ranges = { { from = 2456, to = 2458 } } },
+    ssh = { tcp = { 2222 } },
+  },
+},
+```
+
+A misspelled name stops `diff` and `switch` with the names archix knows: `firewall.allowed_services names "stean", which firewall.service_ports doesn't define; known services: alvr, gsconnect, ...`.
+
 ### Extra nftables rules
 
 For anything the options don't cover, write nftables rules. `extra_input_rules` are added to the end of the input chain, after everything above:
@@ -201,3 +243,19 @@ Setting it in your config disables `nftables.service` in the next deployment, an
 ```lua
 services = { ["nftables.service"] = false },
 ```
+
+### ufw and firewalld
+
+ufw and firewalld are firewalls too, with their own tables and their own drop policy, and CachyOS ships ufw enabled. Beside them, a port archix opens is still dropped by theirs, so archix refuses to build a deployment with `firewall.enable` that would also start one: when your config enables `ufw.service` or `firewalld.service`, or the running system has one enabled and your config doesn't disable it (the new deployment keeps what's enabled in `/etc`). Nothing is changed:
+
+```console
+error: ufw.service would run beside the archix firewall (it's enabled on this system, and the new deployment keeps it), and its rules would still drop what the firewall options open; set services["ufw.service"] = false to use archix's firewall, or firewall.enable = false to keep ufw; nothing was changed
+```
+
+To move to archix's firewall, disable it in the config; it stops being started from the next boot, when archix's rules load:
+
+```lua
+services = { ["ufw.service"] = false },
+```
+
+Only enabled units count: one started by hand and not enabled doesn't start at the next boot, which is when archix's rules take effect.

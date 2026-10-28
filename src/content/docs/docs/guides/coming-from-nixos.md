@@ -48,6 +48,7 @@ You already know the ideas behind archix: a declarative config, a lockfile, gene
 | `networking.firewall.enable` | `firewall.enable` |
 | `networking.firewall.allowedTCPPorts`, `allowedUDPPorts` | `firewall.allowed_tcp_ports`, `allowed_udp_ports` |
 | `networking.firewall.allowedTCPPortRanges`, `allowedUDPPortRanges` | `firewall.allowed_tcp_port_ranges`, `allowed_udp_port_ranges` |
+| a service's `openFirewall`, such as `services.syncthing.openDefaultPorts` | `firewall.allowed_services = { "syncthing" }` |
 | `networking.firewall.trustedInterfaces` | `firewall.trusted_interfaces` |
 | `networking.firewall.allowPing` | `firewall.allow_ping` |
 | `networking.firewall.checkReversePath` | `firewall.check_reverse_path` |

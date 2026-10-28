@@ -26,7 +26,7 @@ The pacman-style aliases do the same:
 | `archix -S <pkg>` | `archix install <pkg>` |
 | `archix -Ss <terms>` | `archix search <terms>` |
 | `archix -R <pkg>` | `archix remove <pkg>` |
-| `archix -Syu` | `archix upgrade`: `pacman -Syu`, adopt, newest AUR recipes, switch |
+| `archix -Syu` | `archix upgrade`: newest snapshot and AUR recipes, then switch |
 | `archix` | `archix -Syu` |
 | `archix <terms>` | Search, pick from a numbered list, and install, like `yay <terms>` |
 
@@ -36,7 +36,7 @@ Search covers the locked snapshot's repos and the AUR's package list, with votes
 
 ## Where `archix install` writes
 
-`archix install` doesn't just install. It declares. The package name goes into `lua/hosts/<host>/installed.lua`, a plain Lua file archix imports automatically and you can edit too, and then archix switches. The next switch, on this machine or a fresh one, installs it again. If you abort or the switch fails, the file is put back as it was.
+`archix install` doesn't just install. It declares. The package name goes into `lua/hosts/<host>/installed.lua`, a plain Lua file archix imports automatically and you can edit too, and then archix switches, so the package is there after the next reboot. The next switch, on this machine or a fresh one, installs it again. If you abort or the switch fails, the file is put back as it was.
 
 To put a package somewhere shared instead, pass a directory under the config's `lua/`:
 
@@ -57,7 +57,7 @@ return {
 }
 ```
 
-To try a package without declaring it, `sudo archix install --temp <pkg>` installs it, built and reviewed the same way, and the next switch removes it unless you've declared it by then.
+To try a package without declaring it, `sudo archix install --temp <pkg>` installs it into a new deployment, built and reviewed the same way, and the next switch leaves it out unless you've declared it by then.
 
 ## How AUR packages are locked
 
@@ -116,7 +116,7 @@ Review happens wherever recipes enter the lock: `install`, `lock`, `update`, `up
 
 ## Clean chroot builds
 
-Every AUR package is built with devtools' `makechrootpkg` in a clean chroot at `/var/lib/archix/chroot`, as the unprivileged `archix-build` user. The chroot is created with `base-devel` at the host's locked snapshot date, and moved whenever the lock's date changes. It's created again from scratch when devtools changes its chroot format. AUR dependencies are built first and passed in. AUR builds need `devtools` and `git` installed.
+Every AUR package is built with devtools' `makechrootpkg` in a clean chroot at `/var/lib/archix/chroot`, as the unprivileged `archix-build` user. The chroot is created with `base-devel` at the host's locked snapshot date, running the chroot's own pacman hooks rather than the running system's, and moved whenever the lock's date changes. It's created again from scratch when devtools changes its chroot format. AUR dependencies are built first and passed in. AUR builds need `devtools` and `git` installed.
 
 ```console
 :: creating the build chroot at the 2026-10-09 snapshot
@@ -136,7 +136,7 @@ The chroot only has the official repos. Your third-party repos stay out of it, s
 
 ### `build_on_host`
 
-Some packages don't build in a chroot: they need hardware access, a running service, or files the chroot doesn't have. List them in [`aur.build_on_host`](/docs/reference/options/), and archix builds them with `makepkg` on the host instead. Their build dependencies are installed from the locked snapshot and removed again afterwards. Use it as an escape hatch, not a default: a host build depends on the state of your machine.
+Some packages don't build in a chroot: they need hardware access, a running service, or files the chroot doesn't have. List them in [`aur.build_on_host`](/docs/reference/options/#aurbuild_on_host), and archix builds them with `makepkg` on the host instead, in a throwaway copy of the current deployment staged like a new one: their build dependencies are installed into that copy from the locked snapshot, and the copy is discarded afterwards, so the running system doesn't change. Use it as an escape hatch, not a default: a host build depends on the state of your machine.
 
 ```lua
 aur = { build_on_host = { "some-driver-dkms" } },
@@ -154,7 +154,7 @@ aur = { skip_check = { "helm-ls" } },
 
 Built packages are cached in `/var/cache/archix/pkg`, named by recipe commit and snapshot date, so every build of a version keeps its own file. If neither changed, archix reuses the built package instead of building again. Each generation records the sha256 of the file it installed, so rollback puts back that exact file, even when a later build has the same version.
 
-To build once for several machines, push the builds to a [package cache](/docs/concepts/lockfile/#package-caches) with `archix cache push`, and list it in [`package_caches`](/docs/reference/options/#package_caches) on the others. A machine that finds a build of the same recipe commit at the same snapshot there installs it instead of building: `:: using zen-browser-bin's build from the package cache at file:///mnt/nas/archix/aur-builds/zen-browser-bin/cd6266c6847e61c71facdd7dbf869b5cf64359be-2026-10-09.json`. It has to be the build the lock records, by `sha256`; until a machine has built it, that build is trusted as the cache's record says, so list only caches you control. [`package_cache_push`](/docs/reference/options/#package_cache_push) has the building machine fill the cache after every switch.
+To build once for several machines, push the builds to a [package cache](/docs/concepts/lockfile/#package-caches) with `archix cache push`, and list it in [`package_caches`](/docs/reference/options/#package_caches) on the others. A machine that finds a build of the same recipe commit at the same snapshot there installs it instead of building: `:: using zen-browser-bin's build from the package cache at file:///mnt/nas/archix/aur-builds/zen-browser-bin/cd6266c6847e61c71facdd7dbf869b5cf64359be-2026-10-09.json`. It has to be the build the lock records, by `sha256`; until a machine has built it, that build is trusted as the cache's record says, so list only caches you control. [`package_cache_push`](/docs/reference/options/#package_cache_push) has the building machine fill the cache after every switch. A machine that builds a package itself instead gets the same code in a different file, and says so; [`aur.require_locked_build`](/docs/reference/options/#aurrequire_locked_build) refuses that and insists on the recorded build.
 
 A snapshot move rebuilds a package archix built, at the same commit, exactly when a library it links disappears in the switch: when a package the switch changes or removes stops shipping one of the ELF sonames the build needs. Otherwise it keeps the build it has. See [Rebuilds at the same version](/docs/guides/local-pkgbuilds-and-patches/#rebuilds-at-the-same-version).
 
@@ -162,4 +162,4 @@ When a locked commit can't be built any more, because it's gone from the package
 
 ## How installs run
 
-archix reads pacman's local database directly and runs every transaction through the `pacman` binary. It doesn't reimplement pacman, so hooks, `pacman.conf` options and the local database behave as you expect.
+archix reads pacman's local database directly and runs every transaction through the `pacman` binary, inside the new [deployment](/docs/concepts/atomicity/) it's building. It doesn't reimplement pacman, so hooks, `pacman.conf` options and the local database behave as you expect.

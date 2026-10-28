@@ -79,18 +79,19 @@ const generations = [
 		['~ lib32-mesa 1:25.2.4-1 -> 1:25.3.0-1'],
 		['212 packages locked'],
 		['sudo archix switch --noconfirm', 'cmd'],
-		[':: installing packages'],
-		[':: writing the boot entry'],
-		['switched to generation 42 (snapshot 2026-10-15)', 'ok'],
+		[':: building deployment 42 from deployment 41'],
+		['switched to generation 42 (snapshot 2026-10-15); its deployment boots at the next restart', 'ok'],
+		['sudo reboot', 'cmd'],
 		['steam', 'cmd'],
 		['Segmentation fault (core dumped)', 'bad'],
 	];
 	const rollback: Line[] = [
 		['sudo archix rollback', 'cmd'],
-		['roll back to generation 41 (snapshot 2026-10-09) with 2 changes? [Y/n] y'],
-		['rolled back to generation 41 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config', 'ok'],
+		['roll back to generation 41 (snapshot 2026-10-09)? [Y/n] y'],
+		['rolled back to generation 41 (snapshot 2026-10-09); it boots at the next restart. archix.lock is unchanged, so the next `archix switch` returns to the config', 'ok'],
+		['sudo reboot', 'cmd'],
 		['steam', 'cmd'],
-		['# launches fine. generation 42 is kept until gc ages it out', 'note'],
+		['# launches fine. nothing was reinstalled: deployment 41 was still there', 'note'],
 	];
 
 	const root = document.querySelector<HTMLElement>('[data-demo]')!;
@@ -147,10 +148,10 @@ const generations = [
 			} else if (state !== 'idle') return;
 			state = 'busy';
 			updateButton.disabled = true;
-			await print(update.slice(0, 9));
+			await print(update.slice(0, 8));
 			gen42.classList.remove('future');
 			moveAnchor(4, 42);
-			await print(update.slice(9));
+			await print(update.slice(8));
 			state = 'updated';
 			rollbackButton.disabled = false;
 			rollbackButton.focus({ preventScroll: true });

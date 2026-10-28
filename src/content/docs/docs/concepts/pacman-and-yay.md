@@ -1,17 +1,34 @@
 ---
 title: pacman and yay
-description: How archix handles packages installed or upgraded outside it, how adopting works, the pacman-style commands, and how undeclared and ignored packages are treated.
+description: Why plain pacman and yay can't change a system laid out as deployments, the pacman-style commands that do, how adopting works, and how undeclared and ignored packages are treated.
 sidebar:
   order: 4
 ---
 
-archix doesn't lock you out of your own system. `pacman` and `yay` keep working, on your live mirrors, exactly as before. You can `pacman -Syu` at 2 a.m. to get a fix, `pacman -S` something to try it, or follow an Arch news item to the letter.
+Once archix has made its first switch, the running system's `/usr`, `/opt` and `/boot` are read-only: each switch builds a new [deployment](/docs/concepts/atomicity/) beside the running one, and the next boot starts it. So plain pacman and yay can't change the system any more. Everything that reads keeps working, `pacman -Q`, `-Ss`, `-Si`, `-F` and `-Sw` among them, but `pacman -S`, `pacman -Syu`, `pacman -R` and `yay` fail, since they'd write into the running deployment, which older deployments share files with. A pacman hook archix installs in every deployment, `00-archix-deployment.hook`, stops them before they start and says what to run instead:
 
-What archix adds is memory. It notices those changes and, on the next switch, asks what you want to do with them: adopt upgrades into the lock, and declare new packages in your config.
+```console
+$ sudo pacman -S htop
+...
+archix: this system runs from a deployment whose /usr, /opt and /boot are read-only, so pacman, and AUR helpers like yay that run it, can't change its packages. Change them with archix, which builds a new deployment that boots at the next restart: `archix install <package>` (or `archix -S`) to add one, `archix remove <package>` (or `archix -R`) to take one out, `archix upgrade` (or `archix -Syu`) to update everything, and `archix switch` to apply your config. pacman -Q, -Ss, -Si, -F and -Sw work as before. See https://archix.dev/docs/concepts/pacman-and-yay/
+```
+
+pacman's own disk space check, `CheckSpace`, would otherwise stop the transaction first with `Partition /usr is mounted read only`, so a deployment's `pacman.conf` has it commented out; archix checks space itself. [`eject`](/docs/reference/cli/#eject) turns it back on.
+
+Change packages through archix instead. It has the commands you already type:
+
+| Instead of | Run | What it does |
+| --- | --- | --- |
+| `pacman -S htop`, `yay -S zen-browser-bin` | `archix -S htop` | Declares it in your config and builds a deployment with it |
+| `pacman -Syu`, `yay` | `archix -Syu`, or bare `archix` | Moves the lock to the newest snapshot and AUR recipes, then switches |
+| `pacman -R htop` | `archix -R htop` | Takes it out of your config and builds a deployment without it |
+| `pacman -S` to try something | `archix install --temp htop` | Builds a deployment with it, undeclared; the next switch drops it |
+
+Each of those takes effect at the next boot. There's no way to install something into the running system: that's what keeps the deployments you'd roll back to intact.
 
 ## The pacman hook
 
-archix installs `/etc/pacman.d/hooks/archix.hook`, which runs `archix hook-record` after every pacman transaction. archix's own pacman runs are marked, so only changes made outside archix are recorded, in `/var/lib/archix/outside-changes.json`:
+archix installs `/etc/pacman.d/hooks/archix.hook`, which runs `archix hook-record` after every pacman transaction archix didn't run itself, and records it in `/var/lib/archix/outside-changes.json`:
 
 ```console
 $ sudo pacman -Syu
@@ -21,11 +38,11 @@ $ sudo pacman -Syu
 archix: recorded 3 packages changed outside archix; `archix switch` will offer to adopt them
 ```
 
-The hook never fails or changes a pacman transaction; it only takes notes. `archix status` reports them, and the next successful switch clears them.
+The hook never fails or changes a pacman transaction; it only takes notes. `archix status` reports them, and the next successful switch clears them. That matters for changes made before archix laid the system out, between `archix init` and the first switch.
 
 ## Adopting
 
-On the next `archix switch`, if installed packages are newer than the lock, archix asks:
+On the next `archix switch`, if installed packages are newer than the lock, as after a `pacman -Syu` between `archix init` and the first switch, archix asks:
 
 ```console
 $ sudo archix switch
@@ -52,7 +69,7 @@ wrote /etc/archix/archix.lock
 
 AUR packages upgraded by yay or paru are adopted too: archix finds the commit whose build recipe builds the installed version, and locks that.
 
-[Patched packages](/docs/guides/local-pkgbuilds-and-patches/#patched-packages) survive a plain `pacman -Syu` too. When pacman replaces your patched build with Arch's newer one, adopting moves the lock to that version and applies your patches to it, so the switch goes on to `upgrade    hyprland 0.52.0-1 -> 0.52.0-1.1`. Declining puts your patched build of the locked version back.
+[Patched packages](/docs/guides/local-pkgbuilds-and-patches/#patched-packages) are adopted the same way: when pacman replaced your patched build with Arch's newer one, adopting moves the lock to that version and applies your patches to it, so the switch goes on to `upgrade    hyprland 0.52.0-1 -> 0.52.0-1.1`. Declining puts your patched build of the locked version back.
 
 Pins survive `archix lock` at the same date. `archix update` to a new snapshot drops them.
 
@@ -83,7 +100,8 @@ $ archix btop
 ==> Install which? Numbers (1 3), ranges (2-5), ^ to leave one out: 1
 ...
 install    btop 1.4.5-1
-apply 1 change? [Y/n]
+a new deployment with its own boot entry; it boots at the next restart
+apply 2 changes? [Y/n]
 ```
 
 Run as your user, archix asks sudo for the install itself. Commands win over terms, so `archix status` is never a search. See [`archix <terms>`](/docs/reference/cli/#search-and-install-archix-terms).
@@ -92,15 +110,13 @@ Run as your user, archix asks sudo for the install itself. Commands win over ter
 
 ### `archix -Syu`
 
-If you want the yay experience without the question, use the full upgrade:
+If you want the yay experience, use the full upgrade:
 
 ```console
 $ sudo archix -Syu
 ```
 
-It runs `pacman -Syu` from your live mirrors, adopts the result into the lock without asking, moves AUR packages to the newest commit of their build recipes (showing each changed recipe for review), and switches. Running `archix` with no arguments does the same, the way `yay` does.
-
-Compare it with `archix update`, which moves the lock to the newest archive snapshot and applies nothing until you `archix switch`. Both get you current. `-Syu` is the newest your mirror has; `update` is a whole, consistent day of the archive.
+It moves the lock to the newest Arch Linux Archive snapshot, moves AUR packages to the newest commit of their build recipes (showing each changed recipe for review), and switches. Running `archix` with no arguments does the same, the way `yay` does. It's `archix update` followed by `archix switch`, in one command. pacman can't upgrade a deployment in place, so `-Syu` no longer runs `pacman -Syu` against your live mirrors.
 
 ### `installed.lua`
 
@@ -122,13 +138,11 @@ archix imports it automatically whenever it exists, so you don't have to. `archi
 
 ## Undeclared packages
 
-Adopting covers packages archix already tracks. It doesn't cover a package you `pacman -S`'d that isn't in your config at all. It's installed, but it isn't in the lock. The [`undeclared_packages`](/docs/reference/options/) option decides what happens to it, and `archix init` asks you to choose in its Packages step: `Later, when you install something with plain pacman or yay`.
+Adopting covers packages archix already tracks. It doesn't cover a package that isn't in your config at all, such as one you installed with pacman before the first switch. It's installed, but it isn't in the lock. The [`undeclared_packages`](/docs/reference/options/) option decides what happens to it, and `archix init` asks you to choose in its Packages step: `Later, when you install something with plain pacman or yay`.
 
 **`"remove"`** is the default: `switch offers to declare it, and removes it if you say no`. The next switch lists the explicitly installed packages the pacman hook saw arrive since the last switch, and asks:
 
 ```console
-$ sudo pacman -S htop ncdu
-...
 $ sudo archix switch
 installed with pacman or an AUR helper but not declared: htop ncdu
 declare them in installed.lua? (no removes them) [Y/n]
@@ -137,7 +151,7 @@ declare them in installed.lua? (no removes them) [Y/n]
 - **Yes** adds them to [`installed.lua`](#installedlua) and switches with them in the lock, the same as if you'd run `archix install`.
 - **No** removes them.
 
-`--noconfirm` declares them. Anything else that isn't in the lock, such as a package installed before the hook could see it or one that `archix install --temp` installed, is removed on switch. The system is exactly what the config says, which is the guarantee that makes rollback and a fresh reinstall meaningful.
+`--noconfirm` declares them. Anything else that isn't in the lock, such as a package installed before the hook could see it or one that `archix install --temp` installed, is left out of the next deployment. The system is exactly what the config says, which is the guarantee that makes rollback and a fresh reinstall meaningful.
 
 This covers packages only. Changes to `/etc` files and services that archix never managed are left alone; see [Safety](/docs/concepts/safety/#managed-files-backups-and-hand-edits).
 
@@ -156,9 +170,9 @@ the system matches the lock and the config
 not declared, kept because undeclared_packages = "warn": htop ncdu
 ```
 
-To keep one, add it to `packages` or run `archix install htop`. To get rid of it, remove it with pacman or switch back to `"remove"`.
+To keep one, add it to `packages` or run `archix install htop`. To get rid of it, switch back to `"remove"`.
 
-To try something without declaring it, `sudo archix install --temp <pkg>` installs it as undeclared on purpose. archix ran that transaction itself, so the hook doesn't record it and switch doesn't offer to declare it: the next switch removes it unless you've declared it by then.
+To try something without declaring it, `sudo archix install --temp <pkg>` builds a deployment with it, undeclared on purpose, which boots at the next restart. archix ran that transaction itself, so switch doesn't offer to declare it: the next switch leaves it out unless you've declared it by then.
 
 ## Ignoring packages everywhere
 
@@ -201,8 +215,4 @@ Server = https://cdn-mirror.chaotic.cx/$repo/$arch
 # END archix custom repos (after the official repos)
 ```
 
-Repos with `before_official = true` go in the first block, the rest in the second. archix rewrites only these blocks, after each successful switch. A hand-written section for a repo your config declares is taken over, so it's never listed twice. Removing a repo from your config removes it from `pacman.conf`. Everything else in the file, including the official repos and their mirrorlists, is yours.
-
-## When a switch is unfinished
-
-If an archix switch was interrupted, `switch`, `lock`, `update` and the other commands that change things refuse to run until you deal with it with `archix recover`. Read-only commands like `diff` and `status` still work, and so do pacman and yay, but the hook warns you after every transaction that a switch is unfinished. See [Safety](/docs/concepts/safety/#unfinished-switches).
+Repos with `before_official = true` go in the first block, the rest in the second. archix rewrites only these blocks, in each new deployment's `/etc/pacman.conf`. A hand-written section for a repo your config declares is taken over, so it's never listed twice. Removing a repo from your config removes it from `pacman.conf`. Everything else in the file, including the official repos and their mirrorlists, is yours.

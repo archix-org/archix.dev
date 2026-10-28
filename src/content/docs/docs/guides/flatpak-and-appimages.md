@@ -45,15 +45,14 @@ To take most apps from another remote, set `flatpak.remote` to its name; ids wit
 $ sudo archix switch
 flatpak    install com.spotify.Client (5f8806197a2b)
 flatpak    install org.mozilla.firefox (0bb3a9e40c1f)
-boot entry for the new generation
+a new deployment with its own boot entry; it boots at the next restart
 apply 3 changes? [Y/n]
-:: installing packages
+:: building deployment 44 from deployment 43
 ...
-:: making the new generation current
-switched to generation 44 (snapshot 2026-10-09)
+switched to generation 44 (snapshot 2026-10-09); its deployment boots at the next restart
 ```
 
-Before it asks, `switch` locks each new app to its remote's current commit and writes it to `archix.lock`; the short commit is shown in brackets. After you confirm and the new generation is current, it adds the remotes your apps use, installs the apps and pins each one to its locked commit with `flatpak update --commit=`. Pinning holds even when the remote already has something newer, so a second machine with the same lock gets the same build.
+Before it asks, `switch` locks each new app to its remote's current commit and writes it to `archix.lock`; the short commit is shown in brackets. Flatpak apps live in `/var/lib/flatpak`, outside the [deployments](/docs/concepts/atomicity/), so once the new deployment is committed, `switch` adds the remotes your apps use, installs the apps and pins each one to its locked commit with `flatpak update --commit=`, on the running system, without waiting for the reboot. Pinning holds even when the remote already has something newer, so a second machine with the same lock gets the same build.
 
 Only `switch` adds remotes, and only after you confirm; `diff` and `lock` never do. So when flatpak isn't installed yet, or an app's remote hasn't been added, there's nothing to ask for a commit, and the app is listed with the reason:
 
@@ -61,9 +60,17 @@ Only `switch` adds remotes, and only after you confirm; `diff` and `lock` never 
 flatpak    install org.mozilla.firefox: flatpak isn't installed yet
 ```
 
-The same switch installs the `flatpak` package and adds the remote, then locks the app, writes it to `archix.lock` and installs it.
+The same switch puts the `flatpak` package in the new deployment, but the running system doesn't have it until you reboot, so the switch leaves the apps for the new deployment's first boot:
 
-A Flatpak step that fails, such as a remote that can't be reached, doesn't undo the switch. The new generation is current, the failure is listed, and archix exits non-zero, as with a service that doesn't start. See [Hard and soft failures](/docs/concepts/safety/#hard-and-soft-failures).
+```console
+flatpak    install org.mozilla.firefox at the new deployment's first boot, which brings flatpak
+...
+flatpak comes with deployment 44, so deployment 44's first boot installs them once the network is up: org.mozilla.firefox
+```
+
+At that boot, `archix-flatpak.service` brings up and waits for `network-online.target`, only at a boot that has apps to install, then adds the remotes, locks the apps at their remote's current commit, installs and pins them, and writes the commits to the generation and `archix.lock`. If that fails, it's tried again at the next boot, with a note at your next login: `archix: at boot, flatpak: ...; it's tried again at the next boot`. A switch or rollback that syncs Flatpak itself before then drops the waiting apps.
+
+A Flatpak step that fails, such as a remote that can't be reached, doesn't undo the switch. The deployment is committed, the failure is listed, and archix exits non-zero, as with a service that doesn't start. See [Hard and soft failures](/docs/concepts/safety/#hard-and-soft-failures).
 
 ### The lock
 
@@ -110,14 +117,14 @@ Each generation records the commits it pinned. `archix rollback` pins the older 
 
 ```console
 $ sudo archix rollback
-flatpak    com.spotify.Client 81c2d4e6f0a3 -> 5f8806197a2b
+generation 44 (snapshot 2026-10-09) still has its deployment: rolling back points current and the boot default at it, nothing is reinstalled
 downgrade  mesa 1:25.3.1-1 -> 1:25.3.0-1
-roll back to generation 44 (snapshot 2026-10-09) with 2 changes? [Y/n]
-...
-rolled back to generation 44 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
+flatpak    com.spotify.Client 81c2d4e6f0a3 -> 5f8806197a2b
+roll back to generation 44 (snapshot 2026-10-09)? [Y/n]
+rolled back to generation 44 (snapshot 2026-10-09); it boots at the next restart. archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-Old commits come from the remote, so rolling back Flatpak apps needs the network, and a remote that still has the commit. Rolling back from the boot menu happens before the network is up, so it skips Flatpak apps and says so: ``archix: Flatpak apps aren't pinned at boot; run `sudo archix rollback 44` once you're online``. Running that pins them. See [Generations and rollback](/docs/concepts/generations/).
+The apps are pinned back right away, while the rest of the generation waits for the reboot. Old commits come from the remote, so rolling back Flatpak apps needs the network, and a remote that still has the commit. Picking an older entry in the boot menu leaves Flatpak apps as they are. See [Generations and rollback](/docs/concepts/generations/).
 
 ### What gets removed
 
@@ -184,14 +191,16 @@ install    fuse2 2.9.9-5
 create     /opt/archix/appimages/obsidian.AppImage
 create     /usr/local/bin/obsidian
 create     /usr/local/share/applications/archix-obsidian.desktop
-boot entry for the new generation
+a new deployment with its own boot entry; it boots at the next restart
 apply 5 changes? [Y/n]
 downloading https://example.org/releases/Obsidian-1.9.14.AppImage
 downloading fuse2-2.9.9-5-x86_64.pkg.tar.zst
-:: installing packages
+:: building deployment 46 from deployment 45
 ...
-switched to generation 46 (snapshot 2026-10-15)
+switched to generation 46 (snapshot 2026-10-15); its deployment boots at the next restart
 ```
+
+The files are in `/opt` and `/usr/local`, which are part of the [deployment](/docs/concepts/atomicity/), so `obsidian` is there after the reboot.
 
 Each entry becomes three managed files:
 
@@ -203,7 +212,7 @@ Each entry becomes three managed files:
 
 archix also declares `fuse2`, which AppImages need to run.
 
-The download happens after you confirm, before anything changes, and an AppImage whose hash differs from the config stops the switch: `<url> has sha256 <actual>, but the config says <sha256>`. Big files are copied from the store into place, not read into memory.
+The download happens after you confirm, before anything is built, and an AppImage whose hash differs from the config stops the switch: `<url> has sha256 <actual>, but the config says <sha256>`. Big files are copied from the store into place, not read into memory.
 
 ### Update, roll back and remove
 

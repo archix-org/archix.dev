@@ -75,19 +75,19 @@ What each step decides:
 
 2. **Config.** `Where should the config live?` shows `/etc/archix (default)` until you type something else. Any directory works, such as a clone of your own repo. If you pick another directory, `/etc/archix` becomes a symlink to it, and a config inside your home is handed over to you, the whole tree including the `.git` below, so you can edit and commit it without `sudo`. When git is installed, `Make it a git repository` is on, and init runs `git init` and `git add -A` in the config directory; nothing is committed. `Write files read-only, like the Nix store (apps can't change them; a switch puts them back)` is off; turn it on to have archix write the files it manages read-only, as NixOS does, and put them back on every switch. See [Read-only files](/docs/guides/dotfiles-and-apps/#read-only-files).
 
-3. **Packages.** Your explicitly installed packages, from the repos and the AUR, are declared in `installed.lua`. Third-party repos in your `pacman.conf`, such as CachyOS's or chaotic-aur, are declared as they are, and init asks what to do if a locked package disappears from one (see [Third-party repos](/docs/guides/third-party-repos/)). Foreign packages that aren't on the AUR, built by hand or gone from it, are rebuilt as recipes in `pkgbuilds/` from their installed files and declared; one whose files changed since pacman installed it is left alone, in `ignored_packages`, with a `!` line that says why. Orphaned dependencies can be kept in `ignored_packages` or left for the first switch to remove. `Later, when you install something with plain pacman or yay` sets [`undeclared_packages`](/docs/concepts/pacman-and-yay/#undeclared-packages). With AUR packages, there are also review and [missing versions](/docs/concepts/lockfile/#missing-versions). System-wide Flatpak apps are declared in `flatpak.apps`, with any remote other than Flathub, and locked to the commits they're installed at. Apps installed with `--user` are left out, and so are apps whose remote is gone, with a `!` line. See [Flatpak and AppImages](/docs/guides/flatpak-and-appimages/).
+3. **Packages.** Your explicitly installed packages, from the repos and the AUR, are declared in `installed.lua`. Third-party repos in your `pacman.conf`, such as CachyOS's or chaotic-aur, are declared as they are, and init asks what to do if a locked package disappears from one (see [Third-party repos](/docs/guides/third-party-repos/)). Foreign packages that aren't on the AUR, built by hand or gone from it, stay in `ignored_packages` unless you tick them, which rebuilds them as recipes in `pkgbuilds/` from their installed files, kept out of the config; one whose files changed since pacman installed it can't be, and a `!` line says why. Orphaned dependencies can be kept in `ignored_packages` or left for the first switch to remove. `Later, when you install something with plain pacman or yay` sets [`undeclared_packages`](/docs/concepts/pacman-and-yay/#undeclared-packages). With AUR packages, there are also review and [missing versions](/docs/concepts/lockfile/#missing-versions). System-wide Flatpak apps are declared in `flatpak.apps`, with any remote other than Flathub, and locked to the commits they're installed at. Apps installed with `--user` are left out, and so are apps whose remote is gone, with a `!` line. See [Flatpak and AppImages](/docs/guides/flatpak-and-appimages/).
 
 4. **System.** Four checklists of what init takes over as it is, all ticked: `Settings` (hostname, timezone, locales and keymap, but only where the option would write exactly what's on disk now), `Users` (regular users, uid 1000 to 59999, each with uid, shell and groups, declared with their real groups, shell, home and description so declaring them changes nothing), `Groups` (regular groups, with their gid) and `Services that differ from their preset` (each `enabled` or `disabled`). Untick anything archix should leave alone; it isn't declared. Passwords stay where they are; archix never manages them.
 
 5. **Config files.** The `/etc` files you changed: package config files edited since they were installed, and files nobody owns in well-known directories such as `/etc/systemd/system`, `/etc/sysctl.d` and `/etc/udev/rules.d`. Files that hold secrets are never listed or copied, only counted: `· 3 files that hold secrets stay out of the config and aren't listed`. The rest is one scrollable checklist, each file tagged with why it's there: `recommended`, then `changed from its package's version` or `not from any package`. Recommended files, such as `/etc/fstab` and anything hand-written, start ticked; the others are mostly changed by package install scripts. See [Safety](/docs/concepts/safety/#what-init-captures-and-never-captures).
 
-6. **Boot.** On a btrfs root, `Snapshot / before every switch, as an extra recovery point`. If systemd-boot is installed and your kernel command line has `root=`, the step shows the command line and offers `Write a boot entry for each generation`.
+6. **Boot.** archix boots every generation as its own [deployment](/docs/concepts/atomicity/), so it needs systemd-boot. If systemd-boot is installed and your kernel command line has `root=`, the step shows the command line and offers `Boot every generation as its own deployment, from a systemd-boot entry`, on. Left off, `archix switch` refuses. The Result section later says whether the first switch can lay the system out as deployments, and why not if it can't, such as an ESP mounted at `/boot`.
 
 7. **Generations.** `Generations gc always keeps`, shown as `10 (default)`, and `…and any younger than this many days`, shown as `30 (default)`. Leave them empty for the defaults; anything you type has to be a whole number.
 
 8. **Dotfiles.** Pick a user if there's more than one, then choose entries from `~/.config` and top-level dotfiles. Recommended ones, such as your shell's rc files, `.gitconfig`, and editor, terminal and window manager configs, start ticked; untick everything to bring in none. Caches, browsers and app state aren't offered, and credentials such as `~/.ssh` are only counted. Ticked entries are copied into the config's `home/`. Directories become live links, and so do files, unless you turned on read-only files, which makes them read-only copies instead. Files their app replaces on save, such as KDE's `*rc` files and `mimeapps.list`, always become writable copies, since a link wouldn't survive the app's save. See [Dotfiles and apps](/docs/guides/dotfiles-and-apps/#bringing-your-existing-dotfiles-in).
 
-9. **Review.** Everything init will write, one line each: the config location, packages, undeclared and unused packages, Flatpak apps, accounts, services (`3 of 4` when you unticked one), config files, boot, snapshots, generations and dotfiles. `Write the config ›` writes it.
+9. **Review.** Everything init will write, one line each: the config location, packages, undeclared and unused packages, Flatpak apps, accounts, services (`3 of 4` when you unticked one), config files, boot, generations and dotfiles. `Write the config ›` writes it.
 
 </Steps>
 
@@ -115,7 +115,7 @@ Then the wizard closes, and init prints the rest in the terminal. With AUR revie
 
 For scripts, `sudo archix init --defaults` takes every recommended answer without opening the wizard, so it needs no terminal. It ticks the recommended config files, never imports dotfiles, makes the config directory a git repository when git is installed, and prints what it captured in Packages, System, Config files, Boot and Generations sections before the same Lock and Result. The config files you didn't get are counted, so you can run the wizard later to pick them.
 
-There are two exceptions to an empty Result. Dotfiles you imported are listed, because the first switch backs up the originals and replaces them with links into the config. And if you let archix write boot entries, it declares the boot tooling it needs, `mkinitcpio` and `systemd-ukify`, so the Result lists them as installs if they're missing. Either way, the section starts with `! the first switch would still change these:`.
+There are two exceptions to an empty Result. Dotfiles you imported are listed, because the first switch backs up the originals and replaces them with links into the config. And archix declares the boot tooling it needs, `mkinitcpio`, `systemd-ukify` and `dosfstools`, so the Result lists them as installs if they're missing. Either way, the section starts with `! the first switch would still change these:`.
 
 ## Look at what you got
 
@@ -186,7 +186,7 @@ return {
 [hosts.desktop]
 date = "2026-10-09"
 repos = ["core", "extra", "multilib"]
-declared = ["archix", "base", "firefox", "linux", "mkinitcpio", "neovim", "steam", "systemd-ukify"]
+declared = ["archix", "base", "dosfstools", "firefox", "linux", "mkinitcpio", "neovim", "steam", "systemd-ukify"]
 pinned = ["mesa"]
 
 [hosts.desktop.packages]
@@ -208,16 +208,16 @@ $ git add -A && git commit -m "Capture desktop with archix init"
 
 ```console
 $ sudo archix switch
-boot entry for the new generation
+lay out   the system as deployment 1: /usr, /etc, /opt, /boot and pacman's database move into /archix/deploy/1, with a boot entry of its own
 apply 1 change? [Y/n]
-:: installing packages
-...
-:: writing the boot entry
-:: making the new generation current
-switched to generation 1 (snapshot 2026-10-09)
+:: laying the system out as deployment 1
+laid the system out as deployment 1, which boots from its own entry; changes from now on take effect at the next boot
+switched to generation 1 (snapshot 2026-10-09); its deployment boots at the next restart
 ```
 
-No packages change. On a machine where archix writes boot entries, the only change is generation 1's boot entry. Without boot entries, the switch prints `switched to generation 1 (snapshot 2026-10-09); no package changes were needed`. Either way, the files archix took over are backed up first, so taking one out of the config later puts the original back. Your system looks the same as before, but now it's described, locked and reversible.
+No packages change. The first switch lays your system out as deployment 1, in `/archix/deploy/1`, and gives it a boot entry: hardlinks on ext4 and a snapshot on btrfs, so it costs little space. The files archix took over are backed up first, so taking one out of the config later puts the original back. Reboot once, so the machine starts from deployment 1's entry. Your system looks the same as before, but now it's described, locked and reversible.
+
+From here on, `/usr` is read-only and every switch builds the next deployment beside the running one. It takes effect at the next boot. See [Atomic deployments](/docs/concepts/atomicity/).
 
 ## Make a change
 
@@ -252,16 +252,17 @@ resolving 87 declared packages against the 2026-10-09 snapshot
 213 packages locked
 wrote /etc/archix/archix.lock
 install    htop 3.4.1-1
-boot entry for the new generation
+a new deployment with its own boot entry; it boots at the next restart
 apply 2 changes? [Y/n]
 downloading htop-3.4.1-1-x86_64.pkg.tar.zst
-:: installing packages
+:: building deployment 2 from deployment 1
 ...
-:: making the new generation current
-switched to generation 2 (snapshot 2026-10-09)
+hibernation is off until you reboot into deployment 2: resuming would start its kernel on the running system's memory image; suspend still works
+switched to generation 2 (snapshot 2026-10-09); its deployment boots at the next restart
+deployment 2 is committed and boots at the next restart; changes to /etc made before then are carried over to it
 ```
 
-`switch` updated the lock for you, showed the changes, and applied them once you said yes. `sudo archix install htop` would have done the same, writing the name to `installed.lua` instead of your host file. Commit the change:
+`switch` updated the lock for you, showed the changes, and built deployment 2 once you said yes. The running system doesn't change: reboot, and `htop` is there. Until you do, changes you make to `/etc` are carried into the new deployment, and hibernating is off. `sudo archix install htop` would have done the same, writing the name to `installed.lua` instead of your host file. Commit the change:
 
 ```console
 $ git commit -am "Add htop"
@@ -281,10 +282,10 @@ snapshot 2026-10-09 -> 2026-10-15
 wrote /etc/archix/archix.lock
 $ sudo archix switch
 ...
-switched to generation 3 (snapshot 2026-10-15)
+switched to generation 3 (snapshot 2026-10-15); its deployment boots at the next restart
 ```
 
-You can also use `sudo archix -Syu`, or just `sudo archix`, which upgrades from your live mirrors like yay does and adopts the result into the lock. See [pacman and yay](/docs/concepts/pacman-and-yay/#archix--syu).
+Reboot into generation 3. You can also use `sudo archix -Syu`, or just `sudo archix`, which does both in one go, like yay. See [pacman and yay](/docs/concepts/pacman-and-yay/#archix--syu).
 
 ## Roll back
 
@@ -292,19 +293,19 @@ Say the new mesa breaks your games. Go back:
 
 ```console
 $ sudo archix rollback
+generation 2 (snapshot 2026-10-09) still has its deployment: rolling back points current and the boot default at it, nothing is reinstalled
 downgrade  linux 7.2.9.arch1-1 -> 7.2.8.arch1-1
 downgrade  mesa 1:25.3.1-1 -> 1:25.3.0-1
-roll back to generation 2 (snapshot 2026-10-09) with 2 changes? [Y/n]
-...
-rolled back to generation 2 (snapshot 2026-10-09); archix.lock is unchanged, so the next `archix switch` returns to the config
+roll back to generation 2 (snapshot 2026-10-09)? [Y/n]
+rolled back to generation 2 (snapshot 2026-10-09); it boots at the next restart. archix.lock is unchanged, so the next `archix switch` returns to the config
 ```
 
-archix makes the system match generation 2 again: its exact package versions from the cache, its files, users and services. No rebuilds.
+Deployment 2 is still there, so the rollback only points the boot default at it. Reboot, and you're on generation 2 with the same packages, kernel and `/etc` it had. Nothing is reinstalled.
 
 Rollback changes the system, not your config. Your `archix.lock` still says 2026-10-15, so the next `archix switch` would apply it again. To stay back, revert the lock in git, or move it with `archix update --to 2026-10-09`.
 
 <Aside type="tip">
-	If the system won't boot at all, pick generation 2 in the systemd-boot menu. archix rolls back to it early in boot. See [Generations and rollback](/docs/concepts/generations/#rolling-back-from-the-boot-menu).
+	If the system won't boot at all, pick generation 2 in the systemd-boot menu. It boots that deployment, and archix makes it current. See [Generations and rollback](/docs/concepts/generations/#rolling-back-from-the-boot-menu).
 </Aside>
 
 ## Next steps

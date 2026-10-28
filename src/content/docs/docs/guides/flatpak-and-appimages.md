@@ -200,7 +200,7 @@ downloading fuse2-2.9.9-5-x86_64.pkg.tar.zst
 switched to generation 46 (snapshot 2026-10-15); its deployment boots at the next restart
 ```
 
-The files are in `/opt` and `/usr/local`, which are part of the [deployment](/docs/concepts/atomicity/), so `obsidian` is there after the reboot.
+The AppImage is in `/opt`, which is part of the [deployment](/docs/concepts/atomicity/), so `obsidian` runs after the reboot. The link and the menu entry are in `/usr/local`, which every deployment shares, so they're written at once, ahead of the AppImage they point at, which arrives with the reboot.
 
 Each entry becomes three managed files:
 

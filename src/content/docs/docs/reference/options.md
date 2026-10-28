@@ -460,7 +460,7 @@ deployments = { keep = 3 },
 
 ## System
 
-Every setting in this section renders to files archix manages. Their contents are stored with each generation, so `archix rollback` restores them along with the packages. Files under `/etc`, `/usr` and `/opt` are written into the new deployment and take effect at the next boot; files elsewhere are written once the switch has committed. A file archix replaces is backed up and comes back when it leaves the config; a managed file edited by hand is saved before it's overwritten, and `diff` flags it beforehand. See [Safety](/docs/concepts/safety/).
+Every setting in this section renders to files archix manages. Their contents are stored with each generation, so `archix rollback` restores them along with the packages. Files under `/etc`, `/usr` and `/opt` are written into the new deployment and take effect at the next boot; files elsewhere, `/usr/local`'s included, are written once the switch has committed. A file archix replaces is backed up and comes back when it leaves the config; a managed file edited by hand is saved before it's overwritten, and `diff` flags it beforehand. See [Safety](/docs/concepts/safety/).
 
 ### `files`
 
@@ -470,7 +470,7 @@ Every setting in this section renders to files archix manages. Their contents ar
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Files archix writes, keyed by absolute path; give one of `text`, `source`, `link`, `url` or `merge`. Files in `/etc`, `/usr`, `/opt` and `/boot` go into the new deployment and take effect at the next boot; files elsewhere are written once the switch commits. Files archix replaces are backed up and restored when they leave the config.
+Files archix writes, keyed by absolute path; give one of `text`, `source`, `link`, `url` or `merge`. Files in `/etc`, `/usr`, `/opt` and `/boot` go into the new deployment and take effect at the next boot; files elsewhere, `/usr/local` included, which every deployment shares, are written once the switch commits. Files archix replaces are backed up and restored when they leave the config.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -482,7 +482,7 @@ Files archix writes, keyed by absolute path; give one of `text`, `source`, `link
 | `mode` | `str` | `"0644"` | Octal permissions. |
 | `owner` | `str` | `"root"` | |
 | `group` | `str` | `"root"` | |
-| `on_change` | `null or lines` | `null` | A bash script run as root when a switch or rollback changed this file: for a file in `/etc`, `/usr`, `/opt` or `/boot`, at the new deployment's first boot, before networking and before the [hooks](#hooks); for a file elsewhere, which is written right away, right after it's written. |
+| `on_change` | `null or lines` | `null` | A bash script run as root when a switch or rollback changed this file: for a file in `/etc`, `/usr` (but `/usr/local`), `/opt` or `/boot`, at the new deployment's first boot, before networking and before the [hooks](#hooks); for a file elsewhere, which is written right away, right after it's written. |
 | `mutable` | `null or bool` | `null` | Write the file read-only (`false`) or writable (`true`); by default as [`mutable_files`](#mutable_files) says. |
 | `merge` | `null or submodule` | `null` | Set only these keys in a file the app also writes, keeping the rest of it, like plasma-manager. Leaving the config leaves the keys as they are. `format` is one of `"ini"`, `"kconfig"` or `"json"`, *required*; `values` (`attrs of any`, default `{}`) holds the keys: sections (kconfig groups nest) of keys, or a JSON object deep-merged into the file. |
 
@@ -496,7 +496,9 @@ With `mutable = false`, or [`mutable_files = false`](#mutable_files), the file i
 
 `merge` sets keys in a file archix doesn't own, such as one an app writes too: archix edits only the declared keys and leaves the app's own. The app's keys never show up in `archix diff`; a declared key that changed does, and the next switch sets it back. JSON files may be JSONC, with comments and trailing commas, but archix drops the comments when it writes the file back; a file that can't take its keys stops the switch before anything changes. A new file gets `0644` and `owner`/`group`; an existing one keeps its mode and owner. When the entry leaves the config, the file keeps its keys and is neither restored nor deleted. See [Setting single keys](/docs/guides/dotfiles-and-apps/#setting-single-keys).
 
-archix doesn't write under `/usr` (except `/usr/local`, which is part of each deployment), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`: `files: <path> is in a directory archix doesn't write to; home files go in home.files, and boot entries in boot.extra_entries`. Files in a home directory go in [`home.files`](#homefiles), and systemd-boot entries in [`boot.extra_entries`](#bootextra_entries).
+Files under `/usr/local` aren't part of any deployment: `/usr/local` is the shared `/var/usrlocal`, so they're written there once the switch commits, take effect at once, and are in every deployment. `diff` tracks them, and backups, owners and `on_change` work as for other files written right away. A rollback writes them as the generation it goes to declares them, but leaves what else is in `/usr/local` alone. Units, udev rules and module settings under `/usr/local/lib` apply to every deployment at boot; `archix status` lists them, and some boots leave `/usr/local` out to get past a bad one. See [What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds).
+
+archix doesn't write under `/usr` (except `/usr/local`), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`: `files: <path> is in a directory archix doesn't write to; home files go in home.files, and boot entries in boot.extra_entries`. Files in a home directory go in [`home.files`](#homefiles), and systemd-boot entries in [`boot.extra_entries`](#bootextra_entries).
 
 ```lua
 files = {

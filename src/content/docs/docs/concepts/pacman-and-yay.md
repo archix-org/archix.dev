@@ -24,7 +24,9 @@ Change packages through archix instead. It has the commands you already type:
 | `pacman -R htop` | `archix -R htop` | Takes it out of your config and builds a deployment without it |
 | `pacman -S` to try something | `archix install --temp htop` | Builds a deployment with it, undeclared; the next switch drops it |
 
-Each of those takes effect at the next boot. There's no way to install something into the running system: that's what keeps the deployments you'd roll back to intact.
+Each of those takes effect at the next boot. There's no way to install a package into the running system: that's what keeps the deployments you'd roll back to intact.
+
+What isn't a package can go in `/usr/local`, which stays writable: an installer run with `curl | sh`, `sudo make install`, `sudo npm install -g`, or a binary copied into `/usr/local/bin` works at once, in every deployment. It isn't part of any deployment, so no rollback undoes it, and `/usr/local/bin` comes before `/usr/bin` in `PATH`. A package that ships files into `/usr/local`, which Arch's packaging rules forbid, is refused by the switch. See [What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds).
 
 ## The pacman hook
 

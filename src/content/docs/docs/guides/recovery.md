@@ -5,13 +5,13 @@ sidebar:
   order: 9
 ---
 
-Most failures need neither of these. A bad update is undone by picking an older deployment in the boot menu, or by boot counting on its own; a lost `loader/` is covered by the fallback boot image in `EFI/Linux`. This guide is for when no deployment boots: every one broken the same way, a root filesystem that needs repair, or a password nobody knows.
+Most failures need neither of these. A bad update is undone by picking an older deployment in the boot menu, or by boot counting on its own; a lost `loader/` is covered by the fallback boot image in `EFI/Linux`. A bad file in the shared `/usr/local`, which every deployment uses and no rollback undoes, is got past the same way: those boots, and the fallback boot image, leave `/usr/local` out, so you can fix or remove the file in `/var/usrlocal` and reboot; see [What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds). This guide is for when no deployment boots: every one broken the same way, a root filesystem that needs repair, or a password nobody knows.
 
 ## Without a live USB: the rescue entry
 
 Every switch keeps an entry called **archix rescue** in the boot menu, after the deployments. It's never the default and boot counting never picks it; choose it in the menu, or from a running system with `sudo bootctl set-oneshot archix-rescue.conf`.
 
-It boots the kernel of the newest deployment that booted fine, with an initramfs of its own: archix's static binary, a shell, and the tools to check and repair filesystems (`e2fsck`, `btrfs`, `fsck.fat`, and `cryptsetup` and `lvm` when installed). It mounts nothing on its own, so a damaged root can be checked unmounted, and opens the `archix rescue` prompt:
+It boots the kernel of the newest deployment that booted fine, with an initramfs of its own: archix's static binary, a shell, and the tools to check and repair filesystems (`e2fsck`, `btrfs`, `fsck.fat`, and `cryptsetup` and `lvm` when installed). It mounts nothing on its own, so a damaged root can be checked unmounted, and opens the `archix rescue` prompt. Its `shell` and repairs never mount the shared `/usr/local`, so a bad unit or binary there can't get in the way; its files are in `/var/usrlocal` on the root:
 
 | Command | What it does |
 | --- | --- |
@@ -49,7 +49,7 @@ You need a live USB only when the rescue entry can't start either: the ESP wiped
 2. **Bind a deployment over the root** with the static archix every deployment carries. Without a number it binds current's; it refuses a deployment that's missing a tree and lists the complete ones.
    ```console
    # /mnt/archix/deploy/2/usr/lib/archix/archix-static mount-deployment /mnt 2
-   bound deployment 2's trees over /mnt
+   bound deployment 2's trees over /mnt; its /usr/local stays empty, as nothing in the shared one, /mnt/var/usrlocal, should get in the way of a repair
    ```
 3. **Find what's damaged.**
    ```console

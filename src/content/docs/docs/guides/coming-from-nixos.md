@@ -106,7 +106,7 @@ Home Manager's files are symlinks into the read-only Nix store. archix writes re
 
 ### Mutable passwords
 
-archix never manages passwords. That matches NixOS's default of `users.mutableUsers = true`: users and groups are declared, passwords are set with `passwd`. When archix creates a user, it reminds you to run `passwd`. There's no equivalent of `hashedPassword`. Each deployment has its own `/etc/shadow`, but a password you change before the reboot is carried into the waiting deployment, and a rollback carries today's passwords into the one it goes back to.
+archix follows NixOS's default of `users.mutableUsers = true` per user: `initial_hashed_password` is `initialHashedPassword`, set when the account is created, and `hashed_password` is `hashedPassword`, set again at every switch, with `archix diff` saying when that resets a password changed with `passwd`. Unlike NixOS, an enforced hash never unlocks an account locked with `passwd -l`, a password set in the rescue entry holds until the declared hash changes, and a rollback carries today's passwords rather than restoring an older generation's. There's no `hashedPasswordFile` yet; a secrets option will supply hashes from an encrypted file. A user without either keeps the password `passwd` gives it. See [Users, SSH and sudo](/docs/guides/users-and-access/).
 
 Encrypted secrets, agenix- or sops-style, are not supported.
 

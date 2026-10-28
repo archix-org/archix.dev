@@ -601,7 +601,7 @@ user_services = { ["pipewire-pulse.socket"] = true },
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Users archix creates and keeps in step; ones it created are removed (home kept) when they leave the config. Passwords are never managed: set them with `passwd`.
+Users archix creates and keeps in step; ones it created are removed (home kept) when they leave the config. Passwords come from `hashed_password` or `initial_hashed_password`, else set them with `passwd`.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -612,12 +612,71 @@ Users archix creates and keeps in step; ones it created are removed (home kept) 
 | `home` | `null or path` | `null` | The home directory; `/home/<name>` when null. |
 | `description` | `str` | `""` | The GECOS field. |
 | `system` | `bool` | `false` | A system user: low uid, no home directory. |
+| `hashed_password` | `null or str` | `null` | The password as a crypt(3) hash, or `"!"` to lock the account; set at every switch. See below. |
+| `initial_hashed_password` | `null or str` | `null` | A crypt(3) hash set only when archix creates the account. |
+| `ssh_authorized_keys` | `list of str` | `[]` | SSH public keys that may log in as the user, one `.pub` line each. |
 
 Declaring a user that already exists brings it in line with every field, defaults included: a declared user is authoritative, so `groups` is the complete list of supplementary groups, and `shell` falls back to `/bin/bash`. When you declare an existing user by hand, list all of its groups and its shell. `archix init` captures existing users with their real groups, shell, home and description, so declaring them changes nothing. Users that archix didn't create are never deleted. Users are created in the new deployment's `/etc`, and their home directories once it's committed. One archix created and you declare again later without a `uid` gets back the uid it had, so the files it owned are still its own. Groups work the same way.
 
 ```lua
 users = {
   me = { groups = { "wheel", "video" }, shell = "/usr/bin/zsh", description = "Me" },
+},
+```
+
+**`hashed_password`** is enforced: every switch sets it in the new deployment's `/etc/shadow`, so a password changed with `passwd` goes back to the declared one at the next switch, and `archix diff` and the switch say so beforehand (`password   resetting me's password to the declared one`). Hashes are never printed. Give a yescrypt (`$y$`, what `mkpasswd` prints), SHA-512 (`$6$`, `openssl passwd -6`), SHA-256, scrypt or bcrypt hash; a value that isn't one, such as a plaintext password, is refused, as are MD5 and DES hashes. `"!"` or `"*"` locks the account. Three things win over it:
+
+- **A lock.** An account locked with `passwd -l` or `usermod -L`, or expired with `chage -E`, stays so: the switch warns `me's account is locked or expired, so archix keeps it that way and doesn't apply the declared password` and leaves the entry alone until you unlock it. Only a declared `"!"` replaces a locked entry. A lock made after the switch and before the reboot is carried into the waiting deployment like any other `/etc` change.
+- **The rescue entry.** A password set with [`archix rescue`'s `password`](/docs/reference/cli/#rescue) holds over an unchanged `hashed_password`: switches say `keeping me's password set in the rescue entry over users.me.hashed_password, until that hash changes`. Changing the hash in the config replaces it, and the switch says so.
+- **A rollback.** Rolling back, or booting an older deployment, carries the running system's passwords into it, as for every account; it never brings back the hash an older generation declared. The next switch applies the config's.
+
+A hash in the config can be cracked offline by anyone who can read it, wherever the config is kept; `archix switch` and `diff` warn when the config is a git repository with a remote. Use a long passphrase. A secrets option will supply hashes from an encrypted file later.
+
+**`initial_hashed_password`** is set only on the account archix creates, which then comes up ready to log in; after that it's the user's, changed with `passwd` for good. Give one of the two, not both.
+
+**`ssh_authorized_keys`** go to `/etc/ssh/authorized_keys.d/<user>` in the next deployment, root's and mode 0644, with an sshd drop-in, `/etc/ssh/sshd_config.d/10-archix-authorized-keys.conf`, setting `AuthorizedKeysFile .ssh/authorized_keys /etc/ssh/authorized_keys.d/%u`, so keys in `~/.ssh/authorized_keys` keep working beside them. Each line needs a key type sshd knows (`ssh-ed25519`, `ecdsa-sha2-nistp256`, `ssh-rsa`, the `sk-` security-key types) followed by that type's key, optionally after options such as `from="10.0.0.0/8"`; `ssh-dss` is refused. Declaring a key installs `openssh`; enable `sshd.service` in [`services`](#services). Keys take effect at the next boot.
+
+```lua
+users = {
+  me = {
+    groups = { "wheel" },
+    initial_hashed_password = "$y$j9T$...",
+    ssh_authorized_keys = { "ssh-ed25519 AAAAC3Nza... me@laptop" },
+  },
+},
+services = { ["sshd.service"] = true },
+```
+
+### `allow_no_password_login`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/system.lua` |
+
+A switch refuses a deployment in which neither root nor a member of `wheel` or `sudo` has a usable yescrypt or SHA-512 password (locked, empty and expired ones don't count) when the running system has one, as the [rescue entry](/docs/guides/recovery/#without-a-live-usb-the-rescue-entry) needs one to open: `this config leaves no account that can log in with a password ... nothing was changed`. When the running system has none either, as in a container, it only warns. `true` allows it, for a machine reached only by SSH keys.
+
+### `sudo`
+
+| | |
+| --- | --- |
+| Type | `submodule` |
+| Declared in | `<archix>/sudo.lua` |
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `enable` | `bool` | `false` | Install sudo and write `/etc/sudoers.d/archix`. |
+| `wheel` | `bool` | `true` | Let members of `wheel` run any command as any user. |
+| `wheel_needs_password` | `bool` | `true` | Whether they type their password (`false` gives them `NOPASSWD`). |
+| `extra_rules` | `list of str` | `[]` | More sudoers lines. |
+
+The drop-in goes into the next deployment, root's and mode 0440, and the build checks it with `visudo -c` in the new deployment; a line visudo refuses fails the switch with nothing changed: `visudo refuses the sudoers lines from sudo (/etc/sudoers.d/archix:3:39: syntax error); nothing was changed`. Arch's own `/etc/sudoers` stays as it is.
+
+```lua
+sudo = {
+  enable = true,
+  extra_rules = { "me ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart nginx" },
 },
 ```
 
@@ -638,6 +697,23 @@ Groups archix creates and keeps in step.
 
 ```lua
 groups = { media = {}, builders = { gid = 1500 } },
+```
+
+### `tmpfiles`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/system.lua` |
+
+[tmpfiles.d](https://man.archlinux.org/man/tmpfiles.d.5) lines, written to `/etc/tmpfiles.d/archix.conf` in the next deployment and applied by `systemd-tmpfiles` when it boots, like every `/etc` change; nothing is created on the running system at the switch. The build checks them with `systemd-tmpfiles --dry-run` in the new deployment, so a line it can't parse or an owner that doesn't exist there fails the switch with nothing changed. Lines that would create, change, clean or remove anything in archix's own paths (`/archix`, `/var/lib/archix`, `/var/usrlocal` and the ESP), or reach them recursively from above (`R /var/lib`, `Z /`, an age on `/var`), are refused; `x` and `X` lines may name them. A line that deletes under `/home` (`r`, `R`, `D`) gets a warning.
+
+```lua
+tmpfiles = {
+  "d /var/lib/foo 0750 foo foo -",
+  "L+ /etc/foo.conf - - - - /usr/share/foo/foo.conf",
+},
 ```
 
 ### `hostname`

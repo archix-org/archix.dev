@@ -34,7 +34,7 @@ $ archix --version
 archix 0.1.0
 ```
 
-Then run `sudo archix init` to capture your system into a config and a lock that match it exactly, so the first `archix diff` is empty. Until there's a config, commands that need one say so: ``there's no archix config at /etc/archix yet; run `sudo archix init` to write one that describes this machine, or point --config at yours``. The [quick start](/docs/quick-start/) walks through it.
+Then run `sudo archix init` to capture your system into a config and a lock that match it exactly, so the first `archix diff` has no changes to show, only what [stays on this machine without being in the config](/docs/reference/cli/#carried-but-not-declared), such as secrets. Until there's a config, commands that need one say so: ``there's no archix config at /etc/archix yet; run `sudo archix init` to write one that describes this machine, or point --config at yours``. The [quick start](/docs/quick-start/) walks through it.
 
 ## `ax`, the short name
 

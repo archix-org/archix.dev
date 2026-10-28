@@ -88,7 +88,8 @@ const nix = [
 					<h3>Declared</h3>
 					<p>
 						One config for every machine, laid out like a neovim config. Modules declare typed options, so a typo is an
-						error with a suggestion, not a setting that silently does nothing.
+						error with a suggestion, not a setting that silently does nothing. What you set up by hand and never declared
+						stays on that machine only, and <code>archix diff</code> names it.
 					</p>
 					<Artifact title="archix diff">
 						<pre><span class="bad">error:</span> <span class="w">`programs.kity`</span>: option does not exist

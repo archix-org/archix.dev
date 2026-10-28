@@ -114,6 +114,8 @@ Encrypted secrets, agenix- or sops-style, are not supported.
 
 On NixOS, imperative changes mostly don't stick. On archix, they can't be made: `/usr`, `/opt` and `/boot` are read-only, so `pacman -S` and `yay` stop with a message pointing to archix, while `pacman -Q`, `-Ss` and `-F` work as usual. Install through archix, `archix -S`, `archix -Syu` or `archix install --temp` to try something undeclared, which, like everything else, takes effect at the next boot. See [pacman and yay](/docs/concepts/pacman-and-yay/).
 
+What was there before the first switch is the exception, and so is `/etc`, which stays writable. Each deployment starts as a copy of the one before, the first as a copy of the live system, so a tree under `/opt` no package installed, a config file edited by hand and secrets such as SSH host keys stick, on that machine only: a machine built from the config won't have them. archix keeps them and names them in `archix diff` and `archix status`, under [carried but not declared](/docs/reference/cli/#carried-but-not-declared).
+
 ### One machine at a time
 
 `archix switch` applies to the machine it runs on. You can evaluate, diff and lock another host with `--host`, but remote switch over ssh, like `nixos-rebuild --target-host`, is not supported.

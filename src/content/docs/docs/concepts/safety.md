@@ -142,6 +142,8 @@ Before it stages anything, a switch takes a copy of the running `/etc` as the ba
 
 New accounts and new group members wait until the clash is resolved.
 
+A second switch, `archix install` or rollback before the reboot builds from the waiting deployment, so it first stops the watcher, which makes its last pass as it stops. The build then copies a whole `/etc`, never one caught between the merge's writes, such as a new `/etc/passwd` before its `/etc/shadow`. Once the new deployment is committed, or the build failed, the watcher starts again for whichever deployment is waiting, and carries what changed during the build.
+
 At shutdown the watcher makes a last pass, bounded to 20 seconds, which never holds up the shutdown. After a power cut, a hang or a pass that ran out of time, the next boot carries what the old `/etc` held on disk before anything starts, and the login note says so; a change the disk hadn't stored yet when the power went is lost. `archix status` lists what was carried and the conflicts:
 
 ```

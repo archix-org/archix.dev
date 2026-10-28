@@ -742,7 +742,7 @@ udev_rules = {
 
 ## File systems and swap
 
-archix writes each deployment's `/etc/fstab` whole: the root's line as the deployment had it, the ESP's line with its [protections](#bootesp), then a line for each of [`file_systems`](#file_systems) and [`swap`](#swap). Lines nothing declares are dropped, and the switch says so before you confirm. Like the rest of a deployment, they apply at the next boot: a switch mounts and unmounts nothing on the running system. A rollback boots the old deployment with its own fstab, so a disk declared after it isn't mounted there. `/etc/fstab` can't be in [`files`](#files): ``files: /etc/fstab is archix's to write, with its own lines for the root and the ESP; declare mounts in file_systems and swap instead``. See [Disks, mounts and swap](/docs/guides/file-systems/).
+archix writes each deployment's `/etc/fstab` whole: the root's line as the deployment had it, the ESP's line with its [protections](#bootesp), then a line for each of [`file_systems`](#file_systems) and [`swap`](#swap). Lines nothing declares are dropped, and the switch says so before you confirm, but it refuses to drop one that's mounted now or under `/home`, `/var` or `/srv` unless [`drop_mounts`](#drop_mounts) lists it. Like the rest of a deployment, they apply at the next boot: a switch mounts and unmounts nothing on the running system. A rollback boots the old deployment with its own fstab, so a disk declared after it isn't mounted there. `/etc/fstab` can't be in [`files`](#files): ``files: /etc/fstab is archix's to write, with its own lines for the root and the ESP; declare mounts in file_systems and swap instead``. See [Disks, mounts and swap](/docs/guides/file-systems/).
 
 ### `file_systems`
 
@@ -760,10 +760,10 @@ Filesystems to mount at boot, keyed by mount point.
 | `fs_type` | `str` | `"auto"` | The filesystem type, such as `ext4`, `btrfs`, `vfat`, `tmpfs` or `nfs`; a bind mount's is written as `none`. |
 | `options` | `list of str` | `[]` | Mount options, one per string, such as `{ "noatime", "subvol=@data" }` or `{ "bind" }`; none means `defaults`. |
 | `check` | `bool` | `false` | fsck the filesystem at boot before mounting it (`fs_passno` 2). Not for bind mounts or tmpfs. |
-| `required` | `bool` | `false` | Make the boot wait for it and stop in emergency mode without it. |
+| `required` | `null or bool` | `null` | Make the boot wait for it and stop in emergency mode without it. `null` means `true` at `/home`, `/var` and `/srv` and under them, `false` elsewhere. |
 | `encrypted` | `null or submodule` | `null` | Unlock a LUKS device at boot through an `/etc/crypttab` line archix writes: `device` (`str`, *required*), the LUKS partition such as `"UUID=…"`; `key_file` (`null or str`), a key file to unlock it with, or null for systemd to ask for the passphrase at boot; `options` (`list of str`, default `[]`), crypttab options such as `{ "discard" }`. The mount's own `device` must be `/dev/mapper/<name>`, which names the crypttab line. |
 
-By default a mount is `nofail`, and a device that udev has to bring up (`UUID=`, `LABEL=`, `PARTUUID=`, `PARTLABEL=`, `ID=` or a `/dev` path other than `/dev/mapper`) is waited for 30 seconds, `x-systemd.device-timeout=30s`, unless `options` set a timeout. So a disk that's unplugged, dead or renamed leaves its mount out instead of dropping every boot into emergency mode, where a headless machine can't be reached and boot counting would only fall back to a deployment with the same fstab. Set `required = true` for a filesystem the system can't run without, such as a separate `/home`. A switch also warns about a device that isn't attached now, or that holds another filesystem than `fs_type`, per `blkid`: ``warning: UUID=… for /mnt/data isn't attached now; boots without it go on without mounting it (nofail)``.
+By default a mount outside `/home`, `/var` and `/srv` is `nofail`, and a device that udev has to bring up (`UUID=`, `LABEL=`, `PARTUUID=`, `PARTLABEL=`, `ID=` or a `/dev` path other than `/dev/mapper`) is waited for 30 seconds, `x-systemd.device-timeout=30s`, unless `options` set a timeout. So a disk that's unplugged, dead or renamed leaves its mount out instead of dropping every boot into emergency mode, where a headless machine can't be reached and boot counting would only fall back to a deployment with the same fstab. Set `required = true` for another filesystem the system can't run without. Mounts at `/home`, `/var` and `/srv` and under them are required unless `required = false` or their `options` have `nofail`: booting without one would show an empty directory that programs fill with fresh files on the root filesystem, hidden once the mount is back. A switch also warns about a device that isn't attached now, or that holds another filesystem than `fs_type`, per `blkid`: ``warning: UUID=… for /mnt/data isn't attached now; boots without it go on without mounting it (nofail)``.
 
 archix writes the root's and the ESP's lines itself, and the first switch can't lay out a system with `/usr`, `/opt`, `/boot`, `/var`, `/var/lib`, `/var/lib/pacman` or `/archix` on a filesystem of its own, so these mount points are refused: `/`, the ESP and anything in it, `/usr` and anything in it but `/usr/local`, `/opt`, `/boot`, `/etc` and `/archix` and anything in them, `/var` and `/var/lib` themselves, `/var/lib/pacman` and `/var/lib/dkms`, and `/var/usrlocal`. For example: ``file_systems["/var"]: /var can't be declared: a separate filesystem there would cover the pacman database and DKMS state each deployment keeps on the root filesystem``. A filesystem at `/usr/local` is fine; it's mounted over the shared [`/usr/local`](/docs/concepts/atomicity/).
 
@@ -771,7 +771,7 @@ A mount of `/dev/mapper/<name>` without `encrypted` needs something else to open
 
 ```lua
 file_systems = {
-  ["/home"] = { device = "UUID=6f1c…", fs_type = "ext4", check = true, required = true },
+  ["/home"] = { device = "UUID=6f1c…", fs_type = "ext4", check = true },
   ["/mnt/data"] = { device = "LABEL=data", fs_type = "btrfs", options = { "subvol=@data", "compress=zstd" } },
   ["/mnt/vault"] = {
     device = "/dev/mapper/vault",
@@ -781,6 +781,20 @@ file_systems = {
   ["/srv/www"] = { device = "/mnt/data/www", options = { "bind" } },
   ["/tmp"] = { device = "tmpfs", fs_type = "tmpfs", options = { "size=4G", "mode=1777" } },
 },
+```
+
+### `drop_mounts`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/file_systems.lua` |
+
+Lines of the running `/etc/fstab` and `/etc/crypttab` that the next deployment may leave out although they're guarded: mount points, and `/dev/mapper/<name>` for crypttab volumes. Without an entry, a switch refuses to drop an fstab line nothing declares whose mount point is mounted now or is `/home`, `/var`, `/srv` or under them, or a crypttab line whose volume is open now or backs such a mount, naming each line and the `file_systems` entry that would keep it, and changes nothing. A volume backing a listed mount point may go with it. An entry `file_systems` declares too is an error; one neither file has gets a warning at each switch, so take it out once the deployment without the line has booted. See [Lines archix won't drop](/docs/guides/file-systems/#lines-archix-wont-drop).
+
+```lua
+drop_mounts = { "/home/old", "/dev/mapper/oldcrypt" },
 ```
 
 ### `swap`
@@ -803,6 +817,8 @@ Swap partitions and files, written into each deployment's `/etc/fstab`; they app
 | `required` | `bool` | `false` | Make the boot wait for it; by default it's `nofail`. |
 
 Give one of `device` and `file`. A file with a `size` is made at boot by `archix-swapfile-<name>.service`, ordered before its swap unit, when it's missing, has another size or no swap signature; otherwise it's left alone. On btrfs it's made with `btrfs filesystem mkswapfile`, which makes it NOCOW and preallocated, in a subvolume of its own that archix creates for its directory when that's missing, since btrfs can't snapshot a subvolume that holds an active swap file. Elsewhere it's preallocated, `0600` and `mkswap`ed. On btrfs, a switch refuses a swap file to be made in a directory that exists and isn't a subvolume of its own: ``swap: /swapfile would be made on btrfs in /, which isn't a subvolume of its own, and btrfs can't snapshot a subvolume holding an active swap file; put it in a directory archix creates as a subvolume, such as /swap/swapfile (the directory must not exist yet), or make / a subvolume first; nothing was changed``. A file without a `size` must exist; archix only swaps on it, and warns when it's missing or, on btrfs, outside a subvolume of its own.
+
+Hibernating to a swap file goes through systemd's `HibernateLocation` EFI variable, which the initramfs's `systemd` hook resumes from; archix sets no `resume_offset=`. A deployment that swaps on a file whose mkinitcpio HOOKS have no `systemd` and whose `kernel_params` no `resume=` gets `/etc/systemd/sleep.conf.d/archix-swap-file.conf`, which turns hibernation off. See [Hibernation](/docs/guides/file-systems/#hibernation).
 
 A swap file is never in a deployment or on the ESP: one in `/archix`, `/usr`, `/var/usrlocal`, `/opt`, `/boot`, `/etc`, `/var/lib/pacman`, `/var/lib/dkms`, `/proc`, `/sys`, `/dev`, `/run` or `/tmp` is refused, such as ``swap[1]: a swap file can't be at /archix/swapfile: deployments live in /archix``.
 

@@ -156,7 +156,7 @@ return {
   },
   services = { ["bluetooth.service"] = true, ["sshd.service"] = true },
   file_systems = {
-    ["/home"] = { device = "UUID=5d2a…", fs_type = "ext4", options = { "rw", "relatime" }, check = true, required = true },
+    ["/home"] = { device = "UUID=5d2a…", fs_type = "ext4", options = { "rw", "relatime" }, check = true },
   },
   swap = { { file = "/swap/swapfile" } },
   files = {

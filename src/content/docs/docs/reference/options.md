@@ -496,7 +496,7 @@ With `mutable = false`, or [`mutable_files = false`](#mutable_files), the file i
 
 `merge` sets keys in a file archix doesn't own, such as one an app writes too: archix edits only the declared keys and leaves the app's own. The app's keys never show up in `archix diff`; a declared key that changed does, and the next switch sets it back. JSON files may be JSONC, with comments and trailing commas, but archix drops the comments when it writes the file back; a file that can't take its keys stops the switch before anything changes. A new file gets `0644` and `owner`/`group`; an existing one keeps its mode and owner. When the entry leaves the config, the file keeps its keys and is neither restored nor deleted. See [Setting single keys](/docs/guides/dotfiles-and-apps/#setting-single-keys).
 
-archix doesn't write under `/usr` (except `/usr/local`, which is part of each deployment), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`: `files: <path> is in a directory archix doesn't write to; home files go in home.files, and boot entries in boot.extra_entries`. Files in a home directory go in [`home.files`](#homefiles), and systemd-boot entries in [`boot.extra_entries`](#bootextra_entries).
+archix doesn't write under `/usr` (except `/usr/local`, which is part of each deployment), `/proc`, `/sys`, `/dev`, `/run`, `/tmp`, `/home` or `/boot`: `files: <path> is in a directory archix doesn't write to; home files go in home.files, and boot entries in boot.extra_entries`. `/etc/fstab` is archix's to write; declare mounts in [`file_systems`](#file_systems) and [`swap`](#swap). Files archix writes from other options, such as `/etc/crypttab` with an [`encrypted`](#file_systems) mount and zram-generator's config with [`zram.enable`](#zramenable), can't be in `files` too. Files in a home directory go in [`home.files`](#homefiles), and systemd-boot entries in [`boot.extra_entries`](#bootextra_entries).
 
 ```lua
 files = {
@@ -738,6 +738,123 @@ udev rules, keyed by file name without `.rules`. They're written to `/etc/udev/r
 udev_rules = {
   ["60-ioschedulers"] = [[ACTION=="add|change", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/scheduler}="none"]],
 },
+```
+
+## File systems and swap
+
+archix writes each deployment's `/etc/fstab` whole: the root's line as the deployment had it, the ESP's line with its [protections](#bootesp), then a line for each of [`file_systems`](#file_systems) and [`swap`](#swap). Lines nothing declares are dropped, and the switch says so before you confirm. Like the rest of a deployment, they apply at the next boot: a switch mounts and unmounts nothing on the running system. A rollback boots the old deployment with its own fstab, so a disk declared after it isn't mounted there. `/etc/fstab` can't be in [`files`](#files): ``files: /etc/fstab is archix's to write, with its own lines for the root and the ESP; declare mounts in file_systems and swap instead``. See [Disks, mounts and swap](/docs/guides/file-systems/).
+
+### `file_systems`
+
+| | |
+| --- | --- |
+| Type | `attrs of submodule` |
+| Default | `{}` |
+| Declared in | `<archix>/file_systems.lua` |
+
+Filesystems to mount at boot, keyed by mount point.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `device` | `str` | *required* | What to mount: `"UUID=…"`, `"LABEL=…"`, `"PARTUUID=…"`, a `/dev` path, the directory to bind with `options = { "bind" }`, `"tmpfs"`, or a network share such as `"server:/export"`. |
+| `fs_type` | `str` | `"auto"` | The filesystem type, such as `ext4`, `btrfs`, `vfat`, `tmpfs` or `nfs`; a bind mount's is written as `none`. |
+| `options` | `list of str` | `[]` | Mount options, one per string, such as `{ "noatime", "subvol=@data" }` or `{ "bind" }`; none means `defaults`. |
+| `check` | `bool` | `false` | fsck the filesystem at boot before mounting it (`fs_passno` 2). Not for bind mounts or tmpfs. |
+| `required` | `bool` | `false` | Make the boot wait for it and stop in emergency mode without it. |
+| `encrypted` | `null or submodule` | `null` | Unlock a LUKS device at boot through an `/etc/crypttab` line archix writes: `device` (`str`, *required*), the LUKS partition such as `"UUID=…"`; `key_file` (`null or str`), a key file to unlock it with, or null for systemd to ask for the passphrase at boot; `options` (`list of str`, default `[]`), crypttab options such as `{ "discard" }`. The mount's own `device` must be `/dev/mapper/<name>`, which names the crypttab line. |
+
+By default a mount is `nofail`, and a device that udev has to bring up (`UUID=`, `LABEL=`, `PARTUUID=`, `PARTLABEL=`, `ID=` or a `/dev` path other than `/dev/mapper`) is waited for 30 seconds, `x-systemd.device-timeout=30s`, unless `options` set a timeout. So a disk that's unplugged, dead or renamed leaves its mount out instead of dropping every boot into emergency mode, where a headless machine can't be reached and boot counting would only fall back to a deployment with the same fstab. Set `required = true` for a filesystem the system can't run without, such as a separate `/home`. A switch also warns about a device that isn't attached now, or that holds another filesystem than `fs_type`, per `blkid`: ``warning: UUID=… for /mnt/data isn't attached now; boots without it go on without mounting it (nofail)``.
+
+archix writes the root's and the ESP's lines itself, and the first switch can't lay out a system with `/usr`, `/opt`, `/boot`, `/var`, `/var/lib`, `/var/lib/pacman` or `/archix` on a filesystem of its own, so these mount points are refused: `/`, the ESP and anything in it, `/usr` and anything in it but `/usr/local`, `/opt`, `/boot`, `/etc` and `/archix` and anything in them, `/var` and `/var/lib` themselves, `/var/lib/pacman` and `/var/lib/dkms`, and `/var/usrlocal`. For example: ``file_systems["/var"]: /var can't be declared: a separate filesystem there would cover the pacman database and DKMS state each deployment keeps on the root filesystem``. A filesystem at `/usr/local` is fine; it's mounted over the shared [`/usr/local`](/docs/concepts/atomicity/).
+
+A mount of `/dev/mapper/<name>` without `encrypted` needs something else to open it: a line naming it in the new deployment's `/etc/crypttab` or `/etc/crypttab.initramfs`, an `rd.luks.name=…=<name>` kernel parameter, or an active LVM volume of that name. Otherwise the switch stops before changing anything: ``/mnt/x mounts /dev/mapper/x, which no /etc/crypttab line opens, so its boot would wait for a device nothing creates; add encrypted = { device = "UUID=…" } to its file_systems entry, or a crypttab line naming x; nothing was changed``. With any `encrypted` mount, archix writes `/etc/crypttab` whole, and it can't be in `files` too; crypttab lines of mounts that aren't `required` get `nofail`.
+
+```lua
+file_systems = {
+  ["/home"] = { device = "UUID=6f1c…", fs_type = "ext4", check = true, required = true },
+  ["/mnt/data"] = { device = "LABEL=data", fs_type = "btrfs", options = { "subvol=@data", "compress=zstd" } },
+  ["/mnt/vault"] = {
+    device = "/dev/mapper/vault",
+    fs_type = "ext4",
+    encrypted = { device = "UUID=9a2e…", key_file = "/var/lib/keys/vault.key" },
+  },
+  ["/srv/www"] = { device = "/mnt/data/www", options = { "bind" } },
+  ["/tmp"] = { device = "tmpfs", fs_type = "tmpfs", options = { "size=4G", "mode=1777" } },
+},
+```
+
+### `swap`
+
+| | |
+| --- | --- |
+| Type | `list of submodule` |
+| Default | `[]` |
+| Declared in | `<archix>/file_systems.lua` |
+
+Swap partitions and files, written into each deployment's `/etc/fstab`; they apply at the next boot.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `device` | `null or str` | `null` | A swap partition, such as `"UUID=…"` or a `/dev` path. |
+| `file` | `null or path` | `null` | A swap file, such as `/swap/swapfile`. |
+| `size` | `null or str` | `null` | For a file: its size, such as `"8G"` or `"512M"` (powers of 1024). archix makes the file at boot. |
+| `priority` | `null or int` | `null` | The swap priority, `pri=`. |
+| `options` | `list of str` | `[]` | More swap options, such as `{ "discard" }`. |
+| `required` | `bool` | `false` | Make the boot wait for it; by default it's `nofail`. |
+
+Give one of `device` and `file`. A file with a `size` is made at boot by `archix-swapfile-<name>.service`, ordered before its swap unit, when it's missing, has another size or no swap signature; otherwise it's left alone. On btrfs it's made with `btrfs filesystem mkswapfile`, which makes it NOCOW and preallocated, in a subvolume of its own that archix creates for its directory when that's missing, since btrfs can't snapshot a subvolume that holds an active swap file. Elsewhere it's preallocated, `0600` and `mkswap`ed. On btrfs, a switch refuses a swap file to be made in a directory that exists and isn't a subvolume of its own: ``swap: /swapfile would be made on btrfs in /, which isn't a subvolume of its own, and btrfs can't snapshot a subvolume holding an active swap file; put it in a directory archix creates as a subvolume, such as /swap/swapfile (the directory must not exist yet), or make / a subvolume first; nothing was changed``. A file without a `size` must exist; archix only swaps on it, and warns when it's missing or, on btrfs, outside a subvolume of its own.
+
+A swap file is never in a deployment or on the ESP: one in `/archix`, `/usr`, `/var/usrlocal`, `/opt`, `/boot`, `/etc`, `/var/lib/pacman`, `/var/lib/dkms`, `/proc`, `/sys`, `/dev`, `/run` or `/tmp` is refused, such as ``swap[1]: a swap file can't be at /archix/swapfile: deployments live in /archix``.
+
+```lua
+swap = {
+  { file = "/swap/swapfile", size = "8G" },
+  { device = "UUID=3e7d…", priority = 10 },
+},
+```
+
+### `zram.enable`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/file_systems.lua` |
+
+Swap on compressed RAM at `/dev/zram0` through zram-generator, which archix declares as a package. archix writes `/etc/systemd/zram-generator.conf`, which can't be in `files` too, and zram-generator sets the device up at the next boot.
+
+### `zram.size`
+
+| | |
+| --- | --- |
+| Type | `any` |
+| Default | `null` |
+| Declared in | `<archix>/file_systems.lua` |
+
+`zram-size`: an expression in `ram`, in MiB, such as `"ram / 2"` or `"min(ram / 2, 4096)"`, or a number of MiB. By default zram-generator's, `min(ram / 2, 4096)`.
+
+### `zram.algorithm`
+
+| | |
+| --- | --- |
+| Type | `null or str` |
+| Default | `null` |
+| Declared in | `<archix>/file_systems.lua` |
+
+`compression-algorithm`, such as `zstd` or `lz4`.
+
+### `zram.priority`
+
+| | |
+| --- | --- |
+| Type | `null or int` |
+| Default | `null` |
+| Declared in | `<archix>/file_systems.lua` |
+
+`swap-priority`; zram-generator's default is 100.
+
+```lua
+zram = { enable = true, size = "ram / 2", algorithm = "zstd" },
 ```
 
 ## Environment
@@ -1000,7 +1117,7 @@ archix writes the ESP's line in each deployment's `/etc/fstab` so that a power c
 - It's readable by root only (`fmask=0077,dmask=0077`), unless the line already sets `umask`, `fmask` or `dmask`. systemd-boot's random seed lives on the ESP.
 - An ESP with no line gets one, `UUID=… /efi vfat umask=0077,x-systemd.automount,x-systemd.idle-timeout=60 0 2`, as systemd's own automatic mount can't put it at `/efi` once each deployment binds its own `/boot`.
 
-When the config manages `/etc/fstab`, archix leaves it alone and the switch warns instead, for each of these it finds missing.
+The other lines of the fstab come from [`file_systems`](#file_systems) and [`swap`](#swap).
 
 ### `boot.kernel`
 

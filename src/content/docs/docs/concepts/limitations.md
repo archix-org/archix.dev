@@ -21,6 +21,8 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 **Some disk layouts are refused.** The first switch lays the system out as deployments, and refuses before changing anything when `/boot`, `/usr`, `/opt`, `/var`, `/var/lib`, `/var/lib/pacman` or `/archix` is a separate filesystem, or the root is overlayfs, as in a container. Caches and logs on their own btrfs subvolumes, such as CachyOS's `@cache` and `@log`, are fine. See [Requirements](/docs/concepts/atomicity/#requirements).
 
+**Mounts change at the next boot.** [`file_systems`](/docs/reference/options/#file_systems) and [`swap`](/docs/reference/options/#swap) are lines in each deployment's `/etc/fstab`, which archix writes whole, so a switch neither mounts a new disk nor unmounts one it drops; the reboot does. Run `mount` yourself to use a disk before then. Mounts are `nofail` unless `required`, so a missing disk leaves its mount point empty and anything that writes there writes to the root filesystem instead.
+
 **Hooks run before the network.** [Hooks](/docs/guides/hooks/), and `on_change` scripts of files in `/etc`, `/usr`, `/opt` and `/boot`, run at the new deployment's first boot, before networking and before anyone logs in. A hook that needs a running service, a network connection or a user's session fails there, and runs again at the next two boots; after three failures it waits for `archix hooks retry` or `archix hooks skip`.
 
 **Package scripts get no network while staging on CachyOS.** CachyOS's pacman puts every install scriptlet and hook in a network namespace of its own, which it can't make inside archix's staging root, so archix gives the whole transaction one instead, with only loopback. A pacman hook with `NetworkAccess = allowed` gets no network there either. Arch's pacman runs as before.
@@ -36,6 +38,8 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 ## Rollback
 
 **A rollback keeps what's in `/var`.** Deployments hold `/usr`, `/opt`, `/boot`, `/etc`, pacman's database and DKMS state. Data under `/var`, such as databases, and your home are shared by every deployment and stay as they are. A newer PostgreSQL or MariaDB may have migrated its data, and the older version can't read it. `archix rollback` asks before going back across such versions, from a list it ships plus your [`unsafe_downgrades`](/docs/reference/options/#unsafe_downgrades), but picking an older entry in the boot menu boots it without asking; see [Downgrades that may break data](/docs/concepts/generations/#downgrades-that-may-break-data). Back up data you can't lose.
+
+**A rollback brings back the old fstab.** Each deployment keeps the `/etc/fstab` its switch wrote, so rolling back, or booting an older entry, mounts what that deployment declared: a disk added to `file_systems` after it isn't mounted there, and one removed since is mounted again. Swap files and the data on disks stay as they are.
 
 **Only kept deployments roll back instantly.** With the default [`deployments.keep = 2`](/docs/reference/options/#deploymentskeep), the previous deployment is kept. Older generations are rebuilt from the nearest kept deployment and their package files, which takes as long as an update and needs those files: in archix's cache, a [package cache](/docs/concepts/lockfile/#package-caches), the Arch Linux Archive, or, for third-party packages, archix's own copies.
 

@@ -125,7 +125,7 @@ Nothing is written until `Write the config ›` on Review. Then the wizard close
   Next: look it over, then run sudo archix switch
 ```
 
-System-wide Flatpak apps are declared too, each locked to the commit it's installed at; `--user` apps are left out, and so are apps whose remote is gone. `init` changes nothing on the system except the config directory. The first `sudo archix switch` lays the system out as deployment 1, with a boot entry of its own, without changing any packages; see [Atomic deployments](/docs/concepts/atomicity/#requirements) for what it needs. Imported dotfiles are the exception: the first switch replaces them with links, and the Result section lists them under `! the first switch would still change these:`. Secret files are never shown or copied, only counted. See the [quick start](/docs/quick-start/) for every step.
+Mounts are declared from `/etc/fstab`: each line but the root's and the ESP's goes into [`file_systems`](/docs/reference/options/#file_systems) or [`swap`](/docs/reference/options/#swap) as it is, `required = true` where it has no `nofail` and `check = true` where its `fs_passno` isn't 0, and a mount of `/dev/mapper/<name>` gets `encrypted` from the crypttab line that opens it, when every crypttab line belongs to a mount; otherwise `/etc/crypttab` is offered as a file. `/etc/systemd/zram-generator.conf` with only a `[zram0]` of `zram-size`, `compression-algorithm` and `swap-priority` becomes [`zram`](/docs/reference/options/#zramenable). `/etc/fstab` is never offered as a file. A line archix can't declare stays out with a `!` line in System saying why, such as `file_systems: the line for /var is left out: a separate filesystem there would cover the pacman database and DKMS state each deployment keeps on the root filesystem`, and so does a zram-generator.conf the option can't say, which is offered as a file instead. System-wide Flatpak apps are declared too, each locked to the commit it's installed at; `--user` apps are left out, and so are apps whose remote is gone. `init` changes nothing on the system except the config directory. The first `sudo archix switch` lays the system out as deployment 1, with a boot entry of its own, without changing any packages; see [Atomic deployments](/docs/concepts/atomicity/#requirements) for what it needs. Imported dotfiles are the exception: the first switch replaces them with links, and the Result section lists them under `! the first switch would still change these:`. Secret files are never shown or copied, only counted. See the [quick start](/docs/quick-start/) for every step.
 
 | Flag | Description |
 | --- | --- |
@@ -480,7 +480,11 @@ mark       python-pip as a dependency
 create     /etc/sysctl.d/80-swappiness.conf
 update     /etc/issue (edited outside archix; your version gets saved)
 enable     sshd.service
+fstab      mount /mnt/data (LABEL=data) at the next boot
+fstab      drop /mnt/old (UUID=4c1f…) at the next boot, as neither file_systems nor swap declares it
 ```
+
+`fstab` lines compare the running deployment's `/etc/fstab` with the mounts and swap the config declares, which the next deployment's fstab holds; `change` marks a line whose device, type, options or check differ.
 
 A package from one of the config's own recipes whose recipe changed at the same version shows as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`.
 
@@ -659,7 +663,7 @@ It copies everything in `/var/cache/archix/pkg`, the files archix downloaded and
 
 ## Internal commands
 
-Hidden commands are run by files archix installs, not by you: `archix hook-record`, from the pacman hook; `archix boot-check` and `archix boot-complete`, from `archix-boot.service` and `archix-boot-complete.service`; `archix deploy-mount`, from the initramfs hook, which mounts the deployment the boot belongs to; `archix deploy-activate`, from `archix-deploy-activate.service`, which applies a deployment's `/var` changes at its first boot and runs its hooks; `archix etc-merge`, from `archix-etc-merge.service` and, with `--boot`, `archix-etc-merge-boot.service`; `archix health-check`, from `archix-health-check.service`; `archix deploy-flatpak`, from `archix-flatpak.service`; `archix bless`, from a drop-in for `systemd-bless-boot.service`, which renames a counted entry to its good name and flushes it under that name, as a FAT rename isn't on disk until then; `archix pacman-guard`, from the pacman hook that stops plain pacman on a deployment; and `archix eject-here`, which `eject` runs in a private mount namespace.
+Hidden commands are run by files archix installs, not by you: `archix hook-record`, from the pacman hook; `archix boot-check` and `archix boot-complete`, from `archix-boot.service` and `archix-boot-complete.service`; `archix deploy-mount`, from the initramfs hook, which mounts the deployment the boot belongs to; `archix deploy-activate`, from `archix-deploy-activate.service`, which applies a deployment's `/var` changes at its first boot and runs its hooks; `archix etc-merge`, from `archix-etc-merge.service` and, with `--boot`, `archix-etc-merge-boot.service`; `archix health-check`, from `archix-health-check.service`; `archix deploy-flatpak`, from `archix-flatpak.service`; `archix swapfile`, from `archix-swapfile-<name>.service`, which makes a [`swap`](/docs/reference/options/#swap) file with a size before it's swapped on; `archix bless`, from a drop-in for `systemd-bless-boot.service`, which renames a counted entry to its good name and flushes it under that name, as a FAT rename isn't on disk until then; `archix pacman-guard`, from the pacman hook that stops plain pacman on a deployment; and `archix eject-here`, which `eject` runs in a private mount namespace.
 
 ## Exit behaviour
 

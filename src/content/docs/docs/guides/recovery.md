@@ -5,7 +5,18 @@ sidebar:
   order: 9
 ---
 
-Most failures need neither of these. A bad update is undone by picking an older deployment in the boot menu, or by boot counting on its own; a lost `loader/` is covered by the fallback boot image in `EFI/Linux`. A bad file in the shared `/usr/local`, which every deployment uses and no rollback undoes, is got past the same way: those boots, and the fallback boot image, leave `/usr/local` out, so you can fix or remove the file in `/var/usrlocal` and reboot; see [What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds). This guide is for when no deployment boots: every one broken the same way, a root filesystem that needs repair, or a password nobody knows.
+Most failures need neither of these. A bad update is undone by picking an older deployment in the boot menu, or by boot counting on its own; a lost `loader/` is covered by the fallback boot image in `EFI/Linux`. A bad file in the shared `/usr/local`, which every deployment uses and no rollback undoes, is got past the same way: those boots, and the fallback boot image, leave `/usr/local` out, and hold it out of the boots after until `sudo archix usr-local quarantine` moves the boot-time files away or `sudo archix usr-local release` lets the next boot try it again; see [What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds). This guide is for when no deployment boots: every one broken the same way, a root filesystem that needs repair, or a password nobody knows.
+
+## Bringing up the boot menu
+
+The deployments, the fallback image ("archix (fallback)") and the rescue entry are all in systemd-boot's menu, but the menu shows only when its timeout is above 0. archix doesn't change the timeout: it's `timeout` in `/efi/loader/loader.conf` as your install wrote it, or the `LoaderConfigTimeout` EFI variable that `bootctl set-timeout` and the menu's `t` and `T` keys set, which wins over the file. `bootctl install` leaves it at 0, which boots the default at once.
+
+- **At 0 (or `menu-hidden`)**, hold Space, or press it over and over, as the machine starts, from the firmware's logo until the menu appears. Some firmware only takes keys for a moment; if the default boots anyway, reset and try again. Then pick an entry with the arrow keys and Enter.
+- **From a running system**, `systemctl reboot --boot-loader-menu=60` restarts into the menu once, and waits up to 60 seconds there.
+- **Every boot**: `sudo bootctl set-timeout 5` shows the menu for 5 seconds at each boot; `sudo bootctl set-timeout ''` goes back to `loader.conf`'s.
+- **`menu-disabled`** turns the key off too; only `systemctl reboot --boot-loader-menu=` and the variable bring the menu back.
+
+The menu's `d` key makes the highlighted entry the default; archix clears that the next time it writes `loader.conf`. To start an entry once without the menu, use `sudo bootctl set-oneshot archix-41.conf` (or `archix-fallback-42.efi`, `archix-rescue.conf`) and reboot.
 
 ## Without a live USB: the rescue entry
 

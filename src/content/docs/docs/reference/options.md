@@ -1177,7 +1177,7 @@ See [Flatpak and AppImages](/docs/guides/flatpak-and-appimages/) for a walkthrou
 | Default | `{}` |
 | Declared in | `<archix>/appimages.lua` |
 
-AppImages to download, keyed by command name: installed to `/opt/archix/appimages`, linked into `/usr/local/bin` and added to app menus. Declares `fuse2`, which AppImages need.
+AppImages to download, keyed by command name: installed to `/opt/archix/appimages`, linked as `/usr/bin/<name>` and added to app menus in `/usr/share/applications`, all inside the deployment, so a rollback takes them back together; a name a package's `/usr/bin` file has is refused. Declares `fuse2`, which AppImages need.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -1193,8 +1193,8 @@ Each entry becomes three managed files, so it's locked by its hash and rolls bac
 | File | What it is |
 | --- | --- |
 | `/opt/archix/appimages/<name>.AppImage` | The download, mode `0755`. |
-| `/usr/local/bin/<name>` | A link to it, so `<name>` runs from your `PATH`. |
-| `/usr/local/share/applications/archix-<name>.desktop` | The menu entry, unless `desktop = false`. |
+| `/usr/bin/<name>` | A link to it, so `<name>` runs from your `PATH`. |
+| `/usr/share/applications/archix-<name>.desktop` | The menu entry, unless `desktop = false`. |
 
 The key has to be usable as a command name: letters, digits, `.`, `_` and `-`. Anything else is an error, such as `appimages: my app isn't a valid command name`.
 

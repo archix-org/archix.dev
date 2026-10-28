@@ -43,7 +43,7 @@ Commands always win over terms: `archix status` runs `status`, and a typo such a
 
 ## Root
 
-Commands that change the system need root: `install`, `remove`, `switch`, `upgrade` (and `-Syu` and bare `archix`), `rollback`, `gc`, `hooks`, `verify`, `eject`, `init`, `secure-boot setup`, `secure-boot revoke` (but not `--dry-run`) and `secure-boot rotate-pcr-key`. Run as your user, they stop before touching anything, `installed.lua` included, and give you the line to run, the way you typed it:
+Commands that change the system need root: `install`, `remove`, `switch`, `upgrade` (and `-Syu` and bare `archix`), `rollback`, `gc`, `hooks`, `usr-local`, `verify`, `eject`, `init`, `secure-boot setup`, `secure-boot revoke` (but not `--dry-run`) and `secure-boot rotate-pcr-key`. Run as your user, they stop before touching anything, `installed.lua` included, and give you the line to run, the way you typed it:
 
 ```console
 $ archix -S htop
@@ -52,7 +52,7 @@ error: `archix install` changes the system, so it needs root; run it with sudo: 
 
 Only one of these runs at a time; see [Commands that change the system](#commands-that-change-the-system). Any other error that comes from a missing permission gets the same hint, such as `archix lock` on a root-owned `/etc/archix`: `hint: that needs root; run it with sudo: sudo archix lock`. Reading doesn't need root: `archix <terms>`, `search`, `diff`, `status`, `eval`, `options`, `generations` and `secure-boot check` work as your user, and so do `lock` and `update` on a config you own. `archix <terms>` asks sudo for the install itself.
 
-Every command except `init`, `options`, `rollback`, `gc`, `hooks`, `verify`, `generations`, `eject`, `prefetch`, `cache push` and `secure-boot` reads the config. `options` works without one, listing every option against an empty config. With no `init.lua` in the config directory, the others stop with:
+Every command except `init`, `options`, `rollback`, `gc`, `hooks`, `usr-local`, `verify`, `generations`, `eject`, `prefetch`, `cache push` and `secure-boot` reads the config. `options` works without one, listing every option against an empty config. With no `init.lua` in the config directory, the others stop with:
 
 ```console
 error: there's no archix config at /etc/archix yet; run `sudo archix init` to write one that describes this machine, or point --config at yours
@@ -328,6 +328,20 @@ dropped the hooks waiting for deployment 46; they won't run
 
 `retry` runs them on the running deployment, and only that one: `deployment 47 isn't the one running, so its hooks run at its boot`. If one fails again, they stay waiting: `hook link: exited with exit status: 1; they stay waiting, `archix hooks skip` drops them`. With none waiting, both say `no hooks wait for deployment 46`.
 
+### `usr-local`
+
+Let boots bind the shared `/usr/local` again after a boot that left it out held it out, because it holds files that systemd, udev or the module loader read at boot; see [What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds).
+
+```console
+$ sudo archix usr-local quarantine
+moved /usr/local/lib/systemd/system/foo.service into /var/usrlocal.quarantine/1793180000, under the same paths; move one back to /usr/local to use it again
+the next boot binds /usr/local again
+$ sudo archix usr-local release
+the next boot binds /usr/local again (held out since ...); if it doesn't reach multi-user.target, the boot after leaves /usr/local out again
+```
+
+`quarantine` moves every file under `/var/usrlocal/lib/systemd`, `lib/udev`, `lib/modprobe.d`, `lib/modules-load.d`, `lib/sysctl.d`, `lib/tmpfiles.d`, `lib/sysusers.d`, `lib/environment.d` and `lib/binfmt.d` into `/var/usrlocal.quarantine/<time>/`, and releases the hold. `release` lets the next boot bind `/usr/local` once, for when you've fixed the files instead; if that boot doesn't reach `multi-user.target`, the one after leaves `/usr/local` out again. With nothing held, `release` says `/usr/local isn't held out; every boot of the current deployment binds it`. Neither evaluates the config.
+
 ### `verify`
 
 Check each kept deployment's `/usr`, `/opt` and `/boot` against its packages, file by file: type, link target, mode, owner, size and sha256, as `pacman -Qkk` does. Files a package lists as `backup` aren't checked, nor is `/usr/local`, which no deployment holds. It also warns, as `archix status` does, about files in the shared `/usr/local` that systemd, udev or the module loader read at boot, since they apply to every deployment: `warning: /usr/local holds files that systemd, udev or the module loader read at boot: /usr/local/lib/systemd/system/foo.service. They apply to every deployment and no rollback undoes them; ...`; see [What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds).
@@ -368,7 +382,7 @@ this machine is plain Arch now and archix no longer manages it; restart when con
 
 It copies the deployment's trees into the root's own, as hardlinks on ext4 and reflinks on btrfs, takes archix's integration out of them, then hands the ESP over: it adds a `default_uki` line for `EFI/Linux/arch-<kernel>.efi` to the kernel's mkinitcpio preset, runs `mkinitcpio -p`, signs the UKI when sbctl has keys, makes it `loader.conf`'s default, and deletes archix's entries, boot images and fallback image. With the ESP mounted at `/boot`, it writes plain `arch-<kernel>.conf` entries instead. Then the running system moves off the deployment's mounts onto the root's own trees, and `/archix` is deleted.
 
-The deployment that runs has to be `current`, since that's what you've been using: with a switch waiting for its reboot, it refuses with ``deployment 43 is current, but this boot runs deployment 42; restart into 43 (or `archix rollback 42`) and eject then; nothing was changed``. It also refuses when this boot didn't come from a deployment.
+The deployment that runs has to be `current`, since that's what you've been using: with a switch waiting for its reboot, it refuses with ``deployment 43 is current, but this boot runs deployment 42; restart into 43 (or `archix rollback 42`) and eject then; nothing was changed``. It also refuses when this boot didn't come from a deployment, and while [`/usr/local` is held out](/docs/concepts/atomicity/#what-usrlocal-holds) with boot-time files in it, which would become the root's own `/usr/local` that every boot reads: run `sudo archix usr-local quarantine` first.
 
 `eject` records how far it got in `/var/lib/archix/eject`. If it's cut off, by a kill or a power cut, the machine still boots, and `sudo archix eject` again finishes it: `archix eject: finishing the eject to plain Arch from deployment 42 that was cut off`. A failure says the same: `the eject stopped partway; the machine still boots, and running `sudo archix eject` again finishes it`.
 
@@ -517,7 +531,7 @@ the system matches the lock
 
 The `booted generation` line and the notes under it appear while a committed deployment waits for the next boot: the updates waiting for it, with kernels, `glibc`, `openssl`, `openssh`, `systemd` and `sudo` named as security-relevant, the [hibernation guard](/docs/concepts/atomicity/#a-switch), and what the [`/etc` merge](/docs/concepts/safety/#changes-to-etc-before-the-reboot) has carried into it, with a line for each conflict and each change it couldn't carry. Once the deployment has booted, the same lines say what was carried from the one before, and whether its last pass at shutdown was cut off.
 
-Other lines appear when they apply: a verify that found changed files (see [`verify`](#verify)), files in the shared `/usr/local` that systemd, udev or the module loader read at boot ([What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds)), hooks or `systemd-sysusers` failing at boot (`deployment 46's hooks failed at 2 of 3 boots; the next boot runs them again`), a [health check](/docs/reference/options/#boothealth_check) or boot count that fell back to the previous deployment, and ``warning: systemd-boot's LoaderEntryDefault variable (the boot menu's default, or `bootctl set-default`) names archix-40.conf and overrides archix's default; the next switch clears it, or `sudo bootctl set-default ''` now``. The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
+Other lines appear when they apply: a verify that found changed files (see [`verify`](#verify)), files in the shared `/usr/local` that systemd, udev or the module loader read at boot, and `/usr/local: every boot leaves it out, held since ...` while a boot that left it out holds it out ([What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds)), hooks or `systemd-sysusers` failing at boot (`deployment 46's hooks failed at 2 of 3 boots; the next boot runs them again`), a [health check](/docs/reference/options/#boothealth_check) or boot count that fell back to the previous deployment, and ``warning: systemd-boot's LoaderEntryDefault variable (the boot menu's default, or `bootctl set-default`) names archix-40.conf and overrides archix's default; the next switch clears it, or `sudo bootctl set-default ''` now``. The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
 
 On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. The last line compares the lock with the current deployment: `the system matches the lock`, or `2 changes pending; see `archix diff``. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 

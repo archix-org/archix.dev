@@ -340,6 +340,8 @@ deployment 42: 1 files differ from its packages:
 error: deployment 42 changed; `sudo archix verify --repair` restores them
 ```
 
+It also checks the deployment's declared [`capabilities`](/docs/reference/options/#capabilities), which `pacman -Qkk` doesn't look at: `deployment 42: /usr/bin/gamescope lacks its capabilities cap_sys_nice=ep` fails the check too, and `--repair` sets them again on a copy of the file of its own.
+
 Up to 20 files are listed per deployment. Packaged files that are missing, as pacman.conf's `NoExtract` leaves them, are counted on their own line and don't fail the check. While the last check found differences, `archix status` says so: ``deployment 42 differs from its packages in 1 files at the last check; `sudo archix verify --repair` restores them``. A [rollback](#rollback) to a kept deployment runs the same check first.
 
 | Flag | Description |
@@ -480,6 +482,7 @@ mark       python-pip as a dependency
 create     /etc/sysctl.d/80-swappiness.conf
 update     /etc/issue (edited outside archix; your version gets saved)
 enable     sshd.service
+setcap     /usr/bin/gamescope cap_sys_nice=ep
 ```
 
 A package from one of the config's own recipes whose recipe changed at the same version shows as `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)`.
@@ -516,7 +519,7 @@ the system matches the lock
 
 The `booted generation` line and the notes under it appear while a committed deployment waits for the next boot: the updates waiting for it, with kernels, `glibc`, `openssl`, `openssh`, `systemd` and `sudo` named as security-relevant, the [hibernation guard](/docs/concepts/atomicity/#a-switch), and what the [`/etc` merge](/docs/concepts/safety/#changes-to-etc-before-the-reboot) has carried into it, with a line for each conflict and each change it couldn't carry. Once the deployment has booted, the same lines say what was carried from the one before, and whether its last pass at shutdown was cut off.
 
-Other lines appear when they apply: a verify that found changed files (see [`verify`](#verify)), hooks or `systemd-sysusers` failing at boot (`deployment 46's hooks failed at 2 of 3 boots; the next boot runs them again`), a [health check](/docs/reference/options/#boothealth_check) or boot count that fell back to the previous deployment, and ``warning: systemd-boot's LoaderEntryDefault variable (the boot menu's default, or `bootctl set-default`) names archix-40.conf and overrides archix's default; the next switch clears it, or `sudo bootctl set-default ''` now``. The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
+Other lines appear when they apply: a verify that found changed files (see [`verify`](#verify)), hooks or `systemd-sysusers` failing at boot (`deployment 46's hooks failed at 2 of 3 boots; the next boot runs them again`), a [health check](/docs/reference/options/#boothealth_check) or boot count that fell back to the previous deployment, and ``warning: systemd-boot's LoaderEntryDefault variable (the boot menu's default, or `bootctl set-default`) names archix-40.conf and overrides archix's default; the next switch clears it, or `sudo bootctl set-default ''` now``. The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. Each of the config's [holds](/docs/concepts/lockfile/#holds) gets a line, `hold: scx-scheds held at 1.1.2-1, behind the snapshot's 1.1.3-2`, as in `diff`, and holds keeping kernels, `glibc`, `openssl`, `openssh`, `systemd`, `sudo`, `pacman` or archix behind add a warning: `warning: holds keep security-sensitive packages behind: linux 6.17.1.arch1-1; they miss the fixes in newer versions, and a held library the rest of the system moved past can break at runtime`. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
 
 On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. The last line compares the lock with the current deployment: `the system matches the lock`, or `2 changes pending; see `archix diff``. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 
@@ -586,7 +589,7 @@ snapshot 2026-10-09 -> 2026-10-15
 wrote /etc/archix/archix.lock
 ```
 
-`+` is a new package, `~` a changed version and `-` a package that's no longer needed. Changed AUR build recipes are shown as a diff for review in between. Flatpak apps move to their remote's current commit, with a line for each one that changed, such as `flatpak com.spotify.Client at 81c2d4e6f0a3`. An app whose remote can't be reached keeps its locked commit: `warning: couldn't check com.spotify.Client on flathub; keeping its locked commit`.
+`+` is a new package, `~` a changed version and `-` a package that's no longer needed. Packages in [`holds`](/docs/reference/options/#holds) stay at their hold, and an update a hold breaks a dependency of is refused, naming both packages. Changed AUR build recipes are shown as a diff for review in between. Flatpak apps move to their remote's current commit, with a line for each one that changed, such as `flatpak com.spotify.Client at 81c2d4e6f0a3`. An app whose remote can't be reached keeps its locked commit: `warning: couldn't check com.spotify.Client on flathub; keeping its locked commit`.
 
 | Flag | Description |
 | --- | --- |

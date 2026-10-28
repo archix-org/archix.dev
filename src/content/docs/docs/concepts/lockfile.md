@@ -48,6 +48,7 @@ Each package is one inline table on one line, sorted by name, so a lock diff in 
 | `repos` | The official repos the host resolved against, in priority order. This is your `repos` option. |
 | `declared` | The packages you declared, sorted. archix compares it with your config to see whether the lock is out of date. |
 | `pinned` | Packages held at a version other than the snapshot's. Only present when there are any. See [Pins](#pins). |
+| `holds` | The config's [`holds`](/docs/reference/options/#holds) the lock was resolved with, each with what the snapshot (or the AUR's newest recipe) has instead. Only present when there are any. See [Holds](#holds). |
 | `packages` | One inline table per package, dependencies included, keyed by package name. |
 | `version`, `file` | The exact package version and its package file. |
 | `repo` | Where it comes from: an official repo such as `core`, a third-party repo by name, `archive` for a pin, `aur`, or `local` for a package built from the config's own recipes. |
@@ -84,7 +85,28 @@ A pin holds one package at a version other than the snapshot's. Pins appear when
 
 A pinned package is listed under `pinned`, and its entry has `repo = "archive"`: archix fetches that exact version from the ALA's `/packages/` instead of the snapshot, and the `sha256` is the checksum of the real file.
 
-Pins survive `archix lock` at the same date, so adding a package doesn't lose them. `archix update` to another date drops them, because the new snapshot replaces what they were holding.
+Pins survive `archix lock` at the same date, so adding a package doesn't lose them. `archix update` to another date drops them, because the new snapshot replaces what they were holding. To keep a package back across updates, hold it.
+
+### Holds
+
+A pin is something archix found on the machine; a hold is something you ask for. [`holds`](/docs/reference/options/#holds) in the config keeps a package at a version, an AUR recipe commit, or above a floor, and unlike a pin it survives `archix update`:
+
+```lua
+holds = { ["scx-scheds"] = "1.1.2-1", ["v4l2loopback-dkms"] = ">= 0.15.4" },
+```
+
+```toml title="archix.lock"
+[hosts.desktop]
+date = "2026-10-15"
+holds = { "scx-scheds" = { hold = "1.1.2-1", newest = "1.1.3-2" }, "v4l2loopback-dkms" = { hold = ">=0.15.4", newest = "0.15.5-1" } }
+
+[hosts.desktop.packages]
+scx-scheds = { version = "1.1.2-1", repo = "archive", file = "scx-scheds-1.1.2-1-x86_64.pkg.tar.zst", sha256 = "...", explicit = true }
+```
+
+A held official package's entry is a pin's, `repo = "archive"` and the real file's `sha256`; a held AUR package's has the held commit. `newest` is what the snapshot, or for an AUR package its newest recipe, would have given, which `archix status` and `diff` show: `hold: scx-scheds held at 1.1.2-1, behind the snapshot's 1.1.3-2`. Changing `holds` makes the lock out of date, like changing `packages`.
+
+Arch doesn't support partial upgrades, and a hold is one: the rest of the system moves on while the held package doesn't. archix checks every lock with the holds in place, against what each package depends on and provides, sonames included, and refuses one where a held version breaks a dependency, naming both packages and changing nothing. What the check can't see is a dependency a package doesn't declare, so keep holds few and short-lived, and hold dependent packages together. `archix status` warns about holds on kernels, `glibc`, `openssl`, `openssh`, `systemd`, `sudo`, `pacman` and archix itself, which keep security fixes out.
 
 ### How init picks the snapshot
 
@@ -211,7 +233,7 @@ snapshot 2026-10-09 -> 2026-10-15
 wrote /etc/archix/archix.lock
 ```
 
-`+` is a new package, `~` a changed version, `-` a package that's no longer needed. Changed AUR recipes are shown as a diff for review before the lock is written. The newest snapshot is the newest one the archive has published, so right after midnight it may still be yesterday's.
+`+` is a new package, `~` a changed version, `-` a package that's no longer needed. [Held](#holds) packages stay where they are held. Changed AUR recipes are shown as a diff for review before the lock is written. The newest snapshot is the newest one the archive has published, so right after midnight it may still be yesterday's.
 
 A lock that's never updated never gets security fixes. Once its snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, `archix status` and `archix switch` say so:
 

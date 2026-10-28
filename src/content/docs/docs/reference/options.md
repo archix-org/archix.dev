@@ -115,6 +115,40 @@ return {
 }
 ```
 
+### `holds`
+
+| | |
+| --- | --- |
+| Type | `attrs of any` |
+| Default | `{}` |
+| Declared in | `<archix>/packages.lua` |
+
+Packages kept back while the rest of the lock moves with the snapshot, keyed by package name. Each hold is one of:
+
+- **An exact version**, `"1.1.2-1"`, or `"1.1.2"` for that pkgver's newest pkgrel. An official package is fetched at that version from the Arch Linux Archive's `/packages/`, the way a [pin](/docs/concepts/lockfile/#pins) is; an AUR package is built from the newest commit of its recipe whose `.SRCINFO` has that version. Write the epoch when the package has one, `"1:2.24.33-5"`.
+- **A floor**, `">= 0.15.4"`. It never pins: the package moves with the snapshot, but a `lock` or `update` that would put it below the floor is refused, `` holds.v4l2loopback-dkms: the 2026-09-01 snapshot has v4l2loopback-dkms 0.15.3-1, below the held >= 0.15.4; `archix update` locks a newer snapshot; nothing was changed ``.
+- **An AUR commit**, `{ commit = "abc1234" }`, 7 to 40 hex digits of a commit in the package's AUR history. Only AUR packages have one.
+
+```lua
+holds = {
+  ["scx-scheds"] = "1.1.2-1",
+  linux = "6.17.1.arch1",
+  ["v4l2loopback-dkms"] = ">= 0.15.4",
+  ["foo-git"] = { commit = "abc1234" },
+},
+```
+
+`archix lock` and `archix update` keep each held package where it is held and move everything else. A held package that `pacman -U` or an AUR helper upgraded isn't [adopted](/docs/concepts/pacman-and-yay/#adopting); the next switch takes it back to its hold. Arch doesn't support partial upgrades, so every lock is checked with the holds in place: a package of the new snapshot whose dependency, a soname such as `librustls.so=0.15.5-64` included, the held version doesn't meet, or a dependency of the held version the new snapshot doesn't meet, stops it, naming both sides:
+
+```console
+$ archix update
+error: the holds break dependencies, as Arch doesn't support partial upgrades:
+  curl-rustls 8.23.0-1 needs `librustls.so=0.15.5-64`, but holds keep librustls at 0.15.4-1 (the snapshot has 0.15.5-1)
+move the hold, hold the dependent package too, or lock an older snapshot; nothing was changed
+```
+
+A hold on a package that isn't in the lock, as declared or as a dependency, is an error, `holds.tree: tree isn't among this config's packages or their dependencies; drop the hold or declare it`, and so are a version the archive or the AUR history doesn't have, a package built from the config's own recipes (change the recipe instead), and an exact hold on a [third-party repo](/docs/guides/third-party-repos/)'s package at a version the repo no longer serves. `archix status` and `diff` list every hold and how far behind it is, and warn about holds on kernels, `glibc`, `openssl`, `openssh`, `systemd`, `sudo`, `pacman` and archix itself. See [Holds](/docs/concepts/lockfile/#holds).
+
 ### `repos`
 
 | | |
@@ -739,6 +773,26 @@ udev_rules = {
   ["60-ioschedulers"] = [[ACTION=="add|change", KERNEL=="nvme[0-9]n[0-9]", ATTR{queue/scheduler}="none"]],
 },
 ```
+
+### `capabilities`
+
+| | |
+| --- | --- |
+| Type | `attrs of str` |
+| Default | `{}` |
+| Declared in | `<archix>/system.lua` |
+
+File capabilities, keyed by the path of a file in `/usr` or `/opt`, in the text form `setcap` takes, such as `cap_sys_nice+ep`. A deployment's `/usr` is read-only, so `setcap` by hand can't do it; archix sets them in the new deployment after its packages are installed and before it's committed.
+
+```lua
+capabilities = {
+  ["/usr/bin/gamescope"] = "cap_sys_nice+ep",
+},
+```
+
+The file has to be in the new deployment and be a package's, or a file the config itself writes there, such as an [AppImage](/docs/guides/flatpak-and-appimages/)'s; anything else stops the switch before it commits, `capabilities: /usr/bin/gamescop isn't in the new deployment; nothing was changed`. A symlink is refused with the file it points at. The text is checked when the config is evaluated, as libcap reads it: a list of capability names (or `all`), then `=`, `+` or `-` and flags from `e`, `i` and `p`. A file has a single effective flag, so `e` goes on every capability it has or on none. `/usr/local` is shared by every deployment and writable, so `setcap` works there as usual.
+
+Deployments on ext4 share unchanged files through hardlinks, and a capability belongs to the file's inode, so archix gives the file a copy of its own first: the deployment it was built from, and any you roll back to, keep their own capabilities. A file that keeps them across later switches keeps sharing its copy. A package may set its own: `gpu-screen-recorder` sets `cap_sys_admin=ep` on `gsr-kms-server` itself, and `gnome-keyring`'s install script gives `gnome-keyring-daemon` `cap_ipc_lock=ep`; those stay as they are unless you declare others on the file. Before setting a declared one, archix records in the deployment what the file had as its package left it, so dropping the entry gives that back in the next deployment, `setcap     /usr/bin/gnome-keyring-daemon cap_ipc_lock=ep (as its package left it)`, and only a file whose package gave it none ends up without, `(capabilities removed)`; the deployments before keep theirs. [`archix verify`](/docs/reference/cli/#verify) checks each deployment's declared capabilities, and on a file no longer declared what its package left it, and `--repair` sets them again.
 
 ## Environment
 

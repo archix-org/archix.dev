@@ -470,7 +470,7 @@ Every setting in this section renders to files archix manages. Their contents ar
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Files archix writes, keyed by absolute path; give one of `text`, `source`, `link`, `url` or `merge`. Files in `/etc`, `/usr`, `/opt` and `/boot` go into the new deployment and take effect at the next boot; files elsewhere are written once the switch commits. Files archix replaces are backed up and restored when they leave the config.
+Files archix writes, keyed by absolute path; give one of `text`, `source`, `link`, `url`, `merge` or `secret`. Files in `/etc`, `/usr`, `/opt` and `/boot` go into the new deployment and take effect at the next boot; files elsewhere are written once the switch commits. Files archix replaces are backed up and restored when they leave the config.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -485,8 +485,9 @@ Files archix writes, keyed by absolute path; give one of `text`, `source`, `link
 | `on_change` | `null or lines` | `null` | A bash script run as root when a switch or rollback changed this file: for a file in `/etc`, `/usr`, `/opt` or `/boot`, at the new deployment's first boot, before networking and before the [hooks](#hooks); for a file elsewhere, which is written right away, right after it's written. |
 | `mutable` | `null or bool` | `null` | Write the file read-only (`false`) or writable (`true`); by default as [`mutable_files`](#mutable_files) says. |
 | `merge` | `null or submodule` | `null` | Set only these keys in a file the app also writes, keeping the rest of it, like plasma-manager. Leaving the config leaves the keys as they are. `format` is one of `"ini"`, `"kconfig"` or `"json"`, *required*; `values` (`attrs of any`, default `{}`) holds the keys: sections (kconfig groups nest) of keys, or a JSON object deep-merged into the file. |
+| `secret` | `null or str` | `null` | Make the file a link to this [secret](#secrets), which the deployment's boot decrypts into `/run/archix/secrets` with the secret's owner and mode; the deployment holds only the link. |
 
-Give exactly one of `text`, `source`, `link`, `url` and `merge`; otherwise it's an error, `files.<path>: give exactly one of text, source, link, url or merge`. `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
+Give exactly one of `text`, `source`, `link`, `url`, `merge` and `secret`; otherwise it's an error, `files.<path>: give exactly one of text, source, link, url, merge or secret`. A `text` holding [`archix.secret`](/docs/reference/lua-api/#archixsecret) placeholders becomes a template: the deployment holds the text with placeholders and a link to `/run/archix/secrets/files/<id>`, where the boot renders it with the file's owner and group and its mode without the bits for others. See [Secrets](/docs/guides/secrets/#use-a-secret). `text` is a `lines` value, so several modules can each add lines to the same file. A `source` path can't leave the config directory.
 
 `on_change` runs when the switch or rollback changed the file: when its entry differs from the one in the generation the system is leaving (the first switch that manages it, new contents, mode, owner, group or link target, a rollback to a generation where it was different), or when the file on disk didn't match and archix wrote it again, such as a hand-edited file put back or a deleted one recreated. It doesn't run when only the script changes, or when the file leaves the config. For a file in the deployment, it runs at the first boot of the new deployment, before the network starts, and again at the next boot if it or a hook failed, up to three boots. For a file outside it, such as in `/srv`, it runs on the running system right after the switch writes the file. Make the script idempotent. A failing script is a soft failure, listed as `failed: on_change of <path>: ...`. See [Activation hooks](/docs/guides/hooks/#on_change).
 
@@ -942,6 +943,89 @@ hooks = {
   ["backup-dir"] = { run = "install -d -m 0750 -o alice /srv/backups" },
   ["flatpak-overrides"] = { run = "flatpak override --system --filesystem=xdg-download com.spotify.Client", after = { "backup-dir" } },
 },
+```
+
+## Secrets
+
+Values encrypted with age in the config and decrypted only at boot, into a ramfs at `/run/archix/secrets`. See [Secrets](/docs/guides/secrets/).
+
+### `secrets.machine_key`
+
+| | |
+| --- | --- |
+| Type | `null or str` |
+| Default | `null` |
+| Declared in | `<archix>/secrets.lua` |
+
+This machine's age recipient (`age1...`), which [`sudo archix secrets init`](/docs/reference/cli/#secrets) makes and prints; every secret this host declares is encrypted to it. Required once any secret is declared: `secrets.machine_key isn't set; sudo archix secrets init makes this machine's key and prints the line for the host's config`.
+
+### `secrets.admins`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `{}` |
+| Declared in | `<archix>/secrets.lua` |
+
+Your own age, age plugin (such as `age-plugin-yubikey`) or `ssh-ed25519` recipients, which every secret is encrypted to as well: the way back to them if a machine's key is lost. Needed once any secret is declared, unless [`secrets.without_admin`](#secretswithout_admin) is `true`; each is checked when the config is rendered.
+
+```lua
+secrets.admins = { "age1yubikey1q2w3e...", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... me@desk" },
+```
+
+### `secrets.without_admin`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/secrets.lua` |
+
+Declare secrets with no admin recipient, knowing that losing this machine's key then loses every secret.
+
+### `secrets.allow_hibernation`
+
+| | |
+| --- | --- |
+| Type | `bool` |
+| Default | `false` |
+| Declared in | `<archix>/secrets.lua` |
+
+Let the machine hibernate while secrets are declared and a swap isn't encrypted. Hibernating writes all of memory to swap, every decrypted secret with it, so archix otherwise turns hibernation, suspend-then-hibernate and hybrid sleep off until the swap is dm-crypt or zram. See [Swap and hibernation](/docs/guides/secrets/#swap-and-hibernation).
+
+### `secrets.items`
+
+| | |
+| --- | --- |
+| Type | `attrs of submodule` |
+| Default | `{}` |
+| Declared in | `<archix>/secrets.lua` |
+
+Secrets by name (letters, digits, `-` and `_`), each decrypted at every boot of the deployment into `/run/archix/secrets/<name>`, a ramfs that never reaches a disk. `files[path] = { secret = name }` links to one, [`archix.secret(name)`](/docs/reference/lua-api/#archixsecret) puts one into a file's `text`, units read [`archix.secret_path(name)`](/docs/reference/lua-api/#archixsecret_path) through `EnvironmentFile=` or `LoadCredential=`, and a `crypt_hash` secret sets a password with `users.<name>.hashed_password = archix.secret(name)`.
+
+| Field | Type | Default | Description |
+| --- | --- | --- | --- |
+| `file` | `str` | *required* | The age file in the config directory, such as `secrets/wg0.age`; [`archix secrets edit`](/docs/reference/cli/#secrets) writes it. |
+| `path` | `null or str` | `null` | Also put the secret at this file under `/run` (outside `/run/archix`) at each boot, the ramfs file bound over it, for apps that refuse a link, such as a NetworkManager profile in `/run/NetworkManager/system-connections`. |
+| `owner` | `str` | `"root"` | |
+| `group` | `str` | `"root"` | |
+| `mode` | `str` | `"0400"` | Octal permissions. |
+| `kind` | `"file"` or `"crypt_hash"` | `"file"` | `crypt_hash` for a password hash, which only `users.<name>.hashed_password` takes and the boot sets in `/etc/shadow`. |
+
+A declared secret whose file doesn't exist yet stops `diff` and `switch`: `secrets.items.wg0.file secrets/wg0.age doesn't exist yet; archix secrets edit wg0 or archix secrets set wg0 writes it`. One that isn't an age file is refused without being read further.
+
+```lua
+secrets = {
+  machine_key = "age1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqs3290gq",
+  admins = { "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... me@desk" },
+  items = {
+    wg0 = { file = "secrets/wg0.conf.age" },
+    home_wifi = { file = "secrets/home.nmconnection.age", path = "/run/NetworkManager/system-connections/home.nmconnection", mode = "0600" },
+    me_password = { file = "secrets/me.hash.age", kind = "crypt_hash" },
+  },
+},
+files = { ["/etc/wireguard/wg0.conf"] = { secret = "wg0" } },
+users.me = { hashed_password = archix.secret("me_password") },
 ```
 
 ## Boot and kernel

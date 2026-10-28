@@ -70,6 +70,14 @@ You need a live USB only when the rescue entry can't start either: the ESP wiped
 
 The `recovery` VM suite runs exactly these steps on every release, after wiping the ESP and damaging the current deployment.
 
+## Secrets and recovery
+
+Nothing in recovery decrypts a [secret](/docs/guides/secrets/). The rescue entry never runs the decrypt step and has no command that does: repairing a boot never needs one, and every place a value is decrypted is one more place it could leak. A logged-in rescue user can read the machine's identity from the root they mounted, as they could anything else on it. `password USER` still works for a user whose password comes from a `crypt_hash` secret: it records that the rescue set it, and boots keep it, with a login note, until a switch changes the secret's value. The rescue's `eject` drops the secrets' links, as nothing is decrypted there; the identity and ciphertexts stay in `/var/lib/archix/secrets`, so `age -d -i /var/lib/archix/secrets/identity` decrypts one by hand.
+
+From a live USB, a deployment's links into `/run/archix/secrets` dangle, which `rollback` and `verify` don't mind: rolling back, even to a dropped generation it rebuilds, needs no identity, as each deployment carries its own ciphertexts and its boot decrypts them. A `switch` in a chroot decrypts nothing either and says so: `can't check secrets here: this runs in a chroot, so nothing is decrypted; the deployment's boot decrypts them and names any that fail`.
+
+A lost machine identity is recovered with an admin key, not from here: see [Losing the machine's key](/docs/guides/secrets/#losing-the-machines-key).
+
 ## What still needs more than this
 
 An ESP the firmware can't read, or firmware that refuses every boot image, can't be fixed from anything archix puts on that disk; a live USB and the steps above, or the firmware's own setup, are the way back. A machine that hasn't completed a switch since the rescue entry shipped has none yet.

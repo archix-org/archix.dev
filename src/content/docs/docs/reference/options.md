@@ -593,6 +593,38 @@ User units to enable (`true`) or disable (`false`) for every user in the next de
 user_services = { ["pipewire-pulse.socket"] = true },
 ```
 
+### `masked_units`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/system.lua` |
+
+System units to mask, such as sleep.target, so nothing can start them: each becomes a link to /dev/null in /etc/systemd/system in the next deployment.
+
+That's what `systemctl mask` does, written into the new deployment's `/etc` like any other managed file; a unit that leaves the list is unmasked by the switch after. `archix init` captures units masked in `/etc/systemd/system`.
+
+```lua
+masked_units = { "sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target" },
+```
+
+### `default_target`
+
+| | |
+| --- | --- |
+| Type | `null or str` |
+| Default | `null` |
+| Declared in | `<archix>/system.lua` |
+
+The target the next deployment boots into, such as multi-user.target for a machine without a desktop; by default systemd's, graphical.target.
+
+archix links `/etc/systemd/system/default.target` to the target in `/usr/lib/systemd/system`, as `systemctl set-default` does; a name that isn't a `.target` is an error. `archix init` captures the link when `/etc/systemd/system/default.target` is set.
+
+```lua
+default_target = "multi-user.target",
+```
+
 ### `users`
 
 | | |
@@ -613,7 +645,7 @@ Users archix creates and keeps in step; ones it created are removed (home kept) 
 | `description` | `str` | `""` | The GECOS field. |
 | `system` | `bool` | `false` | A system user: low uid, no home directory. |
 
-Declaring a user that already exists brings it in line with every field, defaults included: a declared user is authoritative, so `groups` is the complete list of supplementary groups, and `shell` falls back to `/bin/bash`. When you declare an existing user by hand, list all of its groups and its shell. `archix init` captures existing users with their real groups, shell, home and description, so declaring them changes nothing. Users that archix didn't create are never deleted. Users are created in the new deployment's `/etc`, and their home directories once it's committed. One archix created and you declare again later without a `uid` gets back the uid it had, so the files it owned are still its own. Groups work the same way.
+Declaring a user that already exists brings it in line with every field, defaults included: a declared user is authoritative, so `groups` is the complete list of supplementary groups, and `shell` falls back to `/bin/bash`. When you declare an existing user by hand, list all of its groups and its shell. `archix init` captures existing users with their real groups, shell, home and description, so declaring them changes nothing; system users and groups made by hand, below id 1000 and made by no package's `sysusers.d` file, come along with `system = true` and their uid or gid, so files they own keep belonging to them. Users that archix didn't create are never deleted. Users are created in the new deployment's `/etc`, and their home directories once it's committed. One archix created and you declare again later without a `uid` gets back the uid it had, so the files it owned are still its own. Groups work the same way.
 
 ```lua
 users = {
@@ -1025,6 +1057,8 @@ This kernel's entry is the main one, the one boot counting, the protected entry 
 Microcode images in /boot loaded before the initramfs, such as amd-ucode.img.
 
 Paths are relative to the deployment's `/boot`, where the `amd-ucode` and `intel-ucode` packages put them.
+
+Leave it empty when `HOOKS` in `mkinitcpio.conf` has `microcode`, as Arch's default does: that hook already puts the microcode in the initramfs, so listing the image here only loads it a second time. `archix init` checks `/etc/mkinitcpio.conf` and `/etc/mkinitcpio.conf.d` and sets `boot.microcode` only when the hook isn't there.
 
 ### `boot.tries`
 

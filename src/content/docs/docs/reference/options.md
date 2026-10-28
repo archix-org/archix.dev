@@ -1103,7 +1103,7 @@ boot = { loader = "systemd-boot", secure_boot = true, revoke_unused = true },
 
 Sign boot entries with sbctl; by default, whenever sbctl has keys.
 
-`true` also declares the `sbctl` package. When signing, archix also signs systemd-boot's own binary. Changing this builds a new deployment, so turning Secure Boot on re-signs. `sudo archix secure-boot setup` creates and enrolls the keys.
+`true` also declares the `sbctl` package. When signing, archix also signs systemd-boot's own binary and writes `editor no` into `loader.conf`, which turns the boot menu's entry editor off. Changing this builds a new deployment, so turning Secure Boot on re-signs. `sudo archix secure-boot setup` creates and enrolls the keys.
 
 With Secure Boot enforcing, a switch whose entry wouldn't be signed, because this is `false` or `sbctl` has no keys, is refused before anything is built. See [Secure Boot](/docs/guides/secure-boot/).
 

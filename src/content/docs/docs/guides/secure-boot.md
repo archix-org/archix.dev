@@ -52,6 +52,8 @@ Many graphics cards and network cards carry firmware (option ROMs) signed by Mic
 
 [`boot.secure_boot`](/docs/reference/options/#bootsecure_boot) decides whether archix signs. With the default, `null`, it signs whenever `sbctl` has keys; `true` always signs and declares `sbctl`; `false` never signs. Every entry archix writes is signed with `sbctl sign`, one UKI per installed kernel, and so is systemd-boot's own binary, `EFI/systemd/systemd-bootx64.efi` and `EFI/BOOT/BOOTX64.EFI`. The [fallback image](/docs/concepts/atomicity/#the-fallback-boot-image) is a copy of the signed UKI of `current`.
 
+When it signs, archix also writes `editor no` into `loader/loader.conf`, so systemd-boot's menu has no `e` key to edit an entry's command line. systemd-stub already ignores a changed command line for a signed UKI under Secure Boot, but the editor still opens, and an entry that starts something else, such as one of [`boot.extra_entries`](/docs/reference/options/#bootextra_entries), would take what's typed there. archix rewrites the line on every signed switch, so `editor yes` there doesn't last; without signing, archix leaves `editor` as you set it, and a line it wrote while signing stays until you remove it.
+
 archix enrolls your keys directly in the firmware. It doesn't use shim or a Machine Owner Key (MOK). Booting through shim needs a kernel signed by a distribution key that Microsoft's shim trusts, and Arch doesn't ship one, so there's nothing for shim to chain to; with your own keys in `db`, archix's signed entries boot directly.
 
 ### A switch never makes an unbootable entry the default

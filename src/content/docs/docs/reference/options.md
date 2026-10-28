@@ -794,7 +794,7 @@ An nftables firewall in its own `inet archix` table, loaded by `archix-firewall.
 
 With `true`, archix declares the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network starts. Rule changes take effect at the next boot, like the rest of the deployment; turning it off disables the service, so the next boot has no `archix` table. archix doesn't use `nftables.service`, whose stop flushes every table.
 
-The input chain has policy drop and accepts, in order: established and related traffic, loopback, `trusted_interfaces`, all ICMPv6, DHCPv6 replies from `fe80::/10`, ping when `allow_ping` is on, the allowed ports and ranges, then `extra_input_rules`.
+The input chain has policy drop and accepts, in order: established and related traffic, loopback, `trusted_interfaces`, all ICMPv6, DHCPv6 replies from `fe80::/10`, ping when `allow_ping` is on, the allowed ports and ranges, the ports of `allowed_services`, then `extra_input_rules`.
 
 ```lua
 firewall = {
@@ -855,6 +855,120 @@ UDP port ranges open to everyone, as `{ from, to }`.
 ```lua
 firewall = { allowed_udp_port_ranges = { { from = 60000, to = 61000 } } },
 ```
+
+### `firewall.allowed_services`
+
+| | |
+| --- | --- |
+| Type | `list of str` |
+| Default | `[]` |
+| Declared in | `<archix>/firewall.lua` |
+
+Services whose ports, from [`firewall.service_ports`](#firewallservice_ports), are open, such as `{ "ssh", "syncthing" }`; each service's rules carry its name as their nftables comment. Naming a service `service_ports` doesn't define is an error.
+
+This is NixOS's `openFirewall`: you name the service and archix knows its ports. Unlike NixOS, the services meant for the local network (KDE Connect, Syncthing, mDNS and the like) are open only to LAN addresses unless you say otherwise; see `sources` below. Like every list, the names from all modules are joined, and a service named twice is opened once.
+
+```lua
+firewall = {
+  enable = true,
+  allowed_services = { "ssh", "syncthing", "kdeconnect", "steam" },
+},
+```
+
+Each service gets its rules per protocol it uses, after the `allowed_*` ports and sorted by name, with the service's name as the rule's comment, so `nft list ruleset` shows which service opened a port. A LAN-only service gets one rule for IPv4 and one for IPv6, matching the source address against two sets archix adds to its table:
+
+```nft
+  set archix_lan4 {
+    type ipv4_addr; flags interval;
+    elements = { 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 169.254.0.0/16 }
+  }
+
+  set archix_lan6 {
+    type ipv6_addr; flags interval;
+    elements = { fc00::/7, fe80::/10 }
+  }
+  ...
+    ip saddr @archix_lan4 tcp dport { 1714-1764 } accept comment "kdeconnect"
+    ip6 saddr @archix_lan6 tcp dport { 1714-1764 } accept comment "kdeconnect"
+    tcp dport { 22 } accept comment "ssh"
+    ip saddr @archix_lan4 tcp dport { 27036, 27037, 27040 } accept comment "steam"
+    ip6 saddr @archix_lan6 tcp dport { 27036, 27037, 27040 } accept comment "steam"
+    ...
+```
+
+A port an earlier rule already opens to the same or more sources, through `allowed_tcp_ports` or a service earlier in the order, is left out of the later rule, and a rule with nothing left isn't written. A name `service_ports` doesn't define stops evaluation and lists the ones it does:
+
+```
+error: <archix>/firewall.lua: firewall.allowed_services names "stean", which firewall.service_ports doesn't define; known services: alvr, gsconnect, home-assistant, ...
+```
+
+Opening a port doesn't install or start the service; that's still `packages` and `services`.
+
+### `firewall.service_ports`
+
+| | |
+| --- | --- |
+| Type | `attrs of submodule` |
+| Default | `{}` |
+| Declared in | `<archix>/firewall.lua` |
+
+The ports of each service `firewall.allowed_services` can name. archix defines the services below with `archix.default`, so a plain definition of one of these names replaces it; other names add services.
+
+Each entry has:
+
+- `tcp` and `udp` (`list of int`, default `[]`), and `tcp_ranges` and `udp_ranges` (`list of submodule` with `from` and `to`, default `[]`): the ports.
+- `sources` (`one of "any", "lan"`, default `"any"`): who may reach them. `"lan"` admits only private and link-local sources: `10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16` and `169.254.0.0/16` over IPv4, unique local `fc00::/7` and link-local `fe80::/10` over IPv6.
+- `source` (`nullable str`, default `null`): where the ports come from. Every built-in names its upstream page.
+
+Names are 1 to 64 letters, digits, `-`, `_` or `.`, as the name becomes the rule's comment.
+
+```lua
+firewall = {
+  allowed_services = { "ssh", "valheim" },
+  service_ports = {
+    -- your own service, open to any source
+    valheim = { udp_ranges = { { from = 2456, to = 2458 } } },
+    -- sshd moved to 2222: replaces the built-in ssh
+    ssh = { tcp = { 2222 } },
+  },
+},
+```
+
+A plain definition replaces the whole entry, `sources` included, so a replaced built-in is open to any source unless it says `sources = "lan"`. To add ports to a built-in instead, define them with `archix.default` too, and the lists are joined: `ssh = archix.default { tcp = { 2222 } }` opens 22 and 2222. To open a LAN-only built-in to everyone and keep its ports: `kdeconnect = archix.default { sources = archix.force("any") }`.
+
+**What `"lan"` does and doesn't do.** It keeps a service off the internet: off a public IPv4 address, a forwarded port, or a public IPv6 address, which many networks hand every machine. It doesn't tell your home network from a café's: public wifi uses private addresses too, so its other guests are LAN sources. A LAN that uses public IPv6 addresses (most IPv6 networks do, beside link-local ones) reaches a LAN-only service only over IPv4 or link-local IPv6; mDNS and KDE Connect discovery use those anyway. For a stricter rule, leave the service out and write it in [`extra_input_rules`](#firewallextra_input_rules), for example by interface or by your own subnet.
+
+**mDNS** is multicast to `224.0.0.251` and `ff02::fb`, port 5353. The input chain sees multicast it receives like any other packet, and the rule matches the sender, which is a LAN or link-local address, so `mdns` admits it over both families. The firewall doesn't filter outgoing traffic, so your own queries go out regardless.
+
+The built-in services, their ports at each project's default settings, their sources, and where the ports come from (the `source` of each entry links the same page):
+
+| Name | TCP | UDP | Sources | From |
+| --- | --- | --- | --- | --- |
+| `alvr` | 9943, 9944 | 9943, 9944 | LAN | [NixOS `programs.alvr`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/programs/alvr.nix) |
+| `gsconnect` | 1714-1764 | 1714-1764 | LAN | [NixOS `programs.kdeconnect`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/programs/kdeconnect.nix), whose package may be GSConnect |
+| `home-assistant` | 8123 | | LAN | [Home Assistant's HTTP integration](https://www.home-assistant.io/integrations/http/), the default for Container and Core installs |
+| `http` | 80 | | any | [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#section-4.2.1) |
+| `https` | 443 | | any | [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110#section-4.2.2) |
+| `jellyfin` | 8096, 8920 | 1900, 7359 | LAN | [NixOS `services.jellyfin`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/misc/jellyfin.nix) |
+| `kdeconnect` | 1714-1764 | 1714-1764 | LAN | [NixOS `programs.kdeconnect`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/programs/kdeconnect.nix) |
+| `localsend` | 53317 | 53317 | LAN | [NixOS `programs.localsend`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/programs/localsend.nix) |
+| `mdns` | | 5353 | LAN | [RFC 6762](https://www.rfc-editor.org/rfc/rfc6762) |
+| `minecraft` | 25565 | 25565 | any | [NixOS `services.minecraft-server`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/games/minecraft-server.nix) |
+| `mosh` | | 60000-61000 | any | [NixOS `programs.mosh`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/programs/mosh.nix) |
+| `nfs` | 2049 | | LAN | [`nfs(5)`](https://man7.org/linux/man-pages/man5/nfs.5.html): NFSv4, which needs no rpcbind |
+| `plex` | 3005, 8324, 32400, 32469 | 1900, 5353, 32410, 32412-32414 | LAN | [NixOS `services.plex`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/misc/plex.nix) |
+| `samba` | 139, 445 | 137, 138 | LAN | [NixOS `services.samba`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/network-filesystems/samba.nix) |
+| `ssh` | 22 | | any | [RFC 4253](https://www.rfc-editor.org/rfc/rfc4253#section-4.1) |
+| `steam` | 27036, 27037, 27040 | 10400, 10401, 27031-27036 | LAN | [NixOS `programs.steam`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/programs/steam.nix), Remote Play and local network game transfers |
+| `steam-dedicated-server` | 27015 | 27015 | any | [NixOS `programs.steam`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/programs/steam.nix), dedicated server |
+| `sunshine` | 47984, 47989, 47990, 48010 | 47998-48000, 48002, 48010 | LAN | [NixOS `services.sunshine`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/networking/sunshine.nix), at the default base port 47989 |
+| `syncthing` | 22000 | 21027, 22000 | LAN | [NixOS `services.syncthing`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/networking/syncthing.nix) |
+| `tailscale` | | 41641 | any | [NixOS `services.tailscale`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/networking/tailscale.nix) |
+| `transmission` | 51413 | 51413 | any | [NixOS `services.transmission`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/torrent/transmission.nix), peer port; the web interface's 9091 stays closed |
+| `wireguard` | | 51820 | any | [WireGuard quick start](https://www.wireguard.com/quickstart/)'s listen port; WireGuard picks a random one unless told |
+| `wivrn` | 9757 | 9757 | LAN | [NixOS `services.wivrn`](https://github.com/NixOS/nixpkgs/blob/nixos-unstable/nixos/modules/services/video/wivrn.nix) |
+
+Open to any source are the services meant to be reached from anywhere: remote logins (`ssh`, `mosh`), servers (`http`, `https`, `minecraft`, `steam-dedicated-server`), VPN endpoints (`wireguard`, `tailscale`) and torrent peers (`transmission`). The rest serve devices in the same room or house: phones and headsets, streaming clients, file shares and discovery, which have no business answering the internet. Syncthing and Plex still reach peers outside the LAN through their relays without an open port. `sunshine` opens 47990, its web interface, as NixOS does. NFSv3 needs rpcbind and mountd ports `nfs` doesn't open.
 
 ### `firewall.trusted_interfaces`
 

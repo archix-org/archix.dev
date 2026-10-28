@@ -75,6 +75,10 @@ See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check
 
 **The free-space check is an estimate.** Before a switch or rollback builds anything, archix checks every mount the incoming files land on, the way pacman does, from the file sizes in each package's `.MTREE` rounded up to whole blocks, plus a cushion; see [Signatures and disk space](/docs/concepts/safety/#signatures-and-disk-space). It doesn't count directories or a filesystem's own metadata. Official packages to download are counted ahead from the snapshot's repo databases; third-party packages and AUR builds from a package cache aren't, and a full cache disk stops the switch while those download, before anything changes. If the root fills up anyway while the deployment is built, the build fails and its staging tree is deleted; nothing was changed. Free inodes are checked too, roughly, on filesystems that report them; btrfs doesn't.
 
+## Outside archix
+
+**systemd-networkd can miss a carrier flap at its own start.** When a NIC's link goes down and back up just as networkd starts, networkd can go on calling it `no-carrier` while the kernel has the link, and `systemd-networkd-wait-online` times out. It's in systemd, not archix: archix's VM tests met it on plain Arch without archix too, and it can happen, rarely, on real hardware. Replugging the cable, `ip link set <nic> down` and `up`, or `systemctl restart systemd-networkd` brings the network back.
+
 ## Not yet known
 
 - **Power-cut replay across every update.** Replaying every write to each flush point now covers archix's own switch, kept rollback, rebuild of a dropped generation and first boots, and the flaws it found are fixed. It passes on ext4 and btrfs on a desktop machine ([published evidence](https://github.com/archix-org/archix/releases/tag/powercut-evidence-8648816)), but hasn't yet passed on the release gate's slow nested VMs. It replays one prepared update, not every kind of transaction. On the ESP it tries up to 16 random subsets of the writes between two flushes; on the root, writes between flushes are replayed only in the order they were logged.

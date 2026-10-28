@@ -340,7 +340,7 @@ deployment 42: 1 files differ from its packages:
 error: deployment 42 changed; `sudo archix verify --repair` restores them
 ```
 
-It also checks the deployment's declared [`capabilities`](/docs/reference/options/#capabilities), which `pacman -Qkk` doesn't look at: `deployment 42: /usr/bin/gamescope lacks its capabilities cap_sys_nice=ep` fails the check too, and `--repair` sets them again on a copy of the file of its own.
+It also checks the deployment's declared [`capabilities`](/docs/reference/options/#capabilities), which `pacman -Qkk` doesn't look at: `deployment 42: /usr/bin/gamescope lacks its capabilities cap_sys_nice=ep` fails the check too, as does a file whose entry the deployment dropped without the capabilities its package left it, `deployment 43: /usr/bin/gnome-keyring-daemon lacks its capabilities cap_ipc_lock=ep as its package left it`; `--repair` sets them again on a copy of the file of its own.
 
 Up to 20 files are listed per deployment. Packaged files that are missing, as pacman.conf's `NoExtract` leaves them, are counted on their own line and don't fail the check. While the last check found differences, `archix status` says so: ``deployment 42 differs from its packages in 1 files at the last check; `sudo archix verify --repair` restores them``. A [rollback](#rollback) to a kept deployment runs the same check first.
 

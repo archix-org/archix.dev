@@ -22,7 +22,7 @@ return {
 
 The next switch sets it in the new deployment, `setcap     /usr/bin/gamescope cap_sys_nice=ep`, and every switch after keeps it, also when gamescope is upgraded. It's set on a copy of the file, so the deployments before keep theirs, and a [rollback](/docs/concepts/generations/) goes back to what that deployment had. `getcap /usr/bin/gamescope` shows it once you've rebooted into it, and [`archix verify`](/docs/reference/cli/#verify) checks it.
 
-Some packages set their own: `gpu-screen-recorder` gives `gsr-kms-server` `cap_sys_admin=ep` when it's installed, and archix leaves that alone. See [`capabilities`](/docs/reference/options/#capabilities).
+Some packages set their own: `gpu-screen-recorder` gives `gsr-kms-server` `cap_sys_admin=ep` when it's installed, and archix leaves that alone. If you declare different ones on such a file and later drop them, the next deployment gives it back what its package set rather than none. See [`capabilities`](/docs/reference/options/#capabilities).
 
 ## Holding a kernel, a scheduler or a driver
 

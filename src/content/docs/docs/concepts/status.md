@@ -51,7 +51,7 @@ All of this is VM-only: QEMU with OVMF firmware, and swtpm for the TPM. archix h
 | [Flatpak apps](/docs/guides/flatpak-and-appimages/) | **Shipped** | System-wide apps are locked to commits and pinned back on rollback; apps that come with flatpak itself install at the deployment's first boot. | Arch suite |
 | [Dotfiles and home](/docs/guides/dotfiles-and-apps/) | **Shipped** | Home files, written as their user, live links, merged keys and `programs.*` modules. | Arch suite |
 | [`archix eject`](/docs/reference/cli/#eject) | **Shipped** | Turns the running deployment into a plain Arch root with a UKI from mkinitcpio's preset, and finishes when run again after a cut. | VM, Arch suite |
-| [`archix init`](/docs/quick-start/) | **Shipped** | Captures an existing machine into a config and lock that match it exactly; packages no repo or the AUR has are rebuilt as recipes from their installed files when you pick them. | Arch suite |
+| [`archix init`](/docs/quick-start/) | **Shipped** | Captures an existing machine into a config and lock that match it exactly; packages no repo or the AUR has are rebuilt as recipes from their installed files when you pick them. What it leaves out, such as secrets, stays on the machine, and `diff` and `status` [name it](/docs/reference/cli/#carried-but-not-declared). | Arch suite |
 
 ## Partial
 

@@ -23,7 +23,7 @@ return {
 $ sudo archix switch
 ```
 
-That's the loop: edit Lua, switch, reboot into the result, and roll back if you don't like it. You don't start from an empty file, either: `sudo archix init` captures the machine you already have into a config and a lock that match it exactly.
+That's the loop: edit Lua, switch, reboot into the result, and roll back if you don't like it. You don't start from an empty file, either: `sudo archix init` captures the machine you already have into a config and a lock that match it exactly, but for the secrets and files it leaves out, which `archix diff` keeps naming.
 
 ## Three pillars
 
@@ -36,7 +36,7 @@ $ archix diff
 error: `programs.kity`: option does not exist (set in lua/hosts/desktop/init.lua); did you mean `programs.kitty`?
 ```
 
-Evaluation is pure. Your Lua can't run commands or read random files, so the same config and lock give the same system on every run. Read more in [Configuration](/docs/concepts/configuration/).
+Evaluation is pure. Your Lua can't run commands or read random files, so the same config and lock give the same system on every run. The exception is what you set up by hand and never declared, such as a tree under `/opt` no package installed, an edited config file or SSH host keys: each deployment starts as a copy of the one before, so it stays on that machine, but a machine built from the config won't have it. `archix diff` and `archix status` [name it](/docs/reference/cli/#carried-but-not-declared). Read more in [Configuration](/docs/concepts/configuration/).
 
 ### Locked
 

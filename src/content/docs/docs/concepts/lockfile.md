@@ -5,7 +5,7 @@ sidebar:
   order: 2
 ---
 
-Your config says *what* to install. `archix.lock` says *exactly which build*. With the same config and the same lock, two machines get the same package versions, today or a year from now.
+Your config says *what* to install. `archix.lock` says *exactly which build*. With the same config and the same lock, two machines get the same package versions, today or a year from now. Files nobody declared are another matter: they stay on the machine they're on, and [`archix diff` names them](/docs/reference/cli/#carried-but-not-declared).
 
 The lock is a TOML file next to `init.lua`. Commit it. archix writes it; you don't edit it by hand.
 
@@ -88,7 +88,7 @@ Pins survive `archix lock` at the same date, so adding a package doesn't lose th
 
 ### How init picks the snapshot
 
-`archix init` locks to exactly what's installed, so the first `archix diff` is empty. It starts from the newest build date among your installed official packages, then scores the sync databases of the days around it by how many installed versions they match, walking back and forth while the score improves. It keeps the best day. One partially upgraded package can't drag the whole system onto a later snapshot that way.
+`archix init` locks to exactly what's installed, so the first `archix diff` lists no package changes. It starts from the newest build date among your installed official packages, then scores the sync databases of the days around it by how many installed versions they match, walking back and forth while the score improves. It keeps the best day. One partially upgraded package can't drag the whole system onto a later snapshot that way.
 
 Then it pins every installed version that differs from that snapshot, newer *or* older. AUR packages are locked to the commit whose recipe builds the installed version. If a pinned version can't be fetched, init warns and keeps the snapshot's version, which the first switch will then install. System-wide Flatpak apps are locked to the commits they're installed at.
 

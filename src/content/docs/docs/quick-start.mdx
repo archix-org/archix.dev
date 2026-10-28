@@ -13,7 +13,7 @@ You need archix installed ([Installation](/docs/installation/)) and root access.
 
 ## Capture your system with `archix init`
 
-You don't write your first config by hand. `archix init` reads your running system and writes a config and a lock that describe it exactly, down to the version of every installed package. It changes nothing on the machine except the config directory.
+You don't write your first config by hand. `archix init` reads your running system and writes a config and a lock that describe it exactly, down to the version of every installed package, but for the secrets and files it leaves out, which `archix diff` names. It changes nothing on the machine except the config directory.
 
 ```console
 $ sudo archix init
@@ -116,6 +116,8 @@ Then the wizard closes, and init prints the rest in the terminal. With AUR revie
 For scripts, `sudo archix init --defaults` takes every recommended answer without opening the wizard, so it needs no terminal. It ticks the recommended config files, never imports dotfiles, makes the config directory a git repository when git is installed, and prints what it captured in Packages, System, Config files, Boot and Generations sections before the same Lock and Result. The config files you didn't get are counted, so you can run the wizard later to pick them.
 
 There are two exceptions to an empty Result. Dotfiles you imported are listed, because the first switch backs up the originals and replaces them with links into the config. And archix declares the boot tooling it needs, `mkinitcpio`, `systemd-ukify` and `dosfstools`, so the Result lists them as installs if they're missing. Either way, the section starts with `! the first switch would still change these:`.
+
+What init leaves out isn't lost, and isn't in the config either: secrets, config files you didn't tick, and trees under `/opt` or `/usr` that no package installed. The first switch copies the live system into deployment 1 and every switch after starts from the one before, so they stay on this machine, but a machine built from this config won't have them. `archix diff` and `archix status` end by naming them, under `carried on this machine but not in the config (a machine built from this config won't have them):`; see [Carried but not declared](/docs/reference/cli/#carried-but-not-declared).
 
 ## Look at what you got
 

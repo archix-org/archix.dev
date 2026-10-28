@@ -467,7 +467,7 @@ These don't change the system and don't need root. As a normal user, archix keep
 
 ### `diff`
 
-Show what a switch would change to make this machine match the lock and the config.
+Show what a switch would change to make this machine match the lock and the config, and what the machine carries that the config doesn't declare.
 
 ```console
 $ archix diff
@@ -496,9 +496,39 @@ Files declared with a `url` are compared by their `sha256`, so `diff` downloads 
 flatpak apps archix doesn't manage: com.valvesoftware.Steam
 ```
 
+#### Carried but not declared
+
+Last, `diff` names what this machine carries that the config doesn't declare. The first switch copies the live `/usr`, `/opt`, `/boot` and `/etc` into deployment 1, and every later deployment starts as a copy of the one before, so a file nobody declared stays on this machine through every switch and rollback. A machine built from the same config won't have it. archix warns about these files and leaves them alone:
+
+```console
+carried on this machine but not in the config (a machine built from this config won't have them):
+  no package's, in /usr and /opt:
+    /opt/foo/ (1342 files)
+    /usr/bin/kubectl
+  no package's, in /etc:
+    /etc/systemd/system/backup.service.d/ (1 file)
+    /etc/udev/rules.d/99-keyboard.rules
+  edited from what their package shipped, in /etc:
+    /etc/ssh/sshd_config
+  secrets, which no config carries:
+    /etc/NetworkManager/system-connections/ (3 files)
+    /etc/ssh/ssh_host_ed25519_key
+    /var/lib/sbctl/keys/
+```
+
+- **In `/usr` and `/opt`**: files and symlinks no installed package owns, in the deployment the next switch starts from. A directory no package owns is one line with its file count. `/usr/local` isn't listed, nor files pacman hooks make again on any machine with the same packages, such as depmod's `modules.*`, DKMS's modules, icon and font caches and `__pycache__`.
+- **In `/etc`**: files and symlinks no package owns, and package config files (pacman's backup files) edited since pacman installed them, that [`files`](/docs/reference/options/#files) doesn't declare. A directory no package owns is again one line. What [`init`](#init) never offers is left out here too: `.pacnew`, `.pacsave` and other leftovers, generated files such as `/etc/ld.so.cache`, the account files, systemctl's service links, archix's own files and the config. Edited config files of packages in `ignored_packages` aren't listed.
+- **Secrets**: credentials `init` never copies into a config, found by path or content, such as SSH host keys, Wi-Fi and VPN connections and TLS keys, with a secret directory as one line, plus those outside `/etc`, DKMS's `mok.key` and sbctl's keys.
+
+Paths the config declares, in `files`, `units`, `sysctl` and the other options that write files, never appear. Each kind shows its first 10 lines, then `and 12 more`; `--all` lists them all. Run as a normal user, `diff` can't read all of `/etc`: a file it can't read is listed with the secrets, and package config files it couldn't check for edits are counted, as in ``2 package config files only root can read weren't checked for edits; `sudo archix diff` checks them``.
+
+| Flag | Description |
+| --- | --- |
+| `--all` | List everything carried but not declared, not only the first 10 lines of each kind. |
+
 ### `status`
 
-Show the current generation, the booted one when they differ, changes made outside archix, the lock and pending changes.
+Show the current generation, the booted one when they differ, changes made outside archix, the lock, pending changes and what the machine carries that the config doesn't declare.
 
 ```console
 $ archix status
@@ -521,6 +551,8 @@ Other lines appear when they apply: a verify that found changed files (see [`ver
 On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. The last line compares the lock with the current deployment: `the system matches the lock`, or `2 changes pending; see `archix diff``. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 
 Packages archix builds from a VCS checkout, AUR packages and recipes named `-git`, `-hg`, `-svn`, `-bzr`, `-fossil` or `-darcs`, get their own line while the lock has no pinned sources for them, as before their first build: ``1 package builds from a VCS source archix.lock has no commit for yet, so its next build takes upstream's newest code, whose git commit is then recorded: neovim-git``. `archix lock` and `update` mark them the same way, `+ neovim-git 0.12.0.r310.g1a2b3c4-1 (builds from a VCS source; its first build records the commit)`. Packages in `ignored_packages` that aren't installed are named too, as `switch` names them: `ignored_packages lists 1 package that isn't installed here, and archix never installs ignored ones: nvidia-dkms-custom`. That's what a second machine sees when it shares a config `init` wrote on another.
+
+`status` ends with the same [carried but not declared](#carried-but-not-declared) section as `diff`, and takes the same `--all` flag.
 
 ### `generations`
 

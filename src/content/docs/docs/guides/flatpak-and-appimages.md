@@ -189,8 +189,8 @@ $ sudo archix switch
 ...
 install    fuse2 2.9.9-5
 create     /opt/archix/appimages/obsidian.AppImage
-create     /usr/local/bin/obsidian
-create     /usr/local/share/applications/archix-obsidian.desktop
+create     /usr/bin/obsidian
+create     /usr/share/applications/archix-obsidian.desktop
 a new deployment with its own boot entry; it boots at the next restart
 apply 5 changes? [Y/n]
 downloading https://example.org/releases/Obsidian-1.9.14.AppImage
@@ -200,17 +200,17 @@ downloading fuse2-2.9.9-5-x86_64.pkg.tar.zst
 switched to generation 46 (snapshot 2026-10-15); its deployment boots at the next restart
 ```
 
-The files are in `/opt` and `/usr/local`, which are part of the [deployment](/docs/concepts/atomicity/), so `obsidian` is there after the reboot.
+The AppImage, its command and its menu entry are all in the new [deployment](/docs/concepts/atomicity/), in `/opt` and `/usr`, so they arrive together with the reboot, and a rollback takes them back together. None of them goes into `/usr/local`, which every deployment shares and no rollback undoes.
 
 Each entry becomes three managed files:
 
 | File | What it is |
 | --- | --- |
 | `/opt/archix/appimages/obsidian.AppImage` | The AppImage, mode `0755`. |
-| `/usr/local/bin/obsidian` | A link to it, so `obsidian` runs from your `PATH`. |
-| `/usr/local/share/applications/archix-obsidian.desktop` | The menu entry, named `name` (the key by default), with `icon` and `categories` if you set them. `desktop = false` leaves it out. |
+| `/usr/bin/obsidian` | A link to it, so `obsidian` runs from your `PATH`. |
+| `/usr/share/applications/archix-obsidian.desktop` | The menu entry, named `name` (the key by default), with `icon` and `categories` if you set them. `desktop = false` leaves it out. |
 
-archix also declares `fuse2`, which AppImages need to run.
+archix also declares `fuse2`, which AppImages need to run. A name that a package's file in `/usr/bin` already has is refused before the commit, as the link would replace it: ``the config's AppImages would replace files packages ship: /usr/bin/bash is bash's; give the AppImage another name in appimages; nothing was changed``.
 
 The download happens after you confirm, before anything is built, and an AppImage whose hash differs from the config stops the switch: `<url> has sha256 <actual>, but the config says <sha256>`. Big files are copied from the store into place, not read into memory.
 

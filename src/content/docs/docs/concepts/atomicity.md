@@ -21,7 +21,9 @@ A deployment is the part of the system a package transaction writes, kept per ge
 | `pacman` | pacman's local database | A real copy on ext4, copy-on-write on btrfs |
 | DKMS state | `/var/lib/dkms` | A real copy on ext4, copy-on-write on btrfs |
 
-`/archix/current` points at the deployment the next boot starts. Everything else stays on the root filesystem as one copy shared by every deployment: `/home`, `/root`, `/srv`, and `/var` with its databases, logs and caches. That's the state you keep across a rollback.
+`/archix/current` points at the deployment the next boot starts. Everything else stays on the root filesystem as one copy shared by every deployment: `/home`, `/root`, `/srv`, `/var` with its databases, logs and caches, and `/usr/local`. That's the state you keep across a rollback.
+
+`/usr/local` is the one part of `/usr` that isn't in a deployment. Arch packages never install there, so it holds only what you put there: an installer run with `curl | sh`, `sudo make install`, `sudo npm install -g`, a binary copied into `/usr/local/bin`. Its files live in `/var/usrlocal`, and the boot binds that read-write over the deployment's `/usr/local`, as Fedora Silverblue does, so you can write to it at any time, the change is there at once, and every deployment sees the same files. Each deployment keeps only an empty `/usr/local`, with the directories the `filesystem` package ships, to bind it on. See [What `/usr/local` holds](#what-usrlocal-holds).
 
 `/etc` and pacman's database are real copies on ext4, a few MB each, because a hardlink would share edits: an editor that writes in place, or `chmod`, would change the file in every deployment at once, including the one you'd fall back to.
 
@@ -45,7 +47,7 @@ Then the switch ends: `switched to generation 43 (snapshot 2026-10-15); its depl
 
 ## Booting a deployment
 
-archix's mkinitcpio hook, in systemd and busybox initramfs images alike, mounts the deployment before the real root starts. It reads which boot entry systemd-boot started from the `LoaderEntrySelected` EFI variable, and boots that entry's deployment if it's committed, complete, and the entry is one archix recorded writing. Otherwise it boots `current`. It binds the deployment's `usr`, `opt` and `boot` read-only over the root, and its `etc`, pacman database and DKMS state writable. `/archix` itself is bound read-only, so no deployment, the ones you'd roll back to included, can be changed through it; only archix, in a mount namespace of its own, writes there.
+archix's mkinitcpio hook, in systemd and busybox initramfs images alike, mounts the deployment before the real root starts. It reads which boot entry systemd-boot started from the `LoaderEntrySelected` EFI variable, and boots that entry's deployment if it's committed, complete, and the entry is one archix recorded writing. Otherwise it boots `current`. It binds the deployment's `usr`, `opt` and `boot` read-only over the root, its `etc`, pacman database and DKMS state writable, and the shared `/var/usrlocal` writable over `/usr/local`. `/archix` itself is bound read-only, so no deployment, the ones you'd roll back to included, can be changed through it; only archix, in a mount namespace of its own, writes there.
 
 So picking an older entry in the boot menu boots that deployment with the same packages, kernel and `/etc` it had; `/var` and your home are shared and stay as they are now. Nothing is reinstalled, and pacman doesn't run at boot. `archix-boot.service` then makes it current and the boot default, and carries the users and passwords of the deployment that was current into it by name; see [Users and passwords across deployments](/docs/concepts/safety/#users-and-passwords-across-deployments). With systemd-boot 260 or newer, [boot counting](/docs/reference/options/#boottries) does the same by itself when a new deployment doesn't reach `boot-complete.target`.
 
@@ -63,7 +65,7 @@ A second switch before the reboot builds on the waiting deployment and carries i
 
 Everything in the deployment takes effect at the next boot: packages, `/etc` files, users and groups, enabled and disabled services, sysctl, the firewall, the kernel and its modules. Nothing is restarted or reloaded on the running system, so it keeps running the old generation, consistently, until you reboot.
 
-Some things live outside the deployments, and a switch writes them once it has committed: [`home.files`](/docs/reference/options/#homefiles) and other managed files outside `/etc`, `/usr` and `/opt`, with their `on_change` scripts, the home directories of new users, and [Flatpak apps](/docs/guides/flatpak-and-appimages/).
+Some things live outside the deployments, and a switch writes them once it has committed: [`home.files`](/docs/reference/options/#homefiles) and other managed files outside `/etc`, `/usr` and `/opt`, `/usr/local`'s included, with their `on_change` scripts, the home directories of new users, and [Flatpak apps](/docs/guides/flatpak-and-appimages/).
 
 Changes you make to `/etc` after a switch and before the reboot are carried into the new deployment's own copy of `/etc` as you make them: a password you change with `passwd`, a Wi-Fi network you save, a file you edit. `archix-etc-merge.service` watches the running `/etc` from the commit until shutdown and merges each change into the waiting deployment, with the deployment's own version of a file both changed kept beside it as `.pacnew`. `switch` and `archix status` say when a deployment is waiting: `deployment 43 is committed and boots at the next restart; changes to /etc made before then are carried over to it`. See [Changes to `/etc` before the reboot](/docs/concepts/safety/#changes-to-etc-before-the-reboot).
 
@@ -74,7 +76,32 @@ Changes you make to `/etc` after a switch and before the reboot are carried into
 - **To a generation whose deployment is kept**, rolling back first checks the deployment's files against its packages, as [`archix verify`](/docs/reference/cli/#verify) does, and repairs what differs from the package cache, then points the boot default and `current` at it. The next boot starts it. Picking its entry in the boot menu does the same, without the check.
 - **To a generation whose deployment was dropped**, archix builds it again from the nearest kept deployment and the generation's package files in the cache, then commits it like a switch. That takes as long as an update, and is just as atomic.
 
-[`deployments.keep`](/docs/reference/options/#deploymentskeep) decides how many deployments stay, 2 by default; [`generations.keep`](/docs/reference/options/#generationskeep) how many generations stay rebuildable. A rollback leaves data in `/var` and your home as it is: a database a newer version migrated stays migrated. See [Generations and rollback](/docs/concepts/generations/).
+[`deployments.keep`](/docs/reference/options/#deploymentskeep) decides how many deployments stay, 2 by default; [`generations.keep`](/docs/reference/options/#generationskeep) how many generations stay rebuildable. A rollback restores packages and `/etc`. It leaves `/var`, `/usr/local` and your home as they are: a database a newer version migrated stays migrated, and a tool installed with `curl | sh`, `make install` or `npm install -g` stays installed. Managed files outside the deployment, `/usr/local`'s included, are written as the generation you roll back to declares them. See [Generations and rollback](/docs/concepts/generations/).
+
+## What `/usr/local` holds
+
+`/usr/local` is shared by every deployment and no rollback undoes what's in it, so a file there that breaks the system breaks every deployment. systemd, udev and the module loader read parts of it at boot: units, drop-ins and generators in `/usr/local/lib/systemd`, udev rules in `/usr/local/lib/udev`, and `modprobe.d`, `modules-load.d`, `sysctl.d`, `tmpfiles.d`, `sysusers.d`, `environment.d` and `binfmt.d` under `/usr/local/lib`. `PATH` puts `/usr/local/bin` ahead of `/usr/bin`, so a program there is run instead of the package's of the same name, in every deployment.
+
+So that a bad file there can't keep every boot from working, some boots leave `/usr/local` out, and show the deployment's own empty, read-only one instead:
+
+- **A deployment older than `current`**: systemd-boot's fallback after a new deployment failed its [boot tries](/docs/reference/options/#boottries), or an older entry picked in the boot menu.
+- **The [fallback boot image](#the-fallback-boot-image).**
+- **The [rescue entry](/docs/guides/recovery/#without-a-live-usb-the-rescue-entry)**, and [`archix mount-deployment`](/docs/guides/recovery/#with-a-live-usb) from a live USB, which never mount it.
+
+Such a boot says so at login: `archix: this boot left /usr/local unmounted, as systemd-boot started deployment 41, older than the current 42: its fallback after 42's failed boot tries, or an older entry picked in the boot menu; ...`. To start one of them by hand, bring up the boot menu; see [Bringing up the boot menu](/docs/guides/recovery/#bringing-up-the-boot-menu).
+
+When such a boot finds files in those boot-time directories of `/var/usrlocal`, it also holds `/usr/local` out of every boot after it, until you clear them. Without the hold, a unit there that broke deployment 42's boot tries would break 41's too: boot counting's fallback makes 41 current, and its entry has booted before, so systemd-boot doesn't count it and wouldn't fall back again. The plain reboots after the fallback boot 41 without `/usr/local`, and the login note names the files and both ways out:
+
+- `sudo archix usr-local quarantine` moves them to `/var/usrlocal.quarantine/<time>/`, under the same paths, and the next boot binds `/usr/local` again. Move back what you need, one file at a time.
+- Or fix them in `/var/usrlocal`, where the shared files are, and run `sudo archix usr-local release`: the next boot binds `/usr/local` once, and if that boot doesn't reach `multi-user.target`, as when the unit still fails and reboots, the boot after leaves it out again.
+
+The hold has a cost. Any boot that leaves `/usr/local` out while those directories have files sets it, including a fallback for an unrelated reason, such as a kernel that panics, and an older entry you picked by hand. Until you release it, nothing in `/usr/local` runs or applies at boot: your units, udev rules and module settings there stay off, even ones that are fine.
+
+A boot that binds `/usr/local` under the hold lifts it once it reaches `multi-user.target`, and the hold also lets the next boot try by itself once those directories in `/var/usrlocal` hold no files. Until then, [`archix status`](/docs/reference/cli/#status) warns: ``warning: /usr/local: every boot leaves it out, held since a boot left it out (...) while it held /usr/local/lib/systemd/system/foo.service, so nothing in it runs or applies at boot, its units, udev rules and module settings included, even ones that are fine; `sudo archix usr-local quarantine` moves its boot-time files to /var/usrlocal.quarantine, or once you've fixed them `sudo archix usr-local release` lets the next boot bind it again``. A boot that leaves `/usr/local` out when it holds no such files holds nothing; fix what broke, and the next boot of `current` binds it again and drops the note. [`archix status`](/docs/reference/cli/#status) and [`archix verify`](/docs/reference/cli/#verify) list every file in those boot-time directories: `warning: /usr/local holds files that systemd, udev or the module loader read at boot: /usr/local/lib/systemd/system/foo.service. They apply to every deployment and no rollback undoes them; ...`.
+
+Packages can't install to `/usr/local`; Arch's packaging rules forbid it, and archix enforces it. A switch refuses a package with files there before anything changes: `these packages install files into /usr/local, which every deployment shares from /var/usrlocal and Arch packages must not install to; nothing was changed`, naming each package and file. The `filesystem` package's empty directories are the exception. A transaction runs with the new deployment's own empty `/usr/local`, never the shared one, and when an install scriptlet or pacman hook writes a file there, or into `/var/usrlocal`, the build stops before the commit and names the files: `the new deployment's packages or their install scripts put files into /usr/local, ...; nothing was changed`.
+
+The first switch moves what the system's `/usr/local` holds into `/var/usrlocal`, as hardlinks on ext4 and reflinks on btrfs, and [`archix eject`](/docs/reference/cli/#eject) moves it back. A separate filesystem mounted at `/usr/local` is fine: `/etc/fstab` mounts it over the bind at every boot, the ones that leave `/var/usrlocal` out included.
 
 ## Storage
 
@@ -99,10 +126,10 @@ The first switch lays the running system out as deployment 1, and refuses before
 
 - archix needs to manage booting, with [`boot.loader = "systemd-boot"`](/docs/reference/options/#bootloader). GRUB and Limine boot a kernel from `/boot` under a name every deployment shares, which can't be switched together with the rest.
 - The ESP must not be mounted in `/boot`, since each deployment has its own `/boot`. Mount it at `/efi`, the default for [`boot.esp`](/docs/reference/options/#bootesp). Every switch, rollback and `gc` checks that a FAT filesystem is mounted there and, when systemd-boot reports it, that it's the partition systemd-boot started from. New deployments' `fstab` mounts the ESP on access and unmounts it after a minute idle, so a forced reboot rarely catches it mounted; when the config manages `/etc/fstab`, the switch warns instead.
-- `/boot`, `/usr`, `/opt`, `/var`, `/var/lib`, `/var/lib/pacman` and `/archix` must be on the root filesystem. Caches and logs on their own btrfs subvolumes, such as CachyOS's `@cache` and `@log`, are fine.
+- `/boot`, `/usr`, `/opt`, `/var`, `/var/lib`, `/var/lib/pacman` and `/archix` must be on the root filesystem. Caches and logs on their own btrfs subvolumes, such as CachyOS's `@cache` and `@log`, are fine, and so is a separate `/usr/local`.
 - The static archix at `/usr/lib/archix/archix-static`, which the AUR package installs, goes into the initramfs.
 
-`/usr`, `/opt` and `/boot` are read-only from then on, so plain pacman can't change the running system; see [pacman and yay](/docs/concepts/pacman-and-yay/).
+`/usr`, `/opt` and `/boot` are read-only from then on, so plain pacman can't change the running system; see [pacman and yay](/docs/concepts/pacman-and-yay/). `/usr/local` stays writable.
 
 ## How it's tested
 

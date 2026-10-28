@@ -100,7 +100,7 @@ Rollback changes the system, not your config. Your `init.lua` and `archix.lock` 
 
 ## Rolling back from the boot menu
 
-Every kept deployment has its own boot entry. When a generation won't boot, or boots to a broken desktop, pick an older one in systemd-boot:
+Every kept deployment has its own boot entry. When a generation won't boot, or boots to a broken desktop, pick an older one in systemd-boot's menu; with the menu timeout at 0, hold Space as the machine starts to bring it up (see [Bringing up the boot menu](/docs/guides/recovery/#bringing-up-the-boot-menu)):
 
 ```
   Arch Linux (archix, generation 42)

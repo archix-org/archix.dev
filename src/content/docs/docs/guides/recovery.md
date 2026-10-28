@@ -5,13 +5,24 @@ sidebar:
   order: 9
 ---
 
-Most failures need neither of these. A bad update is undone by picking an older deployment in the boot menu, or by boot counting on its own; a lost `loader/` is covered by the fallback boot image in `EFI/Linux`. This guide is for when no deployment boots: every one broken the same way, a root filesystem that needs repair, or a password nobody knows.
+Most failures need neither of these. A bad update is undone by picking an older deployment in the boot menu, or by boot counting on its own; a lost `loader/` is covered by the fallback boot image in `EFI/Linux`. A bad file in the shared `/usr/local`, which every deployment uses and no rollback undoes, is got past the same way: those boots, and the fallback boot image, leave `/usr/local` out, and hold it out of the boots after until `sudo archix usr-local quarantine` moves the boot-time files away or `sudo archix usr-local release` lets the next boot try it again; see [What `/usr/local` holds](/docs/concepts/atomicity/#what-usrlocal-holds). This guide is for when no deployment boots: every one broken the same way, a root filesystem that needs repair, or a password nobody knows.
+
+## Bringing up the boot menu
+
+The deployments, the fallback image ("archix (fallback)") and the rescue entry are all in systemd-boot's menu, but the menu shows only when its timeout is above 0. archix doesn't change the timeout: it's `timeout` in `/efi/loader/loader.conf` as your install wrote it, or the `LoaderConfigTimeout` EFI variable that `bootctl set-timeout` and the menu's `t` and `T` keys set, which wins over the file. `bootctl install` leaves it at 0, which boots the default at once.
+
+- **At 0 (or `menu-hidden`)**, hold Space, or press it over and over, as the machine starts, from the firmware's logo until the menu appears. Some firmware only takes keys for a moment; if the default boots anyway, reset and try again. Then pick an entry with the arrow keys and Enter.
+- **From a running system**, `systemctl reboot --boot-loader-menu=60` restarts into the menu once, and waits up to 60 seconds there.
+- **Every boot**: `sudo bootctl set-timeout 5` shows the menu for 5 seconds at each boot; `sudo bootctl set-timeout ''` goes back to `loader.conf`'s.
+- **`menu-disabled`** turns the key off too; only `systemctl reboot --boot-loader-menu=` and the variable bring the menu back.
+
+The menu's `d` key makes the highlighted entry the default; archix clears that the next time it writes `loader.conf`. To start an entry once without the menu, use `sudo bootctl set-oneshot archix-41.conf` (or `archix-fallback-42.efi`, `archix-rescue.conf`) and reboot.
 
 ## Without a live USB: the rescue entry
 
 Every switch keeps an entry called **archix rescue** in the boot menu, after the deployments. It's never the default and boot counting never picks it; choose it in the menu, or from a running system with `sudo bootctl set-oneshot archix-rescue.conf`.
 
-It boots the kernel of the newest deployment that booted fine, with an initramfs of its own: archix's static binary, a shell, and the tools to check and repair filesystems (`e2fsck`, `btrfs`, `fsck.fat`, and `cryptsetup` and `lvm` when installed). It mounts nothing on its own, so a damaged root can be checked unmounted, and opens the `archix rescue` prompt:
+It boots the kernel of the newest deployment that booted fine, with an initramfs of its own: archix's static binary, a shell, and the tools to check and repair filesystems (`e2fsck`, `btrfs`, `fsck.fat`, and `cryptsetup` and `lvm` when installed). It mounts nothing on its own, so a damaged root can be checked unmounted, and opens the `archix rescue` prompt. Its `shell` and repairs never mount the shared `/usr/local`, so a bad unit or binary there can't get in the way; its files are in `/var/usrlocal` on the root:
 
 | Command | What it does |
 | --- | --- |
@@ -49,7 +60,7 @@ You need a live USB only when the rescue entry can't start either: the ESP wiped
 2. **Bind a deployment over the root** with the static archix every deployment carries. Without a number it binds current's; it refuses a deployment that's missing a tree and lists the complete ones.
    ```console
    # /mnt/archix/deploy/2/usr/lib/archix/archix-static mount-deployment /mnt 2
-   bound deployment 2's trees over /mnt
+   bound deployment 2's trees over /mnt; its /usr/local stays empty, as nothing in the shared one, /mnt/var/usrlocal, should get in the way of a repair
    ```
 3. **Find what's damaged.**
    ```console

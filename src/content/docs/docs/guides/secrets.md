@@ -118,7 +118,7 @@ files = {
 },
 ```
 
-**A path under `/run`.** For apps that won't follow a link, `path` puts the secret at a file under `/run` at each boot, in a ramfs mounted on that file's directory, so the value never sits on `/run`'s swappable tmpfs, and an app that saves by writing a new file and renaming it over the old one edits it in place. NetworkManager reads profiles from `/run/NetworkManager/system-connections`, and an edit with nmcli stays there, in the ramfs, instead of writing plain text into `/etc`. A directory that already holds other files at boot gets the ramfs file bound over the path instead, which an app can read but not replace:
+**A path under `/run`.** For apps that won't follow a link, `path` puts the secret at a file under `/run` at each boot, in a ramfs mounted on that file's directory, so the value never sits on `/run`'s swappable tmpfs, and an app that saves by writing a new file and renaming it over the old one edits it in place. NetworkManager reads profiles from `/run/NetworkManager/system-connections`, and `nmcli connection modify --temporary` edits one there, in the ramfs. Without `--temporary`, and from GUI editors, NetworkManager saves a `/run` profile by moving it to `/etc/NetworkManager/system-connections`, key and all, on disk; change the profile in your config instead. If that happens, the next switch finds the value in `/etc` and refuses, naming the file, which you then delete. A directory that already holds other files at boot gets the ramfs file bound over the path instead, which an app can read but not replace:
 
 ```lua
 secrets.items.home_wifi = {
@@ -213,7 +213,7 @@ archix never copies the identity into a backup, archive or cache. A backup of `/
 
 ## Swap and hibernation
 
-The ramfs and archix's own buffers never swap, but the services reading the secrets can. `archix status` warns while secrets are declared and a swap, active or in fstab, isn't dm-crypt or zram. Hibernation writes all of memory to swap, the ramfs included, so archix turns hibernation, suspend-then-hibernate and hybrid sleep off while secrets are declared and a swap isn't encrypted, as it does while a deployment waits for its reboot: `hibernation is off while secrets are declared and swap isn't encrypted (/dev/nvme0n1p3): it would write every decrypted secret to it; encrypt the swap, or set secrets.allow_hibernation = true`. Suspend still works.
+The ramfs and archix's own buffers never swap, but the services reading the secrets can. `archix status` warns while secrets are declared and a swap, active or in fstab, isn't dm-crypt or zram. Hibernation writes all of memory to swap, the ramfs included, so archix turns hibernation, suspend-then-hibernate and hybrid sleep off while secrets are declared and a swap isn't encrypted, as it does while a deployment waits for its reboot: `hibernation is off while secrets are declared and swap isn't encrypted (/dev/nvme0n1p3): it would write every decrypted secret to it; encrypt the swap, or set secrets.allow_hibernation = true`. Suspend still works. `secrets.allow_hibernation = true` lifts only this refusal: hibernation stays off while a deployment waits for its reboot, and in a deployment that swaps on a file its initramfs can't resume from.
 
 ## Leaving archix
 

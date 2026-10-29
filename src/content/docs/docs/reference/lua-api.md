@@ -213,6 +213,33 @@ A missing `url` is an error, `archix.fetchurl needs { url = ..., sha256 = ... }`
 
 Evaluating the config never downloads anything; it only records the URL and the hash. The download happens at `archix switch`, and the hash is what's locked.
 
+## `archix.secret`
+
+```lua
+archix.secret("nb_key") -- returns a placeholder, never the value
+```
+
+A placeholder for a declared [secret](/docs/reference/options/#secretsitems), which the deployment's boot replaces with its value. Evaluation never sees the value. It may go into a file's `text`, which then becomes a template rendered at boot into `/run/archix/secrets/files/`, or be the whole of `users.<name>.hashed_password` for a `crypt_hash` secret:
+
+```lua
+files["/etc/netbird/env"] = { text = "NB_SETUP_KEY=" .. archix.secret("nb_key") .. "\n" },
+users.me.hashed_password = archix.secret("me_password"),
+```
+
+Anywhere else it's refused with the option's name, such as `kernel_params.[1]: a secret can't go here; ...` or, in a unit, ``units.backup.service: a unit file is loaded before any secret is decrypted, so it can't hold one; give the service EnvironmentFile= or LoadCredential=NAME:/run/archix/secrets/<secret> (archix.secret_path)``. A name that isn't letters, digits, `-` and `_` is an error. See [Secrets](/docs/guides/secrets/).
+
+## `archix.secret_path`
+
+```lua
+archix.secret_path("api_key") -- "/run/archix/secrets/api_key"
+```
+
+The path where the boot decrypts secret `name`, for a unit's `EnvironmentFile=` or `LoadCredential=`, or anything else that reads a file:
+
+```lua
+units["backup.service"] = "[Service]\nLoadCredential=key:" .. archix.secret_path("api_key") .. "\nExecStart=/usr/local/bin/backup\n",
+```
+
 ## `archix.program`
 
 ```lua

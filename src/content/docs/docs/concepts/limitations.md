@@ -69,6 +69,20 @@ archix makes a rolling-release system declared, locked and reversible, on top of
 
 See [Secure Boot](/docs/guides/secure-boot/) for what archix does sign and check.
 
+## Secrets
+
+**Encrypted secrets protect the config, not the machine.** A [secret](/docs/guides/secrets/) is an age file in the config, decrypted only at boot into a ramfs. That keeps the value out of the config's repository and its clones and backups, `archix.lock`, generation records, package caches, every deployment and snapshot archix makes, its logs and the journal. Root on the running machine reads the identity in `/var/lib/archix/secrets` and the values in `/run/archix/secrets`, as with agenix and sops-nix.
+
+**The machine's key is a file on its root.** Anyone who can read an unencrypted root disk reads the identity, and with it every secret. Put the root on LUKS; `archix status` warns while secrets are declared and the root isn't on dm-crypt. TPM sealing of the identity isn't built yet. A backup of `/var` or a snapper or Timeshift snapshot of the root holds the identity too, though never a decrypted value: leave `/var/lib/archix/secrets` out, or encrypt them.
+
+**What a service does with a secret is its own.** archix's own copies stay in locked memory and the ramfs, but an app that writes its token into its state, logs it, keeps it in memory that swaps, or dumps core holds a copy archix can't reach. `archix status` warns while a swap isn't encrypted, and hibernation, which writes the ramfs to swap too, is off then unless [`secrets.allow_hibernation`](/docs/reference/options/#secretsallow_hibernation) says otherwise. A link edited into a regular file puts the value into the running deployment's `/etc`: the `/etc` merge never carries it, `status` warns and the next switch refuses until it's moved away. NetworkManager rewrites a profile it edits in place, so give it secrets with [`path`](/docs/reference/options/#secretsitems) under `/run`; a profile it saves to `/etc` with the value anyway stays in the running deployment's `/etc` on disk, which the `/etc` merge doesn't carry, `status` names and the next switch refuses. The merge compares against this boot's values in the ramfs, so after a power cut the boot's catch-up from the old `/etc`, which runs before they're decrypted, can't check a file changed after the merge's last pass; the next switch's scan still finds it.
+
+**Password hashes from secrets sit in `/etc/shadow`.** A `crypt_hash` secret sets a password at each boot where logins read it, so the hash is in that deployment's `/etc`, the `/etc` merge's account texts and any rollback's carried accounts, as any password is. Its encryption keeps it out of the config, not off the disk.
+
+**A rotated or removed secret stays in git history.** Every earlier ciphertext is still in the config's history, so a leaked or lost key means changing the credentials themselves, not only re-encrypting them; `archix secrets rekey` says so.
+
+**Secrets arrive with the deployment.** A changed secret is a new deployment whose values arrive with the reboot, as everything else in it does; nothing is decrypted again while the system runs. Home files can't hold secrets yet, nor can the initramfs: a LUKS keyfile for a volume opened from crypttab isn't supported as a secret yet, and the root volume's own key never can be, since the identity lives on that root.
+
 ## Disk space
 
 **A kept deployment costs an update's changed files.** With `deployments.keep = 2`, the previous deployment keeps every file the last switch replaced: 2.9 GB for a four-month update of 214 packages, 0.9 GB for a week's 36, on ext4 or btrfs, and 1.7 GB and 0.59 GB on btrfs with zstd. `deployments.keep = 1` costs the same as updating in place, once the new deployment has booted. Each kept deployment's boot image takes up to about 40 MB on the ESP. See [Storage](/docs/concepts/atomicity/#storage).

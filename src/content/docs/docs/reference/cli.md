@@ -213,6 +213,9 @@ See [pacman and yay](/docs/concepts/pacman-and-yay/#adopting) and [Safety](/docs
 | `--noconfirm` | Don't ask. Builds without the `apply N changes?` question, adopts newer packages, declares packages installed with pacman or yay, trusts new AUR build recipes without showing them, and takes the nearest newer version when a locked AUR version can't be built. It refuses unsafe downgrades: ``refusing unsafe downgrades with --noconfirm; to go ahead, run `archix switch` or `archix rollback` with --allow-unsafe-downgrade``. With the default `third_party_fallback = "ask"`, a locked third-party package that's gone fails the switch rather than being swapped for another; see [The fallback chain](/docs/guides/third-party-repos/#the-fallback-chain). |
 | `--allow-unsafe-downgrade` | Go back across versions that may not read newer data (postgresql majors and the like) without asking. They're still listed. |
 | `--accept-nearest newer\|older` | When a locked AUR version can't be built, take the nearest newer or older one without asking. Overrides the `missing_versions` option. |
+| `--without-secrets` | Commit even though declared [secrets](/docs/guides/secrets/) don't decrypt on this machine yet: those are left out of the deployment, `--without-secrets: these secrets can't be decrypted on this machine, so the new deployment leaves them out ...`, and what uses them fails until a switch after `archix secrets rekey`. A password hash from a secret counts for no login in the lockout check then. |
+
+With [secrets](/docs/guides/secrets/) declared, `switch` decrypts each one into locked memory before it builds anything, when this machine's identity is there, and refuses one that doesn't decrypt or a password hash that doesn't parse, with nothing changed. It refuses a managed file that holds a value, and, just before the commit, a value in the new deployment's UKIs or initramfs images, or one of 16 bytes or more in its `/etc`; a shorter one in `/etc` warns. In a chroot it decrypts nothing and says so: `can't check secrets here: this runs in a chroot, so nothing is decrypted; the deployment's boot decrypts them and names any that fail`. See [What a switch checks](/docs/guides/secrets/#what-a-switch-checks).
 
 ### `upgrade`, `-Syu`
 
@@ -377,7 +380,8 @@ On a system not laid out as deployments yet, before the first switch, it does th
 | --- | --- |
 | `--noconfirm` | Don't ask. |
 | `--restore-originals` | Put back the files archix replaced, from its backups, and delete the ones it created, as taking them out of the config would; `/etc/kernel/cmdline` stays, as mkinitcpio reads the kernel command line from it. An eject that was cut off keeps the choice it started with. |
-| `--purge` | Also delete `/var/lib/archix` and `/var/cache/archix`. |
+| `--purge` | Also delete `/var/lib/archix` and `/var/cache/archix`, this machine's secrets identity with them. |
+| `--secrets drop\|materialize` | What becomes of declared [secrets](/docs/guides/secrets/#leaving-archix), which plain Arch has nothing to decrypt; required when the current generation declares any: ``generation 42 declares 3 secrets, which plain Arch has nothing to decrypt; run eject with --secrets drop (their links go) or --secrets materialize (each becomes a real file at its path, from what this boot decrypted); nothing was changed``. `drop` removes their links and keeps the identity and ciphertexts in `/var/lib/archix/secrets`; `materialize` writes each, as this boot decrypted it, to its path with its owner and mode, and refuses when this boot couldn't decrypt one. |
 
 `archix recover` was removed with the move to deployments; running it says why and exits.
 
@@ -461,6 +465,56 @@ It makes a new 2048-bit RSA key, writes `/etc/systemd/tpm2-pcr-private-key.pem`,
 | --- | --- |
 | `[devices]...` | LUKS2 volumes to re-enroll, such as `/dev/nvme0n1p2`. Without any, it only replaces the key. |
 
+### `secrets`
+
+Declared [secrets](/docs/guides/secrets/): this machine's key, editing, setting, re-encrypting and checking them. `edit`, `set`, `rekey` and `check` evaluate every host in `lua/hosts/` to know who each secret goes to; with the config in `/etc/archix`, run them with sudo, and your keys in the invoking user's home still count.
+
+#### `secrets init`
+
+Make this machine's age identity, `/var/lib/archix/secrets/identity` (0400 in a 0700 directory), and print the line for the host's config. Needs root. With an identity there already it prints its key again; `--replace` makes a new one and retires the old one, which stays while a kept deployment needs it.
+
+```console
+$ sudo archix secrets init
+made this machine's secrets identity in /var/lib/archix/secrets
+put this in the host's config:
+
+  secrets = { machine_key = "age1qyqszqgp...3290gq", admins = { "<your age or ssh-ed25519 key>" } }
+
+archix never copies this identity anywhere: your admin recipients are the backup, ...
+```
+
+#### `secrets pubkey`
+
+Print this machine's age recipient.
+
+#### `secrets edit NAME`
+
+Decrypt a secret, or start it empty, into your editor on a private ramfs, and encrypt what you save to every recipient the config names: `encrypted secret wg0 to 2 recipients into secrets/wg0.conf.age`. Saving it unchanged writes nothing. It decrypts with your identities, `$ARCHIX_AGE_IDENTITY`, `~/.config/archix/identity` (which may name age plugins), `~/.ssh/id_ed25519` or `~/.ssh/id_rsa`; `--machine` uses this machine's key and its retired ones instead, and needs root. Without a private ramfs it edits in `$XDG_RUNTIME_DIR`, which must be a tmpfs or ramfs: ``... isn't a tmpfs or ramfs, and no private ramfs could be mounted (...), so the plain text would land on disk; refusing``. It warns when swap isn't encrypted, turns off vim's and nvim's undo, swap and backup files, and warns about other editors. A kill leaves the old age file. See [Write a secret](/docs/guides/secrets/#write-a-secret).
+
+#### `secrets set NAME [--file F]`
+
+Encrypt the value from `--file F` or stdin as a secret, for piping from a password manager; at a terminal it reads one line without echo. An empty value is refused.
+
+#### `secrets rekey [NAME...]`
+
+Re-encrypt secrets, every one by default, to the recipients every host's config names now, as after adding a host or an admin, skipping files already encrypted to exactly those. It decrypts as `edit` does; `--machine` uses this machine's key and its retired ones. It records who each file went to in `secrets/recipients.toml`, and reminds you that the config's git history keeps the old ciphertexts.
+
+#### `secrets check`
+
+For each secret this host declares: who it should be encrypted to against who it was, whether this machine decrypts it (as root), and what uses it. It exits non-zero when one needs a rekey, doesn't decrypt or is missing.
+
+```console
+$ sudo archix secrets check
+wg0  secrets/wg0.conf.age
+  recipients: the 2 the config names
+  this machine: decrypts it
+  used by: /etc/wireguard/wg0.conf
+```
+
+#### `secrets rotate-machine-key`
+
+Make a new machine identity and retire the old one, which stays in `/var/lib/archix/secrets/identity.retired` while a kept deployment or generation has a secret only it decrypts; gc deletes it after. Needs root. It prints the new key and the steps: put it in `secrets.machine_key`, `archix secrets rekey` (or `sudo archix secrets rekey --machine` here), switch and reboot. `--compromised` deletes the old identity at once; change every credential it protected. See [Rotating the machine's key](/docs/guides/secrets/#rotating-the-machines-key).
+
 ## Commands that read the system or the config
 
 These don't change the system and don't need root. As a normal user, archix keeps its download cache in `~/.cache/archix` (or `$XDG_CACHE_HOME/archix`); as root it uses `/var/cache/archix`.
@@ -496,6 +550,8 @@ Files declared with a `url` are compared by their `sha256`, so `diff` downloads 
 flatpak apps archix doesn't manage: com.valvesoftware.Steam
 ```
 
+[Secrets](/docs/guides/secrets/) are listed by name and what uses them, never their value: `secret     wg0: new (/etc/wireguard/wg0.conf)`, `changed`, `re-encrypted only` or `removed`. Telling a changed value from the same one encrypted again needs root and this machine's key; without them, `diff` says it can't tell. The files in `/usr/lib/archix/secrets` that carry them aren't listed.
+
 ### `status`
 
 Show the current generation, the booted one when they differ, changes made outside archix, the lock and pending changes.
@@ -517,6 +573,8 @@ the system matches the lock
 The `booted generation` line and the notes under it appear while a committed deployment waits for the next boot: the updates waiting for it, with kernels, `glibc`, `openssl`, `openssh`, `systemd` and `sudo` named as security-relevant, the [hibernation guard](/docs/concepts/atomicity/#a-switch), and what the [`/etc` merge](/docs/concepts/safety/#changes-to-etc-before-the-reboot) has carried into it, with a line for each conflict and each change it couldn't carry. Once the deployment has booted, the same lines say what was carried from the one before, and whether its last pass at shutdown was cut off.
 
 Other lines appear when they apply: a verify that found changed files (see [`verify`](#verify)), hooks or `systemd-sysusers` failing at boot (`deployment 46's hooks failed at 2 of 3 boots; the next boot runs them again`), a [health check](/docs/reference/options/#boothealth_check) or boot count that fell back to the previous deployment, and ``warning: systemd-boot's LoaderEntryDefault variable (the boot menu's default, or `bootctl set-default`) names archix-40.conf and overrides archix's default; the next switch clears it, or `sudo bootctl set-default ''` now``. The lock line counts the [pins](/docs/concepts/lockfile/#pins), packages held at a version other than the snapshot's, when there are any. When the snapshot is older than [`lock_warn_after_days`](/docs/reference/options/#lock_warn_after_days), 30 by default, the next line warns: ``warning: archix.lock is at the 2026-09-10 snapshot, 38 days old; updates released since aren't installed. `archix update` moves it to the newest snapshot``. `switch` prints the same warning before it starts.
+
+With [secrets](/docs/guides/secrets/) declared, `status` names those this boot couldn't decrypt and why, `secret nb is missing at this boot: its ciphertext in the deployment is damaged`, those a `switch --without-secrets` left out, a secret's link someone replaced with a plain file (``warning: /etc/wireguard/wg0.conf should be a link to secret wg0 but is a file; it holds plain text on disk in deployment 42, and the next switch refuses until it's moved away``), users whose password hash comes from a secret and so sits in `/etc/shadow`, and warnings when the root filesystem isn't on dm-crypt or a swap isn't encrypted, with the hibernation guard when it's on for them.
 
 On a machine that booted through UEFI, the `Secure Boot:` line says `on`, `off`, or ``setup mode (no keys enrolled; `sudo archix secure-boot setup` enrolls them)``. The last line compares the lock with the current deployment: `the system matches the lock`, or `2 changes pending; see `archix diff``. If the config changed since the lock was written, it adds ``the config changed since the lock was written; `archix lock` or `archix switch` will re-resolve``. That includes editing a recipe in `pkgbuilds/` or a file listed in `patches`, not just the Lua.
 
@@ -659,7 +717,7 @@ It copies everything in `/var/cache/archix/pkg`, the files archix downloaded and
 
 ## Internal commands
 
-Hidden commands are run by files archix installs, not by you: `archix hook-record`, from the pacman hook; `archix boot-check` and `archix boot-complete`, from `archix-boot.service` and `archix-boot-complete.service`; `archix deploy-mount`, from the initramfs hook, which mounts the deployment the boot belongs to; `archix deploy-activate`, from `archix-deploy-activate.service`, which applies a deployment's `/var` changes at its first boot and runs its hooks; `archix etc-merge`, from `archix-etc-merge.service` and, with `--boot`, `archix-etc-merge-boot.service`; `archix health-check`, from `archix-health-check.service`; `archix deploy-flatpak`, from `archix-flatpak.service`; `archix bless`, from a drop-in for `systemd-bless-boot.service`, which renames a counted entry to its good name and flushes it under that name, as a FAT rename isn't on disk until then; `archix pacman-guard`, from the pacman hook that stops plain pacman on a deployment; and `archix eject-here`, which `eject` runs in a private mount namespace.
+Hidden commands are run by files archix installs, not by you: `archix hook-record`, from the pacman hook; `archix boot-check` and `archix boot-complete`, from `archix-boot.service` and `archix-boot-complete.service`; `archix deploy-mount`, from the initramfs hook, which mounts the deployment the boot belongs to; `archix deploy-activate`, from `archix-deploy-activate.service`, which applies a deployment's `/var` changes at its first boot and runs its hooks; `archix etc-merge`, from `archix-etc-merge.service` and, with `--boot`, `archix-etc-merge-boot.service`; `archix health-check`, from `archix-health-check.service`; `archix deploy-flatpak`, from `archix-flatpak.service`; `archix bless`, from a drop-in for `systemd-bless-boot.service`, which renames a counted entry to its good name and flushes it under that name, as a FAT rename isn't on disk until then; `archix pacman-guard`, from the pacman hook that stops plain pacman on a deployment; `archix eject-here`, which `eject` runs in a private mount namespace; and `archix secrets activate`, from `archix-secrets.service`, which decrypts the booted deployment's secrets into `/run/archix/secrets`.
 
 ## Exit behaviour
 

@@ -36,6 +36,31 @@ Mounts at `/home`, `/var` and `/srv`, and anything under them, are required by d
 
 A switch warns about a disk that isn't attached when you switch, or holds another filesystem than you declared.
 
+## When a required disk is missing
+
+Booting without a required mount's disk, systemd waits 90 seconds for the device, then stops in emergency mode. With root's password locked, as on an install that only uses sudo, emergency mode's login refuses you, and without archix that refusal is all the console shows. In every deployment that declares a required mount, archix prints what went wrong first:
+
+```
+archix: this boot stopped in emergency mode because required mounts in /etc/fstab didn't mount:
+archix:   /home (UUID=5d2a…): its disk isn't attached
+archix: reattach the disk and reboot,
+archix: or start the archix rescue entry from the boot menu (hold Space at power-on)
+```
+
+A mount whose device is there but didn't mount, such as a damaged filesystem, says so instead, with the `journalctl -b -u home.mount` that shows why. The [rescue entry](/docs/guides/recovery/) asks for root's password or a wheel user's, and opens a shell without mounting a deployment. The hint runs before emergency mode's login and never holds it up; it reads only `/etc/fstab`, `/etc/crypttab` and what's mounted.
+
+### Boot counting and a missing disk
+
+On a new deployment's [counted tries](/docs/reference/options/#boottries), the hint adds `archix: this is one of deployment 43's counted boot tries: each boot that stops here uses one, then systemd-boot starts the previous deployment`. Nothing reboots on its own here: unlike a deployment that can't mount, which reboots into its next try, a missing disk stays missing, and the previous deployment probably needs it too. Each boot you start without the disk uses one of the new deployment's tries, and once they're gone systemd-boot passes it over, though nothing is wrong with it.
+
+archix records which mounts were missing on those tries, so once the disk is back and the previous deployment has booted, the login note and `archix status` say so:
+
+```
+archix: deployment 43 failed its boot tries because /home (UUID=5d2a…) was missing, not because of the deployment, so systemd-boot started 42; switch again (or `archix rollback 43`) to retry it
+```
+
+`archix rollback 43` gives the deployment's entry its tries again and makes it current, so the next boot starts it, and still falls back when it fails; `archix switch` builds a new deployment from the config. When the mount's device was there but didn't mount, the note says the deployment's tries ended in emergency mode as the mount failed, without clearing the deployment.
+
 ## Encrypted disks
 
 For a LUKS volume, mount its `/dev/mapper` name and say how to open it:

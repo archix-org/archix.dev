@@ -77,9 +77,9 @@ What each step decides:
 
 3. **Packages.** Your explicitly installed packages, from the repos and the AUR, are declared in `installed.lua`. Third-party repos in your `pacman.conf`, such as CachyOS's or chaotic-aur, are declared as they are, and init asks what to do if a locked package disappears from one (see [Third-party repos](/docs/guides/third-party-repos/)). Foreign packages that aren't on the AUR, built by hand or gone from it, stay in `ignored_packages` unless you tick them, which rebuilds them as recipes in `pkgbuilds/` from their installed files, kept out of the config; one whose files changed since pacman installed it can't be, and a `!` line says why. Orphaned dependencies can be kept in `ignored_packages` or left for the first switch to remove. `Later, when you install something with plain pacman or yay` sets [`undeclared_packages`](/docs/concepts/pacman-and-yay/#undeclared-packages). With AUR packages, there are also review and [missing versions](/docs/concepts/lockfile/#missing-versions). System-wide Flatpak apps are declared in `flatpak.apps`, with any remote other than Flathub, and locked to the commits they're installed at. Apps installed with `--user` are left out, and so are apps whose remote is gone, with a `!` line. See [Flatpak and AppImages](/docs/guides/flatpak-and-appimages/).
 
-4. **System.** Four checklists of what init takes over as it is, all ticked: `Settings` (hostname, timezone, locales and keymap, but only where the option would write exactly what's on disk now), `Users` (regular users, uid 1000 to 59999, each with uid, shell and groups, declared with their real groups, shell, home and description so declaring them changes nothing), `Groups` (regular groups, with their gid) and `Services that differ from their preset` (each `enabled` or `disabled`). Untick anything archix should leave alone; it isn't declared. Passwords stay where they are; archix never manages them.
+4. **System.** Four checklists of what init takes over as it is, all ticked: `Settings` (hostname, timezone, locales and keymap, but only where the option would write exactly what's on disk now, and `/etc/fstab`'s mounts and swap but the root's and the ESP's lines as [`file_systems`](/docs/reference/options/#file_systems) and [`swap`](/docs/reference/options/#swap), crypttab's lines as their mounts' `encrypted`, and zram-generator's config as [`zram`](/docs/reference/options/#zramenable)), `Users` (regular users, uid 1000 to 59999, each with uid, shell and groups, declared with their real groups, shell, home and description so declaring them changes nothing), `Groups` (regular groups, with their gid) and `Services that differ from their preset` (each `enabled` or `disabled`). Untick anything archix should leave alone; it isn't declared. Passwords stay where they are; archix never manages them.
 
-5. **Config files.** The `/etc` files you changed: package config files edited since they were installed, and files nobody owns in well-known directories such as `/etc/systemd/system`, `/etc/sysctl.d` and `/etc/udev/rules.d`. Files that hold secrets are never listed or copied, only counted: `· 3 files that hold secrets stay out of the config and aren't listed`. The rest is one scrollable checklist, each file tagged with why it's there: `recommended`, then `changed from its package's version` or `not from any package`. Recommended files, such as `/etc/fstab` and anything hand-written, start ticked; the others are mostly changed by package install scripts. See [Safety](/docs/concepts/safety/#what-init-captures-and-never-captures).
+5. **Config files.** The `/etc` files you changed: package config files edited since they were installed, and files nobody owns in well-known directories such as `/etc/systemd/system`, `/etc/sysctl.d` and `/etc/udev/rules.d`. Files that hold secrets are never listed or copied, only counted: `· 3 files that hold secrets stay out of the config and aren't listed`. The rest is one scrollable checklist, each file tagged with why it's there: `recommended`, then `changed from its package's version` or `not from any package`. Recommended files, such as `/etc/mkinitcpio.conf` and anything hand-written, start ticked; `/etc/fstab` is never offered, as archix writes it from `file_systems` and `swap`; the others are mostly changed by package install scripts. See [Safety](/docs/concepts/safety/#what-init-captures-and-never-captures).
 
 6. **Boot.** archix boots every generation as its own [deployment](/docs/concepts/atomicity/), so it needs systemd-boot. If systemd-boot is installed and your kernel command line has `root=`, the step shows the command line and offers `Boot every generation as its own deployment, from a systemd-boot entry`, on. Left off, `archix switch` refuses. The Result section later says whether the first switch can lay the system out as deployments, and why not if it can't, such as an ESP mounted at `/boot`.
 
@@ -129,7 +129,6 @@ $ tree /etc/archix
 ├── files
 │   └── desktop
 │       └── etc
-│           ├── fstab
 │           ├── mkinitcpio.conf
 │           ├── pacman.d
 │           │   └── mirrorlist
@@ -156,8 +155,11 @@ return {
     me = { uid = 1000, groups = { "wheel" }, shell = "/usr/bin/zsh", description = "Me" },
   },
   services = { ["bluetooth.service"] = true, ["sshd.service"] = true },
+  file_systems = {
+    ["/home"] = { device = "UUID=5d2a…", fs_type = "ext4", options = { "rw", "relatime" }, check = true },
+  },
+  swap = { { file = "/swap/swapfile" } },
   files = {
-    ["/etc/fstab"] = { source = "files/desktop/etc/fstab" },
     ["/etc/sysctl.d/80-swappiness.conf"] = { source = "files/desktop/etc/sysctl.d/80-swappiness.conf" },
     -- ...
   },

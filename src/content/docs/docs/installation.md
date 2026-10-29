@@ -74,7 +74,7 @@ $ sudo archix eject
 $ sudo pacman -Rns archix-git
 ```
 
-The deployment you run has to be the current one, so reboot into a waiting switch first. An eject that's cut off finishes when you run it again. See [`eject`](/docs/reference/cli/#eject).
+It lays out the deployment you run, so a switch waiting for its reboot is discarded; reboot into it first to keep it. An eject that's cut off finishes when you run it again. A machine that no longer boots can be ejected from a live USB too; see [Ejecting from a live USB](/docs/guides/recovery/#ejecting-from-a-live-usb) and [`eject`](/docs/reference/cli/#eject).
 
 ## The static binary
 

@@ -367,7 +367,38 @@ this machine is plain Arch now and archix no longer manages it; restart when con
 
 It copies the deployment's trees into the root's own, as hardlinks on ext4 and reflinks on btrfs, takes archix's integration out of them, then hands the ESP over: it adds a `default_uki` line for `EFI/Linux/arch-<kernel>.efi` to the kernel's mkinitcpio preset, runs `mkinitcpio -p`, signs the UKI when sbctl has keys, makes it `loader.conf`'s default, and deletes archix's entries, boot images and fallback image. With the ESP mounted at `/boot`, it writes plain `arch-<kernel>.conf` entries instead. Then the running system moves off the deployment's mounts onto the root's own trees, and `/archix` is deleted.
 
-The deployment that runs has to be `current`, since that's what you've been using: with a switch waiting for its reboot, it refuses with ``deployment 43 is current, but this boot runs deployment 42; restart into 43 (or `archix rollback 42`) and eject then; nothing was changed``. It also refuses when this boot didn't come from a deployment.
+It lays out the deployment that runs, since that's what you've been using and the one that's booted. With a switch waiting for its reboot, the waiting deployment is discarded with every other one:
+
+```console
+  system    deployment 42, which runs now, becomes the root's own /usr, /etc, /opt, /boot and pacman database; the running system switches to them at once
+  pending   deployment 43, which hasn't booted, is discarded: its packages and config never become the system, and the hooks and /var changes waiting for its first boot never run; to keep it, restart into it and eject there
+```
+
+The waiting deployment is never the one laid out: it hasn't booted, so it may not boot, and laying it out under the running system would swap its newer libraries, and the kernel modules of a newer kernel, under the processes running, and its first boot's work would never run. Before copying anything, eject stops the [`/etc` merge](/docs/concepts/safety/#changes-to-etc-before-the-reboot) and makes 42 current and the boot default again, as a rollback by repointing does, so an eject cut off from here on restarts into 42, never 43; edits to `/etc` made since the switch stay, as they're in 42's `/etc`. With `--noconfirm`, a waiting switch needs `--discard-pending` as well, and without it eject refuses: ``deployment 43 is current, but this boot runs deployment 42, which eject lays out; deployment 43 would go with /archix. Run eject again with --discard-pending to do that, or restart into 43 and eject there; nothing was changed``. It also refuses when this boot didn't come from a deployment.
+
+Declared secrets are handled as the running deployment declares them, and `--secrets materialize` copies what this boot decrypted. The shared `/usr/local` and `/etc/fstab` are the running deployment's, with the lines `file_systems` and `swap` declared then. The `/etc` merge's state and the hooks waiting for the discarded deployment's first boot go with it.
+
+#### From a live USB's chroot
+
+Run in `arch-chroot` on a live USB, after [`mount-deployment`](#mount-deployment), eject lays out the deployment that's bound, current by default:
+
+```console
+# /mnt/archix/deploy/42/usr/lib/archix/archix-static mount-deployment /mnt
+# arch-chroot /mnt
+[root@archiso /]# archix eject --noconfirm
+archix eject: archix stops managing this machine, which becomes plain Arch
+  system    deployment 42, which this chroot runs (bound by mount-deployment), becomes the root's own /usr, /etc, /opt, /boot and pacman database
+...
+this root is plain Arch now and archix no longer manages it; leave the chroot (`exit`), `umount -R` the root and restart.
+```
+
+It does what it does on a running system, without systemd or the live system's firmware variables: it builds the plain UKI with the root's own mkinitcpio, chrooted there, and takes the deployment binds off the live system's mounts, so the chroot's shell runs from the root's own trees afterwards. It refuses, changing nothing, when:
+
+- the ESP isn't mounted where `/var/lib/archix/boot/esp` says, inside the chroot: ``from the live system, mount the ESP at ROOT/efi before `arch-chroot ROOT`: boot.esp is /efi, but no FAT filesystem is mounted there, …``;
+- the bound deployment never booted: ``deployment 43 has never booted, so the work of its first boot (its /var changes, new users, waiting hooks) never ran, and plain Arch would never run it; bind one that booted (`archix generations` in the chroot lists them), or boot 43 once first; nothing was changed``. Bind an older one with `mount-deployment ROOT 42`; the newer current one is then discarded, as a waiting switch is, and `--noconfirm` needs `--discard-pending`;
+- `--secrets materialize` is given: nothing in a chroot decrypted the secrets, so only `--secrets drop` works there, and the identity and ciphertexts stay in `/var/lib/archix/secrets`.
+
+A chroot eject that's cut off finishes when `archix eject` is run again in the chroot, after binding the same deployment. `archix rescue` from the [rescue entry](/docs/guides/recovery/#without-a-live-usb-the-rescue-entry), or with `--root-dir` from a live USB, ejects too, without a chroot.
 
 `eject` records how far it got in `/var/lib/archix/eject`. If it's cut off, by a kill or a power cut, the machine still boots, and `sudo archix eject` again finishes it: `archix eject: finishing the eject to plain Arch from deployment 42 that was cut off`. A failure says the same: `the eject stopped partway; the machine still boots, and running `sudo archix eject` again finishes it`.
 
@@ -378,6 +409,7 @@ On a system not laid out as deployments yet, before the first switch, it does th
 | `--noconfirm` | Don't ask. |
 | `--restore-originals` | Put back the files archix replaced, from its backups, and delete the ones it created, as taking them out of the config would; `/etc/kernel/cmdline` stays, as mkinitcpio reads the kernel command line from it. An eject that was cut off keeps the choice it started with. |
 | `--purge` | Also delete `/var/lib/archix` and `/var/cache/archix`. |
+| `--discard-pending` | With `--noconfirm`: eject the running deployment though another is current, a switch waiting for its reboot (or, in a chroot, a newer one than `mount-deployment` bound), which goes with the rest. Without `--noconfirm` the prompt says so instead. |
 
 `archix recover` was removed with the move to deployments; running it says why and exits.
 

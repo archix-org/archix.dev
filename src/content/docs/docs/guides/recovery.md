@@ -70,6 +70,22 @@ You need a live USB only when the rescue entry can't start either: the ESP wiped
 
 The `recovery` VM suite runs exactly these steps on every release, after wiping the ESP and damaging the current deployment.
 
+### Ejecting from a live USB
+
+To leave archix from a live USB instead, as when no deployment boots and you'd rather run plain Arch, do steps 1 and 2 for a deployment that has booted before (current, unless it's a switch that never got its reboot), then eject in the chroot:
+
+```console
+# arch-chroot /mnt
+[root@archiso /]# archix eject --noconfirm
+[root@archiso /]# exit
+# umount -R /mnt
+# reboot
+```
+
+The bound deployment becomes the root's own `/usr`, `/etc`, `/opt`, `/boot` and pacman database, mkinitcpio builds a plain UKI for the root's kernel onto the ESP and makes it the default, and `/archix` goes with every deployment. The ESP has to be mounted inside the root before `arch-chroot`, at the path step 1 read; eject refuses before changing anything when it isn't, when the bound deployment never booted, and with `--secrets materialize`, which needs a booted system's decrypted secrets. Binding an older deployment than current discards current, and `--noconfirm` then needs `--discard-pending` too. See [`eject`](/docs/reference/cli/#from-a-live-usbs-chroot).
+
+The `eject-chroot` boot test runs these steps on ext4 and btrfs, from a plain Arch live system without archix, and boots the result as plain Arch: the deployment's packages, a `pacman -Qkk` that finds nothing a freshly pacstrapped Arch doesn't, and `pacman -Syu` and `pacman -S` working. The `eject-pending` test does the same for an eject with a switch waiting for its reboot.
+
 ## What still needs more than this
 
 An ESP the firmware can't read, or firmware that refuses every boot image, can't be fixed from anything archix puts on that disk; a live USB and the steps above, or the firmware's own setup, are the way back. A machine that hasn't completed a switch since the rescue entry shipped has none yet.

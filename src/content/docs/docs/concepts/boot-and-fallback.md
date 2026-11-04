@@ -75,11 +75,11 @@ A broken glibc stops init and panics the kernel. archix's counted images carry `
 
 From the bad boot to the fallback booting, with nobody at the machine, measured in the VM suites:
 
-| What broke | What reboots it | Measured |
-| --- | --- | --- |
-| A broken glibc, init can't start | the kernel's `panic=10`, at each of the 2 tries | about 35 s |
-| A unit that hangs the boot, or a missing required mount that stops it in emergency mode | `boot.unblessed_timeout`, at each of the 2 tries | about 2 min with `unblessed_timeout = 1`; about 20 min at the default 10 |
-| A unit that fails, so the health check fails | the check marks the entry bad, then one `boot.unblessed_timeout` | about 10 min at the default |
+| What broke | What reboots it | Measured with | Measured |
+| --- | --- | --- | --- |
+| A broken glibc, init can't start | the kernel's `panic=10`, at each of the 2 tries | `unblessed_timeout = 10`, the default, which a panic doesn't wait for | about 35 s |
+| A unit that hangs the boot, or a missing required mount that stops it in emergency mode | `boot.unblessed_timeout`, at each of the 2 tries | `unblessed_timeout = 1` | about 2 min; at the default 10, expect about 20 min (not measured) |
+| A unit that fails, so the health check fails | the check marks the entry bad, then one `boot.unblessed_timeout` | `unblessed_timeout = 10`, the default | about 10 min |
 
 Add your firmware's own boot time. A lower `boot.unblessed_timeout` falls back sooner, and gives you less time at a stuck boot before it reboots under you.
 

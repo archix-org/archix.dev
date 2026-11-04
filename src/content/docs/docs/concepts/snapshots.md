@@ -31,7 +31,7 @@ $ sudo archix snapshot setup
 the root is laid out for rollbacks once you reboot: the next boot moves /var/lib into its own subvolume before any service starts, so services' data stays put when you roll back
 ```
 
-The move is resumable: a power cut partway leaves `/var/lib` whole, and the next boot finishes it. Subvolumes nested in `/var/lib`, such as Docker's or machinectl's, move by a snapshot into their new place, then the old one is deleted.
+The move is resumable: after a power cut partway, the next boot finishes it. In the [power-cut tests](#how-its-tested), every cut booted with the checksums of `/var/lib`'s files unchanged. Subvolumes nested in `/var/lib`, such as Docker's or machinectl's, move by a snapshot into their new place, then the old one is deleted.
 
 ### A root at the top level
 
@@ -193,7 +193,8 @@ archix leaves snapper, snap-pac, Timeshift and limine-snapper-sync alone, their 
 
 VM suites boot archix-managed machines in QEMU with OVMF on btrfs, and on ext4 with rollbacks off:
 
-- **Power cuts** at chosen steps, through a test hook in a debug build and a hard reset: during a real `pacman -Syu`'s package extraction and at each step after it, at each step of `archix rollback N` and `--cancel`, of the `/var/lib` move and of the move of a top-level root into `@`. Every cut system booted, with the root consistent.
+- **Power cuts** at chosen steps, through a test hook in a debug build and a hard reset: during a real `pacman -Syu`'s package extraction and at each step after it, at each step of `archix rollback N` and `--cancel`, of the `/var/lib` move and of the move of a top-level root into `@`. Every cut booted unattended. After each boot the test checks that the ESP is mounted, that `archix status` runs and doesn't call the root foreign, that every entry's image is on the ESP, that no snapshot lacks its root or record and no half-done keep's clone is left, and that `pacman -Dk` and `pacman -Qkk` find nothing outside `/etc` and `/var/log`, ignoring time, permission and owner mismatches. The keep cuts also check that the root holds either the system before the keep or the kept snapshot, and that an account made before the keep is still there; the `/var/lib` cuts check that its files' checksums are unchanged.
+- **What the power cuts don't test.** They reset the VM through QEMU, which keeps every write the guest had already sent to its disk. So they don't test writes a real power cut loses or reorders before they're flushed. Write-replay tests for that are in progress.
 - **Keep** on a layout that mounts `@` by name in `fstab` and on the kernel command line, from a try boot, with users created, changed and deleted since, and `--cancel`; pacman refused while it's pending.
 - **Records** written by a newer archix, read by an older snapshot's initramfs.
 

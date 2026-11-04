@@ -69,7 +69,7 @@ To resolve, archix runs `pacman -Sp` against that day's sync databases and an em
 
 When a dependency names a real package, the lock includes that package, even where pacman met the dependency with another package's `provides`. pacman reuses a provider that's already in the transaction, and on a fresh resolve that can be the wrong one: `ca-certificates-utils` provides `ca-certificates` but ships no certificates, and a lock with only it would empty the CA bundle. A provider still wins when you declare it or list it in `prefer`, and when the real package would conflict with something else in the lock. An existing lock picks this up on the next `archix update`, or when the declared packages change.
 
-Official packages come from `https://archive.archlinux.org` unless [`archive_url`](/docs/reference/options/#archive_url) names a mirror of it with the same layout, such as a local caching proxy. `switch` records the URL it used, so `rollback`, which doesn't evaluate the config, fetches from the same place. [`archive_mirrors`](/docs/reference/options/#archive_mirrors) lists more copies, tried in order when it's down or lacks a file.
+Official packages come from `https://archive.archlinux.org` unless [`archive_url`](/docs/reference/options/#archive_url) names a mirror of it with the same layout, such as a local caching proxy. `switch` records the URL it used, so `revert`, which doesn't evaluate the config, fetches from the same place. [`archive_mirrors`](/docs/reference/options/#archive_mirrors) lists more copies, tried in order when it's down or lacks a file.
 
 To install, archix downloads the exact files in the lock, checks each against its `sha256`, and hands them to `pacman -U`. It never mixes a snapshot with your live mirrors in one transaction, so you can't end up with the partial upgrade the Arch wiki warns about.
 
@@ -108,7 +108,7 @@ zen-browser-bin = { version = "1.16.3b-1", repo = "aur", file = "zen-browser-bin
 neovim-git = { version = "0.12.0.r310.g1a2b3c4-1", repo = "aur", file = "neovim-git-0.12.0.r310.g1a2b3c4-1-x86_64.pkg.tar.zst", sha256 = "4f1c...", base = "neovim-git", commit = "8d2e...", sources = { "neovim::git+https://github.com/neovim/neovim.git" = "1a2b3c4d..." }, explicit = true }
 ```
 
-A later build of the same lock, on this machine after `gc` or on another one, checks out those commits and checks those downloads, so it builds the same code. `archix update` to a newer snapshot drops them, so the next build takes upstream's newest code again. Each generation records the sha256 of the file it actually installed, so rollback reuses that exact file.
+A later build of the same lock, on this machine after `gc` or on another one, checks out those commits and checks those downloads, so it builds the same code. `archix update` to a newer snapshot drops them, so the next build takes upstream's newest code again. Each generation records the sha256 of the file it actually installed, so a revert reuses that exact file.
 
 Dependencies the repos can satisfy are resolved from the repos; the rest come from the AUR. A name or dependency the locked snapshot lacks but the newest snapshot's official repos have is refused instead of being taken from the AUR, since it's simply too new for the lock: `` `cadical` isn't in the 2026-08-19 snapshot, but the newest one (2026-10-17) has it in the official repos, so it isn't taken from the AUR. Run `archix update` to lock a newer snapshot; nothing was changed ``. A recipe's versioned dependency gets the same check, `` mytool needs `glibc>=2.44`, which isn't in the 2026-06-01 snapshot, but the newest one ... ``, so an AUR package providing glibc never stands in for it. An unversioned dependency that in fact needs newer libraries can't be told apart before the build.
 
@@ -175,7 +175,7 @@ What a cache does depends on the package:
 - **Official and third-party packages** are looked for in each cache first, and checked against the lock's `sha256` like any download; a file that doesn't match is skipped for the next source. For a third-party package the repo no longer serves, that's what keeps the locked version restorable on a fresh machine.
 - **AUR packages and builds of the config's own recipes** are reused rather than built. archix looks for the cache's build record for the same recipe commit and snapshot, fetches the files it names, checked against the record's hashes and the lock's `sha256`, and installs those, `:: using zen-browser-bin's build from the package cache at ...`. One machine builds, the others don't, and they all run the same build. A build that isn't the one the lock records is passed over: `warning: the package cache at file:///mnt/nas/archix has a build of zen-browser-bin that doesn't match archix.lock; building it here instead`. Until a machine has built it, the lock has no `sha256` for it, and the record is trusted as it is: list only caches you control.
 
-To have every switch fill a cache, set [`package_cache_push`](/docs/reference/options/#package_cache_push) to its directory on the machine that builds. A cache that's down or misbehaving only costs its speedup: archix says `warning: skipping the package cache at ...` and goes on to the archive or the repo. `switch` records the list, so `rollback`, which doesn't evaluate the config, tries the same caches when it rebuilds a dropped generation.
+To have every switch fill a cache, set [`package_cache_push`](/docs/reference/options/#package_cache_push) to its directory on the machine that builds. A cache that's down or misbehaving only costs its speedup: archix says `warning: skipping the package cache at ...` and goes on to the archive or the repo. `switch` records the list, so `revert`, which doesn't evaluate the config, tries the same caches when it fetches an older generation's packages.
 
 ## `lock` and `update`
 
@@ -288,7 +288,7 @@ The commits move like AUR commits do:
 
 Runtimes aren't locked. An app's runtime follows the branch the app's metadata asks for, at that branch's current commit when the app is installed or updated.
 
-Each generation records the commits it pinned, so [rollback](/docs/concepts/generations/#rolling-back-from-a-running-system) pins the older ones again. See [Flatpak and AppImages](/docs/guides/flatpak-and-appimages/).
+Each generation records the commits it pinned, so a [revert](/docs/concepts/generations/#reverting) pins the older ones again. See [Flatpak and AppImages](/docs/guides/flatpak-and-appimages/).
 
 ## Fetched files: hashes
 

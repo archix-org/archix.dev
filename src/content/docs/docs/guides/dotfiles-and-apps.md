@@ -62,9 +62,9 @@ archix writes your home files as you, not as root: a process running with your u
 
 ## Run a script when a file changes
 
-Home files live outside the [deployments](/docs/concepts/atomicity/), so a switch writes them as soon as its deployment is committed, without waiting for the reboot. Apps that watch their config pick the change up then; others read it when they next start.
+A switch applies in place, so it writes home files while it runs, with the rest of the system. Apps that watch their config pick the change up then; others read it when they next start.
 
-For work that should follow a changed file, give it an `on_change` script, Home Manager's `onChange`. It runs as `home.user`, only when a switch or rollback changed that file, right after the file is written, on the running system:
+For work that should follow a changed file, give it an `on_change` script, Home Manager's `onChange`. It runs as `home.user`, only when a switch or rollback changed that file, on the running system, once the switch has applied the rest:
 
 ```lua title="lua/modules/desktop.lua"
 return {
@@ -78,7 +78,7 @@ return {
 }
 ```
 
-A file a `programs.*` module writes is a `home.files` entry too, so `on_change` works on it without repeating its contents, as `[".config/kitty/kitty.conf"] = { on_change = ... }`. The script runs with `set -e`. Since it runs on the running system, a signal to reload a running app, such as `pkill -USR1 -x kitty`, reaches it. When the same switch creates `home.user`, the user exists only in the new deployment, so the script waits for its first boot, before you log in.
+A file a `programs.*` module writes is a `home.files` entry too, so `on_change` works on it without repeating its contents, as `[".config/kitty/kitty.conf"] = { on_change = ... }`. The script runs with `set -e`. Since it runs on the running system, a signal to reload a running app, such as `pkill -USR1 -x kitty`, reaches it. When the same switch creates `home.user`, the user exists by then: the switch adds users before it writes files.
 
 "Changed" means the file's entry differs from the previous generation's, such as new contents, mode or link target, or that archix had to write it again because the file on disk didn't match, such as putting back a file you edited by hand. So it runs after the first switch that writes the file, but never for edits behind a [live link](#live-links-for-app-written-configs): archix doesn't write what's behind the link. A failing script doesn't undo the switch; it's listed as a failed step, and the switch exits non-zero. For scripts that should run after every switch, see [Activation hooks](/docs/guides/hooks/).
 

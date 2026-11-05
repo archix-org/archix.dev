@@ -46,7 +46,7 @@ const generations = [
 			</div>
 			<div class="controls">
 				<button type="button" data-action="update"><kbd>U</kbd><span data-label>archix update</span></button>
-				<button type="button" data-action="rollback" disabled><kbd>R</kbd>archix rollback</button>
+				<button type="button" data-action="rollback" disabled><kbd>R</kbd>archix revert</button>
 			</div>
 		</figure>
 	</div>
@@ -79,19 +79,18 @@ const generations = [
 		['~ lib32-mesa 1:25.2.4-1 -> 1:25.3.0-1'],
 		['212 packages locked'],
 		['sudo archix switch --noconfirm', 'cmd'],
-		[':: building deployment 42 from deployment 41'],
-		['switched to generation 42 (snapshot 2026-10-15); its deployment boots at the next restart', 'ok'],
-		['sudo reboot', 'cmd'],
+		[':: applying generation 42'],
+		['switched to generation 42 (snapshot 2026-10-15)', 'ok'],
 		['steam', 'cmd'],
 		['Segmentation fault (core dumped)', 'bad'],
 	];
 	const rollback: Line[] = [
-		['sudo archix rollback', 'cmd'],
-		['roll back to generation 41 (snapshot 2026-10-09)? [Y/n] y'],
-		['rolled back to generation 41 (snapshot 2026-10-09); it boots at the next restart. archix.lock is unchanged, so the next `archix switch` returns to the config', 'ok'],
-		['sudo reboot', 'cmd'],
+		['sudo archix revert', 'cmd'],
+		['revert to generation 41 (snapshot 2026-10-09)? [Y/n] y'],
+		[':: applying generation 41 (snapshot 2026-10-09)'],
+		['reverted to generation 41 (snapshot 2026-10-09). archix.lock is unchanged, so the next `archix switch` returns to the config', 'ok'],
 		['steam', 'cmd'],
-		['# launches fine. nothing was reinstalled: deployment 41 was still there', 'note'],
+		['# launches fine, with no reboot: mesa is back at 1:25.2.4-1', 'note'],
 	];
 
 	const root = document.querySelector<HTMLElement>('[data-demo]')!;

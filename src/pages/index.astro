@@ -21,29 +21,29 @@ const flags = [
 const manages = [
 	['Packages', 'Official repos, the AUR, third-party repos like CachyOS, your own PKGBUILDs, and official packages with your patches'],
 	['/etc', 'Any file under /etc, written atomically and tracked by hash'],
-	['systemd', 'System and user units enabled or disabled in each new deployment, so they start as it boots'],
+	['systemd', 'System and user units enabled or disabled, started and stopped by the switch'],
 	['Kernel', 'Kernel parameters, sysctl, modprobe and udev rules'],
-	['Users', 'Users and groups. archix never sets passwords, and a rollback carries the passwords you have now into the deployment it goes back to'],
+	['Users', 'Users and groups. archix never sets passwords unless you declare them, and a rollback carries the accounts and passwords you have now into the snapshot it keeps'],
 	['Dotfiles', 'Copied files with recorded hashes, so edits made outside archix show up in diff, or live links into your config repo'],
 	['Apps', 'programs.* modules, six of them ported from Home Manager and checked byte for byte against its tests, plus writers for toml, json, yaml, ini, kdl and more'],
-	['Hooks', 'Activation scripts that run at the first boot of every switch and rollback, and on_change scripts for files that changed'],
+	['Hooks', 'Activation scripts that run after every switch and revert, and on_change scripts for files that changed'],
 ];
 
 const safety = [
 	['No reinstall', 'archix init takes over the system you already have and locks to what is installed, so the first switch changes nothing, or tells you what it would.'],
-	['Power cuts', 'Every switch builds a new deployment beside the running one and commits it in one step, designed so a power cut leaves the old one or the new one bootable. Kill tests of the staging and commit logic and VM power cuts during staging pass on archix itself; write-level power-cut replay runs on the switches, rollbacks and first boots of archix itself, and the flaws it found are fixed.'],
-	['No live USB', 'No live USB to roll back to a kept deployment: each has its own boot entry. Pick an older one and it boots with the same packages, kernel and /etc, without pacman.'],
-	['Bad updates', 'With systemd-boot 260 or newer, a deployment that does not finish booting is passed over for the last one that did, by boot counting.'],
-	['DKMS', 'Each deployment carries its own kernel, modules and DKMS state, NVIDIA drivers included.'],
-	['Updates at boot', 'Packages, /etc and services change at the next boot, all at once, not under running programs. Flatpak apps and home files are written right after the switch.'],
-	['Tested', 'VM-only so far, not yet on real hardware. Tested in QEMU VMs with Secure Boot enforcing, on ext4 and btrfs: kills of the staging and commit logic, power cuts during staging, full disks, CachyOS, and NVIDIA drivers built per deployment.'],
+	['Power cuts', 'On btrfs with systemd-boot, a power cut during archix switch or a plain pacman or yay transaction never leaves the machine unbootable: archix snapshots the root before it, counts the next boot and marks the update unfinished until it is on disk. Cuts at every step of a switch are tested in VMs.'],
+	['No live USB', 'A broken update falls back by itself to the snapshot of how the system last booted fine, read-only, and archix rollback N keeps it. A rescue entry in the menu repairs the rest.'],
+	['Bad updates', 'With systemd-boot 260 or newer, a boot that does not reach its target or fails the health check is passed over by boot counting, even with nobody at the machine.'],
+	['Plain pacman', 'pacman, yay, paru and pamac keep working, and /usr stays writable. archix snapshots every plain transaction, and adds what it installed to your config or keeps it untracked, as you choose.'],
+	['Live', 'archix switch applies in place, with no reboot; a new kernel takes effect at the next one.'],
+	['Tested', 'VM-only so far, not yet on real hardware. Tested in QEMU VMs on btrfs and ext4: power cuts during pacman and every step of a rollback, broken glibc, hung and failing boots falling back unattended, and full disks.'],
 ];
 
 const nix = [
 	['configuration.nix', 'init.lua'],
 	['flake.lock', 'archix.lock'],
 	['nixos-rebuild switch', 'archix switch'],
-	['nixos-rebuild switch --rollback', 'archix rollback'],
+	['nixos-rebuild switch --rollback', 'archix revert'],
 	['lib.mkDefault / lib.mkForce', 'archix.default / archix.force'],
 	['Home Manager programs.*', 'programs.*, some ported from Home Manager'],
 	['nix-collect-garbage', 'archix gc'],
@@ -115,12 +115,12 @@ mesa = {'{'} version = <span class="s">"1:25.3.0-1"</span>, repo = <span class="
 				<article>
 					<h3>Reversible</h3>
 					<p>
-						Every switch that changes something is a generation, built as a deployment beside the running one, with a boot
-						entry signed when Secure Boot is set up. Roll back from the terminal or pick one at boot: same packages, kernel and /etc.
+						Every switch that changes something is a generation, and on btrfs a snapshot of the root before it, with a boot
+						entry signed when Secure Boot is set up. Revert from the terminal, or pick a snapshot at boot: same packages, kernel and /etc.
 					</p>
 					<Artifact title="systemd-boot">
-						<pre><span class="w">› Arch Linux (archix, generation 42)</span>
-  Arch Linux (archix, generation 41)</pre>
+						<pre><span class="w">› Arch Linux (archix)</span>
+  archix snapshot 6, read-only: 2026-10-30, generation 41</pre>
 					</Artifact>
 				</article>
 			</div>
@@ -128,21 +128,19 @@ mesa = {'{'} version = <span class="s">"1:25.3.0-1"</span>, repo = <span class="
 
 		<section class="split wrap" aria-labelledby="atomic">
 			<div>
-				<h2 id="atomic">Atomic updates, on ext4 too.</h2>
+				<h2 id="atomic">Live updates, with a way back.</h2>
 				<p>
-					A switch builds the next deployment beside the running system, by btrfs snapshot or with hardlinks on ext4, and
-					commits it in one step; the next boot starts it. Packages, /etc and services on the running system stay as they
-					are, and only home files and Flatpak apps change right away. It's designed so a power cut halfway leaves
-					the old system, not a mix of both.
+					A switch applies the config to the running system, in place, with no reboot. On btrfs it first takes a read-only
+					snapshot of the root, and archix's pacman hook does the same before every plain pacman run. A boot that breaks
+					falls back to the system as it last booted fine; on ext4, archix is configuration management with reverts.
 				</p>
-				<p>Keeping the previous deployment costs one update's changed files: about 0.9 GB in one measured week (36 packages). Weeks with a kernel, mesa or browser update take more.</p>
+				<p>A snapshot costs what the update changes, and archix prunes them by count and free space.</p>
 			</div>
 			<Artifact title="terminal">
 				<pre><span class="m">$</span> <span class="w">sudo archix -Syu</span>
 upgrade    mesa 1:25.3.0-1 -&gt; 1:25.3.1-1
-<span class="m">:: building deployment 43 from deployment 42</span>
-<span class="ok">switched to generation 43 (snapshot 2026-10-15);
-its deployment boots at the next restart</span></pre>
+<span class="m">:: applying generation 43</span>
+<span class="ok">switched to generation 43 (snapshot 2026-10-15)</span></pre>
 			</Artifact>
 		</section>
 
@@ -245,7 +243,7 @@ its deployment boots at the next restart</span></pre>
 				<li>
 					<h3>Switch</h3>
 					<CopyCommand command="sudo archix switch" label="Run archix switch" />
-					<p>Lays the system out as deployment 1. From here on, every switch is a generation you can boot back into.</p>
+					<p>Applies in place. On btrfs it lays the root out for snapshots; from the next boot, every switch and pacman run has one to fall back to.</p>
 				</li>
 			</ol>
 		</section>

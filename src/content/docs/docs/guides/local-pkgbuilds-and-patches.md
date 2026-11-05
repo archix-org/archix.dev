@@ -109,10 +109,9 @@ Local recipes build exactly like AUR packages: with `makechrootpkg` in the [clea
 $ sudo archix switch
 install    backup-scripts 1.2.0-1
 install    restic 0.18.1-1
-a new deployment with its own boot entry; it boots at the next restart
 apply 3 changes? [Y/n]
 :: building local:backup-scripts 1.2.0-1 (in a clean chroot)
-:: building deployment 12 from deployment 11
+:: applying generation 12
 ...
 ```
 
@@ -128,7 +127,6 @@ resolving 87 declared packages against the 2026-10-09 snapshot
 214 packages locked
 wrote /etc/archix/archix.lock
 reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)
-a new deployment with its own boot entry; it boots at the next restart
 apply 2 changes? [Y/n]
 ```
 
@@ -136,7 +134,7 @@ The package is built from the new recipe and reinstalled at the same version. A 
 
 An unchanged recipe is rebuilt too when a snapshot move takes away a library its package links. Before a switch, archix reads the ELF `DT_NEEDED` sonames of every package it built that the switch keeps, and when a package the switch upgrades, downgrades or removes stops shipping one of them, it rebuilds that package at the same version against the new snapshot and lists it as a `reinstall`. A build whose libraries all stay isn't rebuilt. The same goes for AUR packages.
 
-Builds from local recipes are cached in `/var/cache/archix/pkg` under a file name prefixed with a hash of the recipe and the snapshot, so two builds of the same version don't overwrite each other, and each generation records the file it installed. That's what lets a [rollback](/docs/concepts/generations/) go back across a same-version change: when the generation it returns to used a different recipe, the rollback lists the same `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)` line and reinstalls that generation's cached build, without building anything.
+Builds from local recipes are cached in `/var/cache/archix/pkg` under a file name prefixed with a hash of the recipe and the snapshot, so two builds of the same version don't overwrite each other, and each generation records the file it installed. That's what lets a [revert](/docs/concepts/generations/#revert-and-keep) go back across a same-version change: when the generation it returns to used a different recipe, the revert lists the same `reinstall  backup-scripts 1.2.0-1 (a build from a different recipe)` line and reinstalls that generation's cached build, without building anything.
 
 ## Patched packages
 
@@ -164,7 +162,6 @@ The first switch replaces Arch's build with yours:
 ```console
 $ sudo archix switch
 upgrade    hyprland 0.51.1-2 -> 0.51.1-2.1
-a new deployment with its own boot entry; it boots at the next restart
 apply 2 changes? [Y/n]
 :: building patch:hyprland 0.51.1-2.1 (in a clean chroot)
 ...
@@ -208,7 +205,7 @@ Either way, the patched build is what ends up installed.
 
 ## When it fails
 
-Everything here fails before anything is built, in [prepare](/docs/concepts/safety/#prepare-then-build), so a failed build leaves the packages, files and services as they were.
+Everything here fails before anything is built, in [prepare](/docs/concepts/safety/#prepare-then-apply), so a failed build leaves the packages, files and services as they were.
 
 - **A build fails.** The switch stops with `local:backup-scripts 1.2.0-1 can't be built: ...` and makechrootpkg's output above it. Unlike an AUR package, there's no nearest version to fall back to: the recipe is yours, so fix it and switch again.
 - **A patch applies nowhere.** The build fails, after `archix: archix-0-0001-fix-cursor-warp.patch applies to no directory in $srcdir`. archix copies each patch into the recipe as `archix-<n>-<file name>`, numbered in your list's order.

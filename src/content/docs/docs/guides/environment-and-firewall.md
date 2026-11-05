@@ -81,7 +81,7 @@ return {
 }
 ```
 
-The switch adds the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network comes up. Like everything in the new deployment, the firewall takes effect at the next boot:
+The switch adds the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network comes up at every boot. The switch applies in place, so it starts the service right away:
 
 ```console
 $ sudo archix switch
@@ -89,7 +89,6 @@ install    nftables 1:1.1.5-1
 create     /etc/nftables-archix.conf
 create     /etc/systemd/system/archix-firewall.service
 enable     archix-firewall.service
-a new deployment with its own boot entry; it boots at the next restart
 apply 5 changes? [Y/n]
 ```
 
@@ -125,7 +124,7 @@ In order, the input chain accepts replies to connections the machine made, every
 
 The `rpfilter` chain checks reverse paths: a packet whose source address wouldn't be routed back out the interface it arrived on is dropped, which stops spoofed traffic. DHCPv4 is let through it, since a client asking for an address has none yet. `check_reverse_path = "loose"` only requires a route back out of any interface, and `"off"` leaves the chain out.
 
-When you change the firewall options, the next switch writes the new rules into its deployment, and they load when it boots. The running system keeps the rules it booted with until then. Setting `enable = false`, or removing the options, disables the service, so the next boot has no `archix` table.
+When you change the firewall options, the next switch rewrites `/etc/nftables-archix.conf` and reloads `archix-firewall.service` on the running system, which loads the new rules at once. Setting `enable = false`, or removing the options, disables the service and stops it, which deletes the `archix` table.
 
 ### Tailscale and a port range
 
@@ -196,7 +195,7 @@ Each table's input chain still applies to every packet, though, so a packet anot
 warning: nftables.service is enabled too, so /etc/nftables.conf (on Arch: drop everything but SSH) still applies on top of the archix firewall; set services["nftables.service"] = false
 ```
 
-Setting it in your config disables `nftables.service` in the next deployment, and the warning goes away:
+Setting it in your config disables and stops `nftables.service` at the next switch, and the warning goes away:
 
 ```lua
 services = { ["nftables.service"] = false },

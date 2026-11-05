@@ -1,75 +1,131 @@
 ---
 title: Recovering a broken system
-description: Bring back a system no deployment boots, from archix's rescue entry or, when even that's gone, a live USB.
+description: Get back to a working system after a bad update or a bad config, from the boot menu, archix's rescue entry or, when even that's gone, a live USB.
 sidebar:
   order: 9
 ---
 
-Most failures need neither of these. A bad update is undone by picking an older deployment in the boot menu, or by boot counting on its own; a lost `loader/` is covered by the fallback boot image in `EFI/Linux`. This guide is for when no deployment boots: every one broken the same way, a root filesystem that needs repair, or a password nobody knows.
+Most failures need nothing from you. On systemd-boot, a package update that leaves the system unable to boot, or booting with failed units, falls back by itself to a snapshot of how the system last booted fine; see [What falls back by itself](/docs/concepts/boot-and-fallback/#what-falls-back-by-itself). This guide is for everything else: picking a snapshot by hand, keeping one, a config you regret, a root that needs repair, a password nobody knows.
 
-## Without a live USB: the rescue entry
+A bad config is different from a bad package update. A switch applies it live and its snapshot holds the system from before, so most config mistakes are one revert or one keep away. But a config that locks you out, breaks the boot or the disk layout, can need the rescue entry or a live USB, as on NixOS.
 
-Every switch keeps an entry called **archix rescue** in the boot menu, after the deployments. It's never the default and boot counting never picks it; choose it in the menu, or from a running system with `sudo bootctl set-oneshot archix-rescue.conf`.
+## Without a live USB
 
-It boots the kernel of the newest deployment that booted fine, with an initramfs of its own: archix's static binary, a shell, and the tools to check and repair filesystems (`e2fsck`, `btrfs`, `fsck.fat`, and `cryptsetup` and `lvm` when installed). It mounts nothing on its own, so a damaged root can be checked unmounted, and opens the `archix rescue` prompt:
+### A snapshot from the boot menu
+
+Every switch snapshot, every pacman snapshot that changed the kernel or initramfs, and the fallback slot have an entry in the boot menu:
+
+```
+  Arch Linux (archix)
+› archix snapshot 5, read-only: 2026-10-15, generation 41, before switch to tree 5d7b21c4e9a0
+  archix snapshot 3, read-only: 2026-10-09, generation 40, before switch to tree 3f2a9c1e07b4
+  archix rescue
+```
+
+Picking one boots it in **try mode**: read-only, with a throwaway layer over the root and `/var/lib`, so you can look around and check that it works. Nothing changes on disk, the next boot goes back to the current system's entry, and pacman and `archix switch` refuse. A notice at login, in the motd, in `archix status` and on the desktop says so:
+
+```
+archix: this boot is snapshot 5, read-only with a throwaway layer (try mode): changes are lost at the next boot, even if you keep it. `sudo archix rollback 5` keeps it from the next boot on; a plain reboot goes back to the current system's entry.
+```
+
+An automatic fallback boots the slot in try mode the same way. See [Try mode](/docs/concepts/boot-and-fallback/#try-mode).
+
+### Keeping a snapshot
+
+To go back for good, keep the snapshot, from a try boot of it or from the running system:
+
+```console
+$ sudo archix rollback 5
+keeping snapshot 5: 5  2026-10-15 08:54 UTC  switch    system as of tree 3f2a9c1e07b4 (generation 41), before switch to tree 5d7b21c4e9a0
+from the next boot it is the root; the running system is kept as a snapshot of kind replaced. Package changes and /etc edits made before that reboot are lost
+keep snapshot 5? [Y/n]
+snapshot 5 is now @, from the next boot; the running system is snapshot 6
+archix: rollback to snapshot 5 is pending: it becomes the root at the next boot. Package changes and /etc edits made before that reboot are lost; `sudo archix rollback --cancel` keeps the running system instead
+```
+
+Reboot to finish it. Until then pacman and `archix switch` refuse, and `sudo archix rollback --cancel` undoes it: `the rollback to snapshot 5 is cancelled: the running system stays the root, and snapshot 6 is gone again`. After the reboot, the system you left is snapshot 6, with a boot entry of its own, so the keep can be undone by keeping 6.
+
+Accounts made since the snapshot come along. One deleted since comes back locked, with no password, expired and a `nologin` shell, so its UID stays reserved and nobody can log in as it:
+
+```console
+alice was deleted since snapshot 5, so it comes back locked (no password, expired, nologin shell); `archix user unlock alice` enables a declared one
+$ sudo archix user unlock alice
+alice is unlocked with its declared password and shell /bin/zsh
+```
+
+A declared user without a declared password is unlocked without one: `alice is unlocked with shell /bin/zsh; it has no password yet: set one with `passwd alice``. See [Keeping a snapshot](/docs/concepts/snapshots/#keeping-a-snapshot) for what a keep carries over and what it puts back in `/var/lib`.
+
+### Reverting a config
+
+For a config change you regret, `sudo archix revert` applies the previous generation's record live, in place, with no reboot, or `archix revert G` the one you name. It puts back what the generation declares and leaves everything else as it is. See [Reverting](/docs/concepts/generations/#reverting), and [Revert and keep](/docs/concepts/generations/#revert-and-keep) for which to use.
+
+### The rescue entry
+
+When nothing boots, not the current system and no snapshot, or the root filesystem needs repair, there's an entry called **archix rescue** in the boot menu, after every other archix entry. It's never the default; choose it in the menu, or from a running system with `sudo bootctl set-oneshot archix-rescue.conf`. systemd-boot also starts it on its own once every counted entry has failed, and archix's initramfs boots it when no snapshot whose entry hasn't failed is left.
+
+It boots the current kernel with an initramfs of its own: archix's static binary, a shell, and the tools to check and repair filesystems (`e2fsck`, `btrfs`, `fsck.fat`, and `cryptsetup` and `lvm` when installed). It mounts nothing on its own, not the root's subvolumes, `@varlib` or the binds, so a damaged root can be checked unmounted, and opens the `archix rescue` prompt:
 
 | Command | What it does |
 | --- | --- |
-| `list` | The deployments, which is current, and their state. |
-| `use N` | Makes deployment N current and its entry the default, repairing it from the package cache first if files differ; a deployment whose entry is gone gets it rebuilt. |
-| `check` | Checks and repairs the root (`e2fsck`; `btrfs check`, read-only unless `--repair-btrfs`) and the ESP (`fsck.fat`). |
-| `verify [--repair]` | Compares every kept deployment with its packages, as `archix verify` does. |
-| `password USER [--all]` | Sets a new password for USER in current's `/etc`, or in every deployment's with `--all`. |
-| `restore-etc PATH` | Puts a packaged file such as a PAM or sudoers file back from the package cache. |
-| `eject` | Ejects to plain Arch, as `archix eject` does. |
-| `open DEVICE [NAME]` | Opens a LUKS volume by its passphrase, never a TPM or other token. |
-| `shell`, `reboot`, `poweroff` | |
+| `check [--repair-btrfs]` | Checks and repairs the root (`e2fsck`; `btrfs check`, read-only unless `--repair-btrfs`, which can make some damage worse) and the ESP (`fsck.fat`). |
+| `password USER` | Sets USER's password in the root's `/etc`, read twice from the console. |
+| `open DEVICE [NAME]` | Opens a LUKS volume with its passphrase as `/dev/mapper/NAME`, never with a TPM, FIDO2 or PKCS#11 token. |
+| `rollback N` | Keeps snapshot N from the next boot on: `archix rollback N` on the root with its layout mounted. Only listed with rollbacks on btrfs. |
+| `shell` | A shell; the root is under `/run/archix-rescue/root`, and `exit` comes back to the prompt. |
+| `reboot`, `poweroff` | Unmount everything and restart, or power off. |
 
-Before its prompt, the rescue entry asks for a login: the password of root or of a member of `wheel` (or `sudo`), checked against the current deployment's `/etc/shadow`. Arch locks root by default, so on most machines that's your own user's password. It allows three tries per boot, two and then four seconds apart, then restarts the machine; nothing in it falls back to a shell. If root is locked and no wheel user has a password, it opens nothing and says so; boot a deployment and set one with `passwd`, or use a live USB as below.
+Before a command, `--root DEVICE [--rootflags OPTIONS]` points it at another root, such as `/dev/mapper/NAME` after `open`.
+
+Before its prompt, the rescue entry asks for a login: the password of root or of a member of `wheel` (or `sudo`), checked against the root's `/etc/shadow`. Arch locks root by default, so on most machines that's your own user's password. It allows three tries per boot, two and then four seconds apart, then restarts the machine; nothing in it falls back to a shell. If root is locked and no wheel user has a password, it opens nothing and says so; boot the system and set one with `passwd`, or use a live USB as below.
 
 On an encrypted root it asks for the LUKS passphrase first, then still asks for the login, because on a locked-down machine knowing the disk passphrase shouldn't make someone root. It never unlocks with a TPM, FIDO2 or PKCS#11 token: the rescue image has no token plugins and its boot image no PCR policy, so a volume a TPM opens, even one bound only to PCR 7, asks for its passphrase there. `open DEVICE [NAME]` opens other volumes the same way.
 
-Whoever logs in can do anything, including resetting passwords in every deployment. With Secure Boot on, the rescue entry's kernel command line is part of its signed image and can't be changed from the boot menu. Without Secure Boot anyone at the console can edit it, as they could boot a live USB. If root and wheel passwords are shared more widely than you'd like, turn it off with [`boot.rescue_entry = false`](/docs/reference/options/#bootrescue_entry).
+Whoever logs in can do anything, including resetting passwords and keeping a snapshot. With Secure Boot on, the rescue entry's kernel command line is part of its signed image and can't be changed from the boot menu. Without Secure Boot anyone at the console can edit it, as they could boot a live USB. If root and wheel passwords are shared more widely than you'd like, turn it off with [`boot.rescue_entry = false`](/docs/reference/options/#bootrescue_entry).
 
-It's tested by the `rescue` VM suite on every release: every deployment's systemd broken, then root's password lost and an entry deleted, each repaired through the rescue alone; then, under Secure Boot with root locked, a wrong and an empty password get no prompt or shell, a wheel user's password gets in, and a volume the TPM opens asks the rescue for its passphrase.
+The rescue entry is kept on systemd-boot and GRUB, refreshed after each switch and each pacman transaction that changed the kernel or initramfs; on Limine it's taken off.
 
-## With a live USB
+### GRUB and Limine
 
-You need a live USB only when the rescue entry can't start either: the ESP wiped or reformatted, systemd-boot broken, or Secure Boot refusing everything. The Arch ISO isn't signed, so turn Secure Boot off to boot it and back on afterwards; the rollback below signs the new boot image with your sbctl keys, as a switch does.
+- **GRUB** lists the same entries as systemd-boot, so picking a snapshot boots it in try mode and `archix rollback N` keeps it. GRUB counts no boots, so nothing falls back by itself: pick the entry by hand.
+- **Limine** gets no archix entries. Its bootable snapshots are limine-snapper-sync's snapper snapshots, restored with `limine-snapper-restore`. That replaces the root behind archix's back, so archix asks you to adopt it afterwards, [below](#a-root-another-tool-replaced). `archix init` offers to [move a Limine machine to systemd-boot](/docs/concepts/boot-and-fallback/#moving-from-limine-to-systemd-boot) for automatic fallback.
 
-1. **Mount the root and the ESP.** On btrfs, mount the root's subvolume. archix records where the ESP goes in `/var/lib/archix/boot/esp`.
+## From a live USB
+
+You need a live USB only when the rescue entry can't start either: the ESP wiped or reformatted, systemd-boot broken, Secure Boot refusing everything, or a system without rollbacks. The Arch ISO isn't signed, so turn Secure Boot off to boot it and back on afterwards; a keep signs the new boot image with your sbctl keys, as a switch does.
+
+`archix chroot` mounts the root as it boots, with its layout: `@` at the root, `@archix` at `/.archix`, `@varlib` at `/var/lib`, pacman's database, DKMS's state and archix's own state bound from `/var/rollback` over `/var/lib`, and the ESP where [`boot.esp`](/docs/reference/options/#bootesp) says, `/efi` by default, then runs `arch-chroot` there. Without the binds, pacman in a chroot would run against an empty database, so the directories under them hold a permanent `db.lck` and a README: after a plain `arch-chroot` into `@`, pacman refuses instead.
+
+1. **Open an encrypted root** first, if it is one: `cryptsetup open /dev/nvme0n1p2 root`.
+2. **Take archix from the root.** The Arch ISO has no archix, but the root carries a static one:
    ```console
-   # mount /dev/nvme0n1p2 /mnt          # btrfs: mount -o subvol=@ /dev/nvme0n1p2 /mnt
-   # cat /mnt/var/lib/archix/boot/esp
-   /efi
-   # mount /dev/nvme0n1p1 /mnt/efi
-   # ls /mnt/archix/deploy
+   # mount -o subvol=@,ro /dev/mapper/root /mnt
+   # cp /mnt/usr/lib/archix/archix-static /tmp/archix
+   # umount /mnt
    ```
-   The root's own `/usr` is empty, since each deployment keeps its trees under `/archix/deploy/<n>`, so `arch-chroot /mnt` alone has nothing to run.
-2. **Bind a deployment over the root** with the static archix every deployment carries. Without a number it binds current's; it refuses a deployment that's missing a tree and lists the complete ones.
+3. **Chroot into the root with its layout**, with a shell or a single command:
    ```console
-   # /mnt/archix/deploy/2/usr/lib/archix/archix-static mount-deployment /mnt 2
-   bound deployment 2's trees over /mnt
+   # /tmp/archix chroot /dev/mapper/root
+   [root@archiso /]# archix snapshot list
+   [root@archiso /]# archix rollback 5 --noconfirm
    ```
-3. **Find what's damaged.**
-   ```console
-   # arch-chroot /mnt
-   [root@archiso /]# archix generations
-   [root@archiso /]# archix verify
-   deployment 2: matches its packages
-   deployment 3: 1 files differ from its packages:
-     /usr/lib/systemd/systemd (systemd): mode 644, not 755
-   ```
-4. **Put systemd-boot back if it's gone, then roll back** to a deployment that matches, or to a damaged one whose packages are still cached, since a rollback repairs the deployment it goes to.
-   ```console
-   [root@archiso /]# bootctl --esp-path=/efi --boot-path=/efi install
-   [root@archiso /]# archix rollback 2 --noconfirm
-   ```
-   `--boot-path` is needed because in a chroot bootctl would take the deployment's read-only `/boot` for a separate boot partition. The rollback makes 2 current and writes its entry, default and fallback boot image, rebuilding the image from the deployment if the ESP lost it. If only the ESP was lost, `archix rollback <current>` rewrites current's entry and changes nothing else.
-5. **Reboot**: `exit`, `umount -R /mnt`, `reboot`. Other kept deployments get their entries back as you switch or roll back to them.
+   `archix chroot` mounts the ESP from the device the root's `fstab` names for it, else from its first `vfat` line, else the only EFI system partition `lsblk` lists. With several and no `fstab` line, it refuses and names them: `the root's fstab has no ESP line and there are 2 EFI system partitions (/dev/nvme0n1p1, /dev/sda1); name the root's with --esp DEVICE`, so pass `--esp /dev/nvme0n1p1`. Put systemd-boot back first if it's gone, with `bootctl install`. A keep onto a wiped ESP writes the current system's entry even though the fallback slot's image is gone, dropping the slot with a warning, so the machine boots again. Inside, `archix rollback N` keeps a snapshot, and pacman works on the root's own database, to reinstall a package or roll a single one back.
+4. **Reboot**: `exit`, then `reboot`. `archix chroot` unmounts what it mounted when the shell or command ends.
 
-The `recovery` VM suite runs exactly these steps on every release, after wiping the ESP and damaging the current deployment.
+On a root that isn't laid out for rollbacks, `archix chroot` stops: `/dev/mapper/root has no /.archix, so it isn't laid out for rollbacks; mount it by hand`. Mount it and `arch-chroot` as you would on any Arch system.
+
+## A root another tool replaced
+
+A snapper rollback, `limine-snapper-restore`, Timeshift or a restore from a backup puts another subvolume in `@`'s place. archix records `@`'s subvolume UUID after its setup and each keep, and notices at boot and in `archix status` when the root isn't the one it produced. Its records then describe another root, so switches and keeps refuse until you adopt it:
+
+```console
+$ sudo archix resync
+the root subvolume (…) isn't the one archix last produced (…): another tool (a snapper or limine-snapper-sync rollback, a restore) replaced it, so archix's records describe another root; on Limine every fallback goes through limine-snapper-restore, so this is expected there. Switches and keeps refuse until `sudo archix resync` adopts it
+carried users, groups and passwords over from the root it replaced (@snapshots/12/snapshot)
+recorded the root; switches and keeps work again
+```
+
+`resync` lays the root out for rollbacks again if it needs to, and carries accounts over from the root it replaced when it can find it by its recorded UUID. When it can't, as when the other tool moved or deleted it, it says so and carries nothing, rather than guessing; check users and passwords then. The pacman snapshot hook never blocks pacman meanwhile: it skips, with a warning in pacman's output. See [A root archix didn't produce](/docs/concepts/snapshots/#a-root-archix-didnt-produce).
 
 ## What still needs more than this
 
-An ESP the firmware can't read, or firmware that refuses every boot image, can't be fixed from anything archix puts on that disk; a live USB and the steps above, or the firmware's own setup, are the way back. A machine that hasn't completed a switch since the rescue entry shipped has none yet.
+An ESP the firmware can't read, or firmware that refuses every boot image, can't be fixed from anything archix puts on that disk; a live USB and the steps above, or the firmware's own setup, are the way back. A machine that hasn't completed a switch with archix managing booting has no rescue entry yet. On ext4, or with rollbacks off, there are no snapshots to boot or keep: the rescue entry can check the disk and reset a password, and `archix revert` goes back to a generation's declared state, but a system a package update broke needs a live USB.

@@ -84,7 +84,21 @@ archix applies everything in place, so there's nothing to convert back: the root
 $ sudo pacman -Rns archix-git
 ```
 
-archix's pacman hooks in `/usr/share/libalpm/hooks` aren't owned by the package; the step after that transaction finds archix gone and deletes them, so plain pacman runs as before. archix's mkinitcpio hook stays in `/etc`, and with the static binary gone, mkinitcpio can't build it: delete `/etc/mkinitcpio.conf.d/archix.conf` and `/etc/initcpio/install/archix`, `/etc/initcpio/hooks/archix` and `/etc/initcpio/archix/`, and set up your own boot entries before the next kernel update. The btrfs layout stays: `@archix` and `@varlib` keep their `fstab` lines, and pacman's database stays bound from `/var/rollback`. The snapshots in `/.archix/snapshots` stay until you delete them with `btrfs subvolume delete`, and archix's boot entries on the ESP until you delete them, under `loader/entries/archix-*.conf` and `EFI/archix`.
+Before the transaction, archix's removal hook copies the static archix to `/run/archix/archix-removed`. The step after the transaction finds `/usr/bin/archix` gone and runs that copy, which takes archix's integration off:
+
+- **Its own files.** archix's systemd units and their links, its bless, emergency, timeout and swap-file drop-ins and units, its mkinitcpio hook and the `HOOKS` drop-in that adds it, its pacman hooks in `/usr/share/libalpm/hooks` and strict mode's script. Plain pacman then runs as before, and the next kernel's `mkinitcpio` doesn't look for archix.
+- **The ESP, handed to plain systemd-boot.** It adds a `default_uki` line to each installed kernel's mkinitcpio preset, builds that UKI in `EFI/Linux`, signed with sbctl when it has keys, points `loader.conf`'s `default` at the main kernel's UKI without archix's `preferred` line, and removes archix's entries, images and rescue entry. From then on, `mkinitcpio` rebuilds that UKI with every kernel update, as on any systemd-boot machine.
+
+```console
+archix: archix was removed; took off 23 of its files (units, the initcpio hook, pacman hooks)
+archix: loader.conf's default is arch-linux.efi
+archix: wrote /efi/EFI/Linux/arch-linux.efi
+archix: archix's snapshots stay in /.archix/snapshots as plain btrfs subvolumes; delete them with `sudo btrfs subvolume delete /.archix/snapshots/*/root` once you don't need them
+```
+
+With Secure Boot on and sbctl holding no keys, a UKI it builds would be refused, so it leaves archix's entries as they are, with a warning: they boot the current kernel until the next kernel update, so sign a UKI for systemd-boot yourself (mkinitcpio's preset with `default_uki`, then `sbctl sign`) and drop archix's entries from `loader/entries` before then. It does the same, with a warning naming why, when a UKI can't be built or signed, rather than leave nothing bootable.
+
+The btrfs layout stays: `@archix` and `@varlib` keep their `fstab` lines, and pacman's database, DKMS's state and archix's state stay bound from `/var/rollback`. The snapshots stay too, as plain btrfs subvolumes, until you delete them as the last line says. Replacing archix-git with another archix package runs none of this, as the new package's archix is there for the step after.
 
 ## The static binary
 

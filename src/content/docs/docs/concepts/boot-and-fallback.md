@@ -108,6 +108,13 @@ The layer is gone at the next boot, and so is everything written to the root or 
 archix: this boot is snapshot 6, read-only with a throwaway layer (try mode): changes are lost at the next boot, even if you keep it. `sudo archix rollback 6` keeps it from the next boot on; a plain reboot goes back to the current system's entry. The layer holds 4096 MiB of changes; past that, writes fail with "no space left on device".
 ```
 
+After an automatic fallback, the login notes and `archix status` also say why the entry it fell back from failed, a health check or a required mount that was missing:
+
+```
+archix: the boot of archix-current.conf failed the health check "no unit failed since the last good boot" at 2026-11-04 09:20:13 UTC (foo.service failed); switch again once it passes
+archix: archix-current.conf failed its boot tries because /home (UUID=0badc0de-0000-4000-8000-000000000000) was missing, not because of the system, so systemd-boot fell back; reattach it and reboot
+```
+
 pacman refuses in a try boot, ``booted snapshot 6 read-only; `archix rollback 6` to keep, or reboot``, and so does `archix switch`. To keep the snapshot, run [`archix rollback 6`](/docs/concepts/snapshots/#keeping-a-snapshot): it becomes the root at the next boot. To go back to the current system, reboot.
 
 ### A missing snapshot

@@ -884,7 +884,7 @@ The console keymap, written to `/etc/vconsole.conf`.
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Kernel settings, written to `/etc/sysctl.d/90-archix.conf` and applied at the next boot. Booleans become `1` and `0`.
+Kernel settings, written to `/etc/sysctl.d/90-archix.conf`. Booleans become `1` and `0`. A switch that changes the file restarts `systemd-sysctl.service`, so new and changed settings apply at once; a setting you drop keeps its value until the next boot, as sysctl has no unset. A file you declare yourself in `/etc/sysctl.d` through [`files`](#files) is read at the next boot.
 
 ```lua
 sysctl = { ["vm.swappiness"] = 10, ["net.ipv4.ip_forward"] = true },
@@ -908,7 +908,7 @@ Kernel modules to load at boot, written to `/etc/modules-load.d/archix.conf`.
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-modprobe.d snippets, keyed by file name without `.conf`.
+modprobe.d snippets, keyed by file name without `.conf`, written to `/etc/modprobe.d`. They apply when a module next loads: a switch doesn't reload modules, so an option for one already loaded takes effect from the next boot, or after you unload and load it again.
 
 ```lua
 modprobe = { nvidia = "options nvidia_drm modeset=1" },
@@ -922,7 +922,7 @@ modprobe = { nvidia = "options nvidia_drm modeset=1" },
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-udev rules, keyed by file name without `.rules`. They're written to `/etc/udev/rules.d`.
+udev rules, keyed by file name without `.rules`. They're written to `/etc/udev/rules.d`. A switch that adds, changes or drops one runs `udevadm control --reload` and then `udevadm trigger --action=change` for every device, so they apply at once.
 
 ```lua
 udev_rules = {

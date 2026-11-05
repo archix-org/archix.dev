@@ -884,7 +884,7 @@ The console keymap, written to `/etc/vconsole.conf`.
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Kernel settings, written to `/etc/sysctl.d/90-archix.conf`. Booleans become `1` and `0`. A switch that changes the file restarts `systemd-sysctl.service`, so new and changed settings apply at once; a setting you drop keeps its value until the next boot, as sysctl has no unset. A file you declare yourself in `/etc/sysctl.d` through [`files`](#files) is read at the next boot.
+Kernel settings, written to `/etc/sysctl.d/90-archix.conf`. Booleans become `1` and `0`. A switch that changes the file restarts `systemd-sysctl.service`, so new and changed settings apply at once; a setting you drop keeps its value until the next boot, as sysctl has no unset. The same goes for any file under `/etc/sysctl.d` or `/usr/lib/sysctl.d` you declare yourself through [`files`](#files).
 
 ```lua
 sysctl = { ["vm.swappiness"] = 10, ["net.ipv4.ip_forward"] = true },
@@ -922,7 +922,7 @@ modprobe = { nvidia = "options nvidia_drm modeset=1" },
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-udev rules, keyed by file name without `.rules`. They're written to `/etc/udev/rules.d`. A switch that adds, changes or drops one runs `udevadm control --reload` and then `udevadm trigger --action=change` for every device, so they apply at once.
+udev rules, keyed by file name without `.rules`. They're written to `/etc/udev/rules.d`. A switch that adds, changes or drops one, or a rule file under `/etc/udev/rules.d` or `/usr/lib/udev/rules.d` you declare through [`files`](#files), runs `udevadm control --reload` and then `udevadm trigger --action=change` for every device, so they apply at once.
 
 ```lua
 udev_rules = {

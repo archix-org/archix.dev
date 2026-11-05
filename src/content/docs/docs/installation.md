@@ -65,6 +65,17 @@ archix is an AUR package on your system, so `archix init` declares it in `instal
 
 Don't update it with `makepkg` again. See [Upgrading archix itself](/docs/concepts/safety/#upgrading-archix-itself).
 
+### From archix 0.2.0
+
+archix 0.2.0 built each switch as a deployment under `/archix/deploy` and booted into it. This archix applies in place and has no migration from that model. On a system 0.2.0 set up, every command but `--help` and `--version` stops, names what it found, and leaves the system as it was:
+
+```console
+$ sudo archix switch
+error: this system uses archix's deployments model, which this version no longer supports; it was left unchanged (/archix/deploy holds deployments). This archix applies configs in place and has no migration from deployments. Keep the archix that set this system up: boot an entry from before archix was upgraded and keep archix at v0.2.0 (build archix-git from the v0.2.0 tag); or reinstall Arch and set it up with this archix
+```
+
+ A 0.2.0 `archix switch` that would upgrade archix to this version fails while it builds the new initramfs, with the same sentence, before it touches the ESP or the deployments. A plain `pacman -U` of the new package is refused by 0.2.0's own pacman hook.
+
 ## Removing archix
 
 archix applies everything in place, so there's nothing to convert back: the root is a plain Arch root, and your packages, files and services stay as they are. With [strict mode](/docs/concepts/pacman-and-yay/#strict-mode) on, removing archix is the one transaction it lets through anyway. Remove the package:

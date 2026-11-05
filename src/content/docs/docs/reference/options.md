@@ -1108,9 +1108,9 @@ An nftables firewall in its own table. See [Environment and firewall](/docs/guid
 | Default | `false` |
 | Declared in | `<archix>/firewall.lua` |
 
-An nftables firewall in its own `inet archix` table, loaded by `archix-firewall.service`; a change to the rules applies at the next boot. Incoming traffic is dropped unless it answers outgoing traffic or something below allows it; other tables (Docker's, Tailscale's) are left alone.
+An nftables firewall in its own `inet archix` table, loaded by `archix-firewall.service`, which a switch that changes the rules reloads. Incoming traffic is dropped unless it answers outgoing traffic or something below allows it; other tables (Docker's, Tailscale's) are left alone.
 
-With `true`, archix declares the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network starts. Turning it on starts the service at that switch. Later rule changes take effect at the next boot, or at once with `sudo systemctl restart archix-firewall.service`; turning it off disables the service, so the next boot has no `archix` table. archix doesn't use `nftables.service`, whose stop flushes every table.
+With `true`, archix declares the `nftables` package, writes the rules to `/etc/nftables-archix.conf`, and writes and enables `archix-firewall.service`, which loads them before the network starts. Turning it on starts the service at that switch. A switch that changes only the rules reloads the service on the running system, which loads them with `nft -f` at once; turning it off disables the service, so the next boot has no `archix` table. archix doesn't use `nftables.service`, whose stop flushes every table.
 
 The input chain has policy drop and accepts, in order: established and related traffic, loopback, `trusted_interfaces`, all ICMPv6, DHCPv6 replies from `fe80::/10`, ping when `allow_ping` is on, the allowed ports and ranges, then `extra_input_rules`.
 
@@ -1438,7 +1438,7 @@ What a counted boot has to pass, besides reaching `boot-complete.target`, before
 | `boot.health_check.reachable` | `list of str` | `[]` | Hosts that must answer before a boot counts as good: `"host:port"` must accept a TCP connection, a bare host must answer a ping, and `"gateway"` is the default IPv4 gateway. A host that's down for a reason outside this machine (the router, a captive portal, a laptop on a train) fails the check just the same and falls back from a good update, so list only what is always up when this machine boots; switching again once it answers brings the update back. |
 | `boot.health_check.login` | `bool` | `false` | Each user archix declares must be able to log in: `su -s <shell> <user> -c true` must succeed. Without it, a boot still doesn't count as good while a declared user's login shell is missing or not in `/etc/shells`. |
 | `boot.health_check.timeout` | `int` | `120` | Seconds the health check keeps retrying its targets after boot before it fails. |
-| `boot.health_check.reboot_on_failure` | `bool` | `false` | Reboot as soon as the health check fails, so the fallback starts at once; otherwise `boot.unblessed_timeout` reboots it once nobody is logged in. |
+| `boot.health_check.reboot_on_failure` | `bool` | `false` | Reboot as soon as the health check fails, so the fallback starts at once; otherwise `boot.unblessed_timeout` reboots it once nobody is logged in. A switch or pacman transaction a power cut left unfinished counts as a failure too. |
 
 The check retries every target every two seconds until `timeout`. With `reachable` set, it waits for `network-online.target`. Units that were already failing at the last good boot don't count; a switch or transaction that gives the current entry its tries notes the units failing on a good boot first, so a unit that's broken for good doesn't make every update fall back. A boot cut off in the middle of a plain pacman transaction fails the check by itself, so it falls back to the slot instead of counting a half-upgraded system as good. A target that still fails marks the entry bad, as `systemd-bless-boot` would:
 
@@ -1657,7 +1657,7 @@ Secrets are age files in the config directory, encrypted to this machine's key a
 | Default | `{}` |
 | Declared in | `<archix>/secrets.lua` |
 
-Secrets by name, decrypted into `/run/archix/secrets/<name>`; `files[path] = { secret = name }` links to one, `archix.secret(name)` puts one into a file's text, and units read `archix.secret_path(name)` through `EnvironmentFile=` or `LoadCredential=`.
+Secrets by name, decrypted by each switch and at each boot into `/run/archix/secrets/<name>`, a ramfs, never on disk; `files[path] = { secret = name }` links to one, `archix.secret(name)` puts one into a file's text, and units read `archix.secret_path(name)` through `EnvironmentFile=` or `LoadCredential=`.
 
 | Field | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -1688,6 +1688,8 @@ files = { ["/etc/wireguard/wg0.conf"] = { secret = "wg0" } },
 | Declared in | `<archix>/secrets.lua` |
 
 This machine's age recipient (`age1...`), which `sudo archix secrets init` makes and prints; every secret this host declares is encrypted to it.
+
+The identity itself lives in the root's own `/var/lib/archix/secrets`, on `@` with rollbacks, so a snapshot holds the identity it had and a keep takes it back with the root. If it's missing or unreadable at boot, `archix-secrets.service` fails and no secret is decrypted, so what reads them fails closed. On a counted boot, the first after a change, that fails the default health check, and boot counting falls back to the slot, whose own state still holds the identity; `archix status` and the login note then point at `archix rollback N`. On a boot that isn't counted, it just fails closed.
 
 ### `secrets.admins`
 

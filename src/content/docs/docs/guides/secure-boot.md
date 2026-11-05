@@ -56,7 +56,13 @@ archix enrolls your keys directly in the firmware. It doesn't use shim or a Mach
 
 ### The menu never points at an unsigned image
 
-With Secure Boot enforcing, which means on and not in setup mode, a boot image that isn't signed would be refused by the firmware. A switch applies in place before it builds the boot images, since they're built from the kernel and initramfs it just installed; the same goes for the step after a plain pacman transaction that changed them. So archix checks each new image, and the systemd-boot loader on the ESP, for a signature before it writes the boot menu, and leaves the menu starting the old images when one isn't signed:
+With Secure Boot enforcing, which means on and not in setup mode, a boot image that isn't signed would be refused by the firmware. So a switch or revert whose images wouldn't be signed at all, with `boot.secure_boot = false` or with sbctl holding no keys, refuses before it applies anything:
+
+```console
+error: Secure Boot is on, but this switch's boot images wouldn't be signed (sbctl has no keys), so the firmware would refuse them; nothing was changed. Run `sudo archix secure-boot setup`, or set boot.secure_boot = true if sbctl already has keys
+```
+
+Inside a chroot, where the firmware is the host's, it only warns. A switch applies in place before it builds the boot images, since they're built from the kernel and initramfs it just installed; the same goes for the step after a plain pacman transaction that changed them. So archix also checks each new image, and the systemd-boot loader on the ESP, for a signature before it writes the boot menu, and leaves the menu starting the old images when one comes out unsigned anyway:
 
 ```console
 failed: the boot images weren't built, so the boot menu still starts the old ones: Secure Boot is on, but 7.2.9-arch1-1-aedff12d49d2.efi isn't signed, so the firmware would refuse it; the menu still starts the old images. Run `sudo archix secure-boot setup` (or set boot.secure_boot = true if sbctl already has keys)
@@ -193,5 +199,5 @@ run `archix switch` before the next restart: until a UKI built with the new key 
 $ sudo archix switch
 ```
 
-`systemd-cryptenroll` asks for each volume's passphrase or recovery key, and replaces its TPM2 slot. The next switch that builds boot images signs their policies with the new key. A switch with nothing to do builds none, so if nothing else changed, the images rebuild only with the next change to the system or a plain pacman transaction that touches the kernel or initramfs; until one boots, the volume asks for its passphrase. Until you boot it, the volume asks for its passphrase. See [`secure-boot rotate-pcr-key`](/docs/reference/cli/#secure-boot-rotate-pcr-key).
+`systemd-cryptenroll` asks for each volume's passphrase or recovery key, and replaces its TPM2 slot. The key's fingerprint is part of the boot settings, so the next `archix switch` builds new boot images and signs their policies with the new key, even with nothing else to do. Until you boot one of them, the volume asks for its passphrase. See [`secure-boot rotate-pcr-key`](/docs/reference/cli/#secure-boot-rotate-pcr-key).
 

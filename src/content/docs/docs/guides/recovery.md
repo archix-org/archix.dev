@@ -93,7 +93,7 @@ The rescue entry is kept on systemd-boot and GRUB, refreshed after each switch a
 
 You need a live USB only when the rescue entry can't start either: the ESP wiped or reformatted, systemd-boot broken, Secure Boot refusing everything, or a system without rollbacks. The Arch ISO isn't signed, so turn Secure Boot off to boot it and back on afterwards; a keep signs the new boot image with your sbctl keys, as a switch does.
 
-`archix chroot` mounts the root as it boots, with its layout: `@` at the root, `@archix` at `/.archix`, `@varlib` at `/var/lib`, and pacman's database, DKMS's state and archix's own state bound from `/var/rollback` over `/var/lib`, then runs `arch-chroot` there. Without the binds, pacman in a chroot would run against an empty database, so the directories under them hold a permanent `db.lck` and a README: after a plain `arch-chroot` into `@`, pacman refuses instead.
+`archix chroot` mounts the root as it boots, with its layout: `@` at the root, `@archix` at `/.archix`, `@varlib` at `/var/lib`, pacman's database, DKMS's state and archix's own state bound from `/var/rollback` over `/var/lib`, and the ESP where [`boot.esp`](/docs/reference/options/#bootesp) says, `/efi` by default, then runs `arch-chroot` there. Without the binds, pacman in a chroot would run against an empty database, so the directories under them hold a permanent `db.lck` and a README: after a plain `arch-chroot` into `@`, pacman refuses instead.
 
 1. **Open an encrypted root** first, if it is one: `cryptsetup open /dev/nvme0n1p2 root`.
 2. **Take archix from the root.** The Arch ISO has no archix, but the root carries a static one:
@@ -105,11 +105,10 @@ You need a live USB only when the rescue entry can't start either: the ESP wiped
 3. **Chroot into the root with its layout**, with a shell or a single command:
    ```console
    # /tmp/archix chroot /dev/mapper/root
-   [root@archiso /]# mount /efi
    [root@archiso /]# archix snapshot list
    [root@archiso /]# archix rollback 5 --noconfirm
    ```
-   `archix chroot` doesn't mount the ESP; `mount /efi` (or wherever [`boot.esp`](/docs/reference/options/#bootesp) says) mounts it from the root's `fstab`. Put systemd-boot back first if it's gone, with `bootctl install`. Inside, `archix rollback N` keeps a snapshot, and pacman works on the root's own database, to reinstall a package or roll a single one back.
+   `archix chroot` mounts the ESP from the device the root's `fstab` names for it, else from its first `vfat` line, else the only EFI system partition `lsblk` lists. With several and no `fstab` line, it refuses and names them: `the root's fstab has no ESP line and there are 2 EFI system partitions (/dev/nvme0n1p1, /dev/sda1); name the root's with --esp DEVICE`, so pass `--esp /dev/nvme0n1p1`. Put systemd-boot back first if it's gone, with `bootctl install`. A keep onto a wiped ESP writes the current system's entry even though the fallback slot's image is gone, dropping the slot with a warning, so the machine boots again. Inside, `archix rollback N` keeps a snapshot, and pacman works on the root's own database, to reinstall a package or roll a single one back.
 4. **Reboot**: `exit`, then `reboot`. `archix chroot` unmounts what it mounted when the shell or command ends.
 
 On a root that isn't laid out for rollbacks, `archix chroot` stops: `/dev/mapper/root has no /.archix, so it isn't laid out for rollbacks; mount it by hand`. Mount it and `arch-chroot` as you would on any Arch system.

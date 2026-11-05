@@ -124,7 +124,7 @@ In order, the input chain accepts replies to connections the machine made, every
 
 The `rpfilter` chain checks reverse paths: a packet whose source address wouldn't be routed back out the interface it arrived on is dropped, which stops spoofed traffic. DHCPv4 is let through it, since a client asking for an address has none yet. `check_reverse_path = "loose"` only requires a route back out of any interface, and `"off"` leaves the chain out.
 
-When you change the firewall options, the next switch rewrites `/etc/nftables-archix.conf`, but leaves the running service alone, since its unit didn't change: the new rules load at the next boot, or now with `sudo systemctl reload archix-firewall.service`. Setting `enable = false`, or removing the options, disables the service and stops it, which deletes the `archix` table.
+When you change the firewall options, the next switch rewrites `/etc/nftables-archix.conf` and reloads `archix-firewall.service` on the running system, which loads the new rules at once. Setting `enable = false`, or removing the options, disables the service and stops it, which deletes the `archix` table.
 
 ### Tailscale and a port range
 

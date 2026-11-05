@@ -124,9 +124,11 @@ Some states stop a switch before it evaluates anything, each with `nothing was c
 
 ## What takes effect when
 
-Everything a switch applies takes effect as it runs: packages, `/etc` files, users and groups, services, sysctl, udev rules, the firewall, dotfiles and Flatpak apps. Services start, stop and restart as described [above](#prepare-then-apply). Two things wait:
+Everything a switch applies takes effect as it runs: packages, `/etc` files, users and groups, services, [`sysctl`](/docs/reference/options/#sysctl) settings, [udev rules](/docs/reference/options/#udev_rules), which it reloads and replays for every device, the firewall, dotfiles and Flatpak apps. Services start, stop and restart as described [above](#prepare-then-apply). Some things wait:
 
 - **A new kernel** runs from the next boot. Until then the running kernel's modules stay loadable, and the switch says `the running kernel was replaced: reboot to run the new one (the running one's modules stay loadable until then)`.
+- **[`modprobe`](/docs/reference/options/#modprobe) options** apply when a module next loads; a switch doesn't reload modules, so for one already loaded they apply from the next boot.
+- **Mounts, swap, zram and tmpfiles lines** apply from the next boot: a switch writes `/etc/fstab` and `/etc/tmpfiles.d/archix.conf`, but doesn't mount or create anything.
 - **Units archix doesn't restart**, the display manager, dbus, logind, NetworkManager, sshd, gettys and the desktop session's own units unless [`restart_if_changed`](/docs/reference/options/#restart_if_changed) says otherwise, run their old code until you log out or reboot.
 
 [Flatpak apps](/docs/guides/flatpak-and-appimages/) are installed, pinned and removed once the rest of the switch has applied, even when the same switch brings `flatpak` itself.

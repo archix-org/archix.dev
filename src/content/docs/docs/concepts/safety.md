@@ -96,7 +96,7 @@ Packages that ship a pacman keyring, the files `pacman-key --populate` reads fro
 
 ### One archix at a time
 
-Only one archix changes the system at a time. `switch`, `install`, `remove`, `upgrade` and bare `archix`, `rollback`, `revert`, `user unlock`, `gc`, `snapshot create`, `delete` and `setup`, `resync`, `init`, `secure-boot setup`, `revoke` and `rotate-pcr-key`, `secrets init` and `rotate-machine-key` and the `--machine` forms of `secrets edit` and `rekey`, and the boot-time checks take an exclusive lock on `/var/lib/archix/running`. A command that finds it held by archix's own boot checks, which a counted boot runs for a moment every minute, waits up to two minutes, `archix: waiting for archix unblessed to finish`; any other holder stops it at once:
+Only one archix changes the system at a time. `switch`, `install`, `remove`, `upgrade` and bare `archix`, `rollback`, `revert`, `user unlock`, `gc`, `snapshot create`, `delete` and `setup`, `resync`, `init`, `secure-boot setup`, `revoke` and `rotate-pcr-key`, `secrets init` and `rotate-machine-key` and the `--machine` forms of `secrets edit` and `rekey`, and the boot-time checks take an exclusive lock on `/var/lib/archix/running`. A command that finds it held by archix's own boot checks, which a counted boot runs for a moment every minute, waits up to two minutes, `archix: waiting for archix unblessed to finish`; any other holder stops it at once. The other way round, archix's boot checks wait for a run of yours, however long it takes, rather than fail, so a switch you start in a counted boot's first minutes never makes a healthy boot fall back:
 
 ```console
 error: another archix is already running (pid 4242, `archix switch`); wait for it to finish

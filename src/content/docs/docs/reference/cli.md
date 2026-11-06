@@ -139,7 +139,7 @@ System-wide Flatpak apps are declared too, each locked to the commit it's instal
 
 ## Commands that change the system
 
-Only one of these runs at a time: each takes an exclusive lock on `/var/lib/archix/running`, and a second one stops with `` another archix is already running (pid 4242, `archix switch`); wait for it to finish ``. One that finds the lock held by archix's own boot checks (`unblessed`, `bless`, `boot-check`, `boot-complete`, `health-check`), as in a counted boot's first minutes, waits up to two minutes for them instead, saying `archix: waiting for ... to finish`. See [Safety](/docs/concepts/safety/#one-archix-at-a-time).
+Only one of these runs at a time: each takes an exclusive lock on `/var/lib/archix/running`, and a second one stops with `` another archix is already running (pid 4242, `archix switch`); wait for it to finish ``. One that finds the lock held by archix's own boot checks (`unblessed`, `bless`, `boot-check`, `boot-complete`, `health-check`), as in a counted boot's first minutes, waits up to two minutes for them instead, saying `archix: waiting for ... to finish`. Those boot checks in turn wait for a user's run however long it takes, so a switch in a counted boot's first minutes doesn't fail its health check. See [Safety](/docs/concepts/safety/#one-archix-at-a-time).
 
 These need root. Run without it, they stop before touching anything, with the command's name and your exact command line: `` `archix switch` changes the system, so it needs root; run it with sudo: sudo archix switch --noconfirm ``. See [Root](#root).
 

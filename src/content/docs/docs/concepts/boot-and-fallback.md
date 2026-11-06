@@ -94,6 +94,7 @@ From the bad boot to the fallback booting, with nobody at the machine, measured 
 | A broken glibc, init can't start | the kernel's `panic=10`, at each of the 2 tries | `unblessed_timeout = 10`, the default, which a panic doesn't wait for | about 35 s |
 | A unit that hangs the boot, or a missing required mount that stops it in emergency mode | `boot.unblessed_timeout`, at each of the 2 tries | `unblessed_timeout = 1` | about 2 min; at the default 10, expect about 20 min (not measured) |
 | A unit that fails, so the health check fails | the check marks the entry bad, then one `boot.unblessed_timeout` | `unblessed_timeout = 10`, the default | about 10 min |
+| A kernel update through plain pacman cut off by a power cut after its new image was built | the unfinished mark fails the check, which marks the entry bad, then one `boot.unblessed_timeout` | `unblessed_timeout = 10`, the default | 616 s after the cut |
 | A switch cut off part way by a power cut | the unfinished mark fails the check, which marks the entry bad, then one `boot.unblessed_timeout` | `unblessed_timeout = 2` | about 2 min |
 
 Add your firmware's own boot time. A lower `boot.unblessed_timeout` falls back sooner, and gives you less time at a stuck boot before it reboots under you.
@@ -126,7 +127,8 @@ If the snapshot an entry names is gone, deleted by hand say, the initramfs boots
 The ESP is FAT, which has no atomic rename. archix writes it so a cut leaves the old file or the new one: each file's data is on the disk before any name points at it, then it's renamed, then the old name is removed, with the whole filesystem flushed between steps. A few files keep one name, and a cut in the moment they're written is covered only by best effort:
 
 - **With boot counting off**, on systemd-boot older than 260 or with `boot.tries = 0`, an entry has no second name, so a changed entry's old file is removed before the new one is named. A cut then leaves that entry missing until the next switch or pacman transaction writes it.
-- **`loader.conf`** is rewritten in place. A cut while it's written can leave systemd-boot without archix's `default` and `preferred` lines until the next refresh; systemd-boot still lists the entries.
+- **`loader.conf` and the rescue entry** are rewritten in place. A cut while one is written can leave it empty, and systemd-boot then starts its own first entry, uncounted, with no fallback. The next boot's check writes them again, `loader.conf` once the current entry is there and the rescue entry from its record while its image is on the ESP, and so does a switch with nothing else to do; `archix status` warns until then.
+- **The boot loaders under Secure Boot**, `EFI/systemd/systemd-bootx64.efi` and `EFI/BOOT/BOOTX64.EFI`, are signed in place, once after each systemd-boot or Limine update leaves them unsigned; later image builds leave them alone. A cut during that one step can leave the machine with no loader until you reinstall it from a live USB, with `bootctl install` and `sbctl sign`.
 - **The removable-media loader**, `EFI/BOOT/BOOTX64.EFI`, which the [move from Limine](#moving-from-limine-to-systemd-boot) replaces, keeps its one name too. The previous one is kept as `BOOTX64.EFI.before-archix`, on the disk before the replacement starts.
 
 ## GRUB and Limine

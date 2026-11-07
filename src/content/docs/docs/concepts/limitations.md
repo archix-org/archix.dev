@@ -26,7 +26,7 @@ set up     rollbacks first: the @archix and @varlib subvolumes, their fstab line
 set rollbacks up and stop for a reboot? (3 package changes wait for the switch after it) [Y/n]
 ```
 
-and ends with ``3 package changes wait: reboot, then run `archix switch` again, which takes a snapshot before them, so a boot they break falls back to it``. Until that reboot, plain pacman refuses too: `archix: the root is laid out for rollbacks and waits for a reboot, which mounts @archix; until then this transaction would have no snapshot to fall back to, so reboot first`. A first switch with no package changes applies its files, users and services right away, without a snapshot, as there's no package transaction for a cut to tear.
+and ends with ``3 package changes wait: reboot, then run `archix switch` again, which takes a snapshot before them, so a boot they break falls back to it``. Until that reboot, plain pacman refuses too: `archix: the root is laid out for rollbacks and waits for a reboot, which mounts @archix; until then this transaction would have no snapshot to fall back to, so reboot first`. The boot after it is counted, and checked by the config's own [`boot.health_check`](/docs/reference/options/#boothealth_check), though that switch recorded no generation, so a unit the config turns off doesn't fail it. A first switch with no package changes applies its files, users and services right away, without a snapshot, as there's no package transaction for a cut to tear.
 
 Laying the root out is safe against cuts, as its order keeps `fstab` from naming anything that isn't ready: a cut before the `fstab` lines are written leaves a plain system, and running the switch again finishes the layout; a cut after them leaves a move the next boot makes.
 

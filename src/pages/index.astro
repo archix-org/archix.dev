@@ -31,7 +31,7 @@ const manages = [
 
 const safety = [
 	['No reinstall', 'archix init takes over the system you already have and locks to what is installed, so the first switch changes nothing, or tells you what it would.'],
-	['Power cuts', 'On btrfs with systemd-boot, from the boot after your first switch on, a power cut during archix switch or a plain pacman or yay transaction never leaves the machine unbootable: archix snapshots the root before it, counts the next boot and marks the update unfinished until it is on disk. Cuts at every step of a switch are tested in VMs.'],
+	['Power cuts', 'On btrfs with systemd-boot, a power cut during archix switch or a plain pacman or yay transaction never leaves the machine unbootable: archix snapshots the root before it, counts the next boot and marks the update unfinished until it is on disk. Cuts at every step of a switch are tested in VMs.'],
 	['No live USB', 'A broken update falls back by itself to the snapshot of how the system last booted fine, read-only, and archix rollback N keeps it. A rescue entry in the menu repairs the rest.'],
 	['Bad updates', 'With systemd-boot 260 or newer, a boot that does not reach its target or fails the health check is passed over by boot counting, even with nobody at the machine.'],
 	['Plain pacman', 'pacman, yay, paru and pamac keep working, and /usr stays writable. archix snapshots every plain transaction, and adds what it installed to your config or keeps it untracked, as you choose.'],

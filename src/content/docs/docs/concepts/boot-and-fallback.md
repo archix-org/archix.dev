@@ -75,13 +75,13 @@ archix: archix-current.conf failed its health check switch (the switch to genera
 
 ### Nobody at the machine
 
-A boot can hang before `boot-complete.target`, or stop in an emergency shell, and nothing would ever reboot it. archix pulls in a timer early in every counted boot, emergency and rescue mode included: once the boot has gone [`boot.unblessed_timeout`](/docs/reference/options/#bootunblessed_timeout) minutes without counting as good, 10 by default, or has sat in emergency or rescue mode that long, with nobody logged in, it reboots, so the counter runs down and systemd-boot falls back:
+A boot can hang before `boot-complete.target`, or stop in an emergency shell, and nothing would ever reboot it. archix pulls in a timer early in every counted boot, emergency and rescue mode included: once the boot has gone [`boot.unblessed_timeout`](/docs/reference/options/#bootunblessed_timeout) minutes without counting as good, 10 by default, or has sat in emergency or rescue mode for 2 minutes (or `boot.unblessed_timeout`, if that's shorter), with nobody logged in, it reboots, so the counter runs down and systemd-boot falls back. The emergency shell's message says so:
 
 ```
 archix: this boot hasn't counted as good within 10 min, with nobody logged in; rebooting so the boot counter can fall back
 ```
 
-A failed health check, an unfinished switch or transaction included, waits for the same timeout, so you can look at the boot while you're at it; set [`boot.health_check.reboot_on_failure = true`](/docs/reference/options/#boothealth_check) to reboot into the fallback at once instead.
+A boot of a switch or transaction a power cut stopped part way, which the unfinished mark fails, reboots into the fallback at once: its root is torn, so there's nothing on it worth waiting for. Any other failed health check waits for the same timeout, so you can look at the boot while you're at it; set [`boot.health_check.reboot_on_failure = true`](/docs/reference/options/#boothealth_check) to reboot into the fallback at once instead.
 
 A broken glibc stops init and panics the kernel. archix's counted images carry `panic=10`, unless your command line sets `panic=` itself, so the machine reboots instead of hanging there.
 
@@ -92,9 +92,10 @@ From the bad boot to the fallback booting, with nobody at the machine, measured 
 | What broke | What reboots it | Measured with | Measured |
 | --- | --- | --- | --- |
 | A broken glibc, init can't start | the kernel's `panic=10`, at each of the 2 tries | `unblessed_timeout = 10`, the default, which a panic doesn't wait for | about 35 s |
-| A unit that hangs the boot, or a missing required mount that stops it in emergency mode | `boot.unblessed_timeout`, at each of the 2 tries | `unblessed_timeout = 1` | about 2 min; at the default 10, expect about 20 min (not measured) |
+| A unit that hangs the boot | `boot.unblessed_timeout`, at each of the 2 tries | `unblessed_timeout = 1` | about 2 min; at the default 10, expect about 20 min (not measured) |
+| A missing required mount that stops it in emergency mode | 2 minutes in emergency mode with nobody logged in, at each of the 2 tries | `unblessed_timeout = 10`, the default | about 5 min |
 | A unit that fails, so the health check fails | the check marks the entry bad, then one `boot.unblessed_timeout` | `unblessed_timeout = 10`, the default | about 10 min |
-| A switch cut off part way by a power cut | the unfinished mark fails the check, which marks the entry bad, then one `boot.unblessed_timeout` | `unblessed_timeout = 2` | about 2 min |
+| A switch or plain pacman update cut off part way by a power cut | the unfinished mark fails the check, which marks the entry bad and reboots at once | `unblessed_timeout = 10`, the default | under a minute |
 
 Add your firmware's own boot time. A lower `boot.unblessed_timeout` falls back sooner, and gives you less time at a stuck boot before it reboots under you.
 

@@ -19,7 +19,7 @@ The record lives in `/var/lib/archix/generations/<n>/generation.json`, and `/var
 - **The config's git commit**, if your config directory is a git repo, and whether the tree had uncommitted changes.
 - **A format version.** An archix that finds a record written in a newer format than it knows won't apply it: `generation 44's record was written by a newer archix (record format 2; this archix knows up to 1); upgrade archix`.
 
-A switch that changes nothing prints `nothing to do: the system matches generation 42 (snapshot 2026-10-15)` and creates none, though it still runs the generation's [hooks](/docs/guides/hooks/) and [repairs a boot step that isn't whole](/docs/reference/cli/#switch).
+A switch that changes nothing prints `nothing to do: the system matches generation 42 (snapshot 2026-10-15)` and creates none; if it has something of that generation's to finish, a boot step a power cut stopped, a boot menu file it finds empty, a move from Limine or the generation's config record, it says `the system matches generation 42 (snapshot 2026-10-15); finishing what's left of it:` and what it does; see [`switch`](/docs/reference/cli/#switch). Either way it runs the generation's [hooks](/docs/guides/hooks/).
 
 ### Root's own copy of the config
 

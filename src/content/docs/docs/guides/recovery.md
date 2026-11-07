@@ -63,7 +63,7 @@ For a config change you regret, `sudo archix revert` applies the previous genera
 
 When nothing boots, not the current system and no snapshot, or the root filesystem needs repair, there's an entry called **archix rescue** in the boot menu, after every other archix entry. It's never the default; choose it in the menu, or from a running system with `sudo bootctl set-oneshot archix-rescue.conf`. systemd-boot also starts it on its own once every counted entry has failed, and archix's initramfs boots it when no snapshot whose entry hasn't failed is left.
 
-It boots the current kernel with an initramfs of its own: archix's static binary, a shell, and the tools to check and repair filesystems (`e2fsck`, `btrfs`, `fsck.fat`, and `cryptsetup` and `lvm` when installed). It mounts nothing on its own, not the root's subvolumes, `@varlib` or the binds, so a damaged root can be checked unmounted, and opens the `archix rescue` prompt:
+It boots the current kernel with an initramfs of its own: archix's static binary, a shell, and the tools to check and repair filesystems (`e2fsck`, `btrfs`, `fsck.fat`, and `cryptsetup` and `lvm` when installed). It takes each tool only if the root has it, and the rescue image is built again once the root gains one, so installing `dosfstools` for `fsck.fat`, say, reaches the rescue entry at the next switch. It mounts nothing on its own, not the root's subvolumes, `@varlib` or the binds, so a damaged root can be checked unmounted, and opens the `archix rescue` prompt:
 
 | Command | What it does |
 | --- | --- |

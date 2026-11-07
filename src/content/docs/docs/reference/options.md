@@ -884,7 +884,7 @@ The console keymap, written to `/etc/vconsole.conf`.
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-Kernel settings, written to `/etc/sysctl.d/90-archix.conf` and applied at the next boot. Booleans become `1` and `0`.
+Kernel settings, written to `/etc/sysctl.d/90-archix.conf`. Booleans become `1` and `0`. A switch that changes the file restarts `systemd-sysctl.service`, so new and changed settings apply at once; a setting you drop keeps its value until the next boot, as sysctl has no unset. The same goes for any file under `/etc/sysctl.d` or `/usr/lib/sysctl.d` you declare yourself through [`files`](#files).
 
 ```lua
 sysctl = { ["vm.swappiness"] = 10, ["net.ipv4.ip_forward"] = true },
@@ -908,7 +908,7 @@ Kernel modules to load at boot, written to `/etc/modules-load.d/archix.conf`.
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-modprobe.d snippets, keyed by file name without `.conf`.
+modprobe.d snippets, keyed by file name without `.conf`, written to `/etc/modprobe.d`. They apply when a module next loads: a switch doesn't reload modules, so an option for one already loaded takes effect from the next boot, or after you unload and load it again.
 
 ```lua
 modprobe = { nvidia = "options nvidia_drm modeset=1" },
@@ -922,7 +922,7 @@ modprobe = { nvidia = "options nvidia_drm modeset=1" },
 | Default | `{}` |
 | Declared in | `<archix>/system.lua` |
 
-udev rules, keyed by file name without `.rules`. They're written to `/etc/udev/rules.d`.
+udev rules, keyed by file name without `.rules`. They're written to `/etc/udev/rules.d`. A switch that adds, changes or drops one, or a rule file under `/etc/udev/rules.d` or `/usr/lib/udev/rules.d` you declare through [`files`](#files), runs `udevadm control --reload` and then `udevadm trigger --action=change` for every device, so they apply at once.
 
 ```lua
 udev_rules = {
@@ -1413,7 +1413,7 @@ archix reads whether the running systemd-boot can count, 260 or newer, from its 
 
 Minutes a boot systemd-boot is still counting may take to count as good, or sit in emergency or rescue mode, before it reboots itself so the fallback can start with nobody at the machine; nobody may be logged in. 0 turns it off.
 
-`archix-unblessed.timer`, pulled in early on counted boots, checks every minute; a drop-in for `emergency.target` and `rescue.target` brings it along when the boot lands there. A boot that hangs, never reaches `boot-complete.target`, sits at an emergency shell after a broken `fstab` line, or failed its health check, reboots once this long has passed and nobody is logged in, and the next try or the fallback starts: `archix: ...; rebooting so the boot counter can fall back`. Set it longer for a machine whose boot is slow on purpose, such as one waiting on a network share. See [How long a fallback takes](/docs/concepts/boot-and-fallback/#how-long-a-fallback-takes).
+`archix-unblessed.timer`, pulled in early on counted boots, checks every minute; a drop-in for `emergency.target` and `rescue.target` brings it along when the boot lands there. A boot that hangs, never reaches `boot-complete.target` or failed its health check reboots once this long has passed and nobody is logged in; one that sits at an emergency or rescue shell, as after a broken `fstab` line, reboots after 2 minutes, or this long if it's shorter, and the next try or the fallback starts: `archix: ...; rebooting so the boot counter can fall back`. Set it longer for a machine whose boot is slow on purpose, such as one waiting on a network share. See [How long a fallback takes](/docs/concepts/boot-and-fallback/#how-long-a-fallback-takes).
 
 ```lua
 boot = { loader = "systemd-boot", unblessed_timeout = 20 },
@@ -1438,7 +1438,7 @@ What a counted boot has to pass, besides reaching `boot-complete.target`, before
 | `boot.health_check.reachable` | `list of str` | `[]` | Hosts that must answer before a boot counts as good: `"host:port"` must accept a TCP connection, a bare host must answer a ping, and `"gateway"` is the default IPv4 gateway. A host that's down for a reason outside this machine (the router, a captive portal, a laptop on a train) fails the check just the same and falls back from a good update, so list only what is always up when this machine boots; switching again once it answers brings the update back. |
 | `boot.health_check.login` | `bool` | `false` | Each user archix declares must be able to log in: `su -s <shell> <user> -c true` must succeed. Without it, a boot still doesn't count as good while a declared user's login shell is missing or not in `/etc/shells`. |
 | `boot.health_check.timeout` | `int` | `120` | Seconds the health check keeps retrying its targets after boot before it fails. |
-| `boot.health_check.reboot_on_failure` | `bool` | `false` | Reboot as soon as the health check fails, so the fallback starts at once; otherwise `boot.unblessed_timeout` reboots it once nobody is logged in. A switch or pacman transaction a power cut left unfinished counts as a failure too. |
+| `boot.health_check.reboot_on_failure` | `bool` | `false` | Reboot as soon as the health check fails, so the fallback starts at once; otherwise `boot.unblessed_timeout` reboots it once nobody is logged in. A boot of a switch or pacman transaction a power cut left unfinished reboots into the fallback at once whatever this says. |
 
 The check retries every target every two seconds until `timeout`. With `reachable` set, it waits for `network-online.target`. Units that were already failing at the last good boot don't count; a switch or transaction that gives the current entry its tries notes the units failing on a good boot first, so a unit that's broken for good doesn't make every update fall back. A boot cut off in the middle of a plain pacman transaction fails the check by itself, so it falls back to the slot instead of counting a half-upgraded system as good. A target that still fails marks the entry bad, as `systemd-bless-boot` would:
 

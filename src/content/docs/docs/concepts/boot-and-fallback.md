@@ -16,7 +16,7 @@ With systemd-boot 260 or newer and [rollbacks](/docs/concepts/snapshots/) on btr
 | A broken update never needs a live USB | yes | if you pick an entry | only through limine-snapper-sync's snapper entries, which archix doesn't control | no |
 | Reproduces the declared state (3) | yes | yes | yes | yes |
 
-1. A package update is a libalpm transaction: one `archix switch`, `install`, `remove` or `upgrade` runs, or one a front end runs on its own, `pacman`, `yay`, `paru` or `pamac`. Either way the current entry gets its tries and the slot its entry before anything changes, and the update is marked unfinished until it's on disk, so a boot it cut off falls back to the slot. A bad config can still need a live USB, as on NixOS. The ESP is FAT, which has a few spots no ordering covers; see [Power cuts and the ESP](#power-cuts-and-the-esp).
+1. A package update is a libalpm transaction: one `archix switch`, `install`, `remove` or `upgrade` runs, or one a front end runs on its own, `pacman`, `yay`, `paru` or `pamac`. Either way the current entry gets its tries and the slot its entry before anything changes, and the update is marked unfinished until it's on disk, so a boot it cut off falls back to the slot. The exception is the time before snapshots start: until the boot after the first switch, an update has no snapshot and no mark, so [a cut then has no fallback](/docs/concepts/limitations/#power-cuts). A bad config can still need a live USB, as on NixOS. The ESP is FAT, which has a few spots no ordering covers; see [Power cuts and the ESP](#power-cuts-and-the-esp).
 2. Broken means a boot fails boot counting's checks: it doesn't reach `boot-complete.target`, or fails the [health check](#boot-counting-and-the-health-check). This covers updates through `archix switch` and through plain pacman.
 3. Not covered: packages you keep untracked with [`drift = "keep"`](/docs/concepts/pacman-and-yay/#drift), `/var/lib` and home, `npm -g` and installers in `/opt`, CachyOS builds older than archix's package cache, AUR builds, which aren't bit-for-bit, and AUR packages deleted since.
 
@@ -67,21 +67,21 @@ After any change, the current entry gets [`boot.tries`](/docs/reference/options/
 
 A unit that's failing on a good boot before a change is noted by the switch or the transaction, so it doesn't make the next boot fall back. More checks, such as a port that must listen or a host that must answer, are in [`boot.health_check`](/docs/reference/options/#boothealth_check). The check retries for `boot.health_check.timeout`, 120 seconds. A failed check marks the entry bad, so the next boot falls back; the login note and `archix status` say which check failed. `init` runs the check once and shows what it would conclude on that machine now.
 
-A counted boot whose entry isn't on a mounted ESP fails its check too, as after a cut mid-kernel-update that left the old kernel without its modules. So does a boot that finds a switch or a [plain pacman transaction](/docs/concepts/snapshots/#snapshots-before-plain-pacman) marked unfinished, because a power cut or a crash stopped it. The check is then named after what was cut off, `switch` or `pacman-transaction`, and its note says what to do:
+A counted boot of an archix entry whose text isn't what archix wrote, as a cut while writing it or an edit leaves it, fails its check too, `archix-current.conf on the ESP isn't what archix wrote, as a cut while writing it or an edit leaves it, so this boot can't count as good`, so it falls back; the login note about an edited entry stays. So does a counted boot whose entry isn't on a mounted ESP, as after a cut mid-kernel-update that left the old kernel without its modules. So does a boot that finds a switch or a [plain pacman transaction](/docs/concepts/snapshots/#snapshots-before-plain-pacman) marked unfinished, because a power cut or a crash stopped it. The check is then named after what was cut off, `switch` or `pacman-transaction`, and its note says what to do:
 
 ```
-archix: archix-current.conf failed its health check switch (the switch to generation 43 started at 2026-11-04 09:12:40 UTC was cut off before it finished, so the packages and files it was changing may be torn; the fallback slot, snapshot 12, is the system from before it: `archix rollback 12` keeps it, or boot this entry again and run `archix switch` again); its entry is marked bad, so the next boot falls back
+archix: archix-current.conf failed its health check switch (the switch to generation 43 started at 2026-11-04 09:12:40 UTC was cut off before it finished, so the packages and files it was changing may be torn; the fallback slot, snapshot 12, is the system from before it: `archix rollback 12` keeps it, or boot this entry again and run `archix switch` again); its entry is marked bad, and the machine reboots into the fallback now
 ```
 
 ### Nobody at the machine
 
-A boot can hang before `boot-complete.target`, or stop in an emergency shell, and nothing would ever reboot it. archix pulls in a timer early in every counted boot, emergency and rescue mode included: once the boot has gone [`boot.unblessed_timeout`](/docs/reference/options/#bootunblessed_timeout) minutes without counting as good, 10 by default, or has sat in emergency or rescue mode that long, with nobody logged in, it reboots, so the counter runs down and systemd-boot falls back:
+A boot can hang before `boot-complete.target`, or stop in an emergency shell, and nothing would ever reboot it. archix pulls in a timer early in every counted boot, emergency and rescue mode included: once the boot has gone [`boot.unblessed_timeout`](/docs/reference/options/#bootunblessed_timeout) minutes without counting as good, 10 by default, or has sat in emergency or rescue mode for 2 minutes (or `boot.unblessed_timeout`, if that's shorter), with nobody logged in, it reboots, so the counter runs down and systemd-boot falls back. The emergency shell's message says so:
 
 ```
 archix: this boot hasn't counted as good within 10 min, with nobody logged in; rebooting so the boot counter can fall back
 ```
 
-A failed health check, an unfinished switch or transaction included, waits for the same timeout, so you can look at the boot while you're at it; set [`boot.health_check.reboot_on_failure = true`](/docs/reference/options/#boothealth_check) to reboot into the fallback at once instead.
+A boot of a switch or transaction a power cut stopped part way, which the unfinished mark fails, reboots into the fallback at once: its root is torn, so there's nothing on it worth waiting for. Any other failed health check waits for the same timeout, so you can look at the boot while you're at it; set [`boot.health_check.reboot_on_failure = true`](/docs/reference/options/#boothealth_check) to reboot into the fallback at once instead.
 
 A broken glibc stops init and panics the kernel. archix's counted images carry `panic=10`, unless your command line sets `panic=` itself, so the machine reboots instead of hanging there.
 
@@ -92,9 +92,10 @@ From the bad boot to the fallback booting, with nobody at the machine, measured 
 | What broke | What reboots it | Measured with | Measured |
 | --- | --- | --- | --- |
 | A broken glibc, init can't start | the kernel's `panic=10`, at each of the 2 tries | `unblessed_timeout = 10`, the default, which a panic doesn't wait for | about 35 s |
-| A unit that hangs the boot, or a missing required mount that stops it in emergency mode | `boot.unblessed_timeout`, at each of the 2 tries | `unblessed_timeout = 1` | about 2 min; at the default 10, expect about 20 min (not measured) |
+| A unit that hangs the boot | `boot.unblessed_timeout`, at each of the 2 tries | `unblessed_timeout = 1` | about 2 min; at the default 10, expect about 20 min (not measured) |
+| A missing required mount that stops it in emergency mode | 2 minutes in emergency mode with nobody logged in, at each of the 2 tries | `unblessed_timeout = 10`, the default | 263 s for both tries |
 | A unit that fails, so the health check fails | the check marks the entry bad, then one `boot.unblessed_timeout` | `unblessed_timeout = 10`, the default | about 10 min |
-| A switch cut off part way by a power cut | the unfinished mark fails the check, which marks the entry bad, then one `boot.unblessed_timeout` | `unblessed_timeout = 2` | about 2 min |
+| A switch or plain pacman update cut off part way by a power cut | the unfinished mark fails the check, which marks the entry bad and reboots at once | `unblessed_timeout = 10`, the default, measured on a plain pacman kernel update cut after its new image was built | 16 s after the cut |
 
 Add your firmware's own boot time. A lower `boot.unblessed_timeout` falls back sooner, and gives you less time at a stuck boot before it reboots under you.
 
@@ -108,6 +109,13 @@ The layer is gone at the next boot, and so is everything written to the root or 
 archix: this boot is snapshot 6, read-only with a throwaway layer (try mode): changes are lost at the next boot, even if you keep it. `sudo archix rollback 6` keeps it from the next boot on; a plain reboot goes back to the current system's entry. The layer holds 4096 MiB of changes; past that, writes fail with "no space left on device".
 ```
 
+After an automatic fallback, the login notes and `archix status` also say why the entry it fell back from failed, a health check or a required mount that was missing:
+
+```
+archix: the boot of archix-current.conf failed the health check "no unit failed since the last good boot" at 2026-11-04 09:20:13 UTC (foo.service failed); switch again once it passes
+archix: archix-current.conf failed its boot tries because /home (UUID=0badc0de-0000-4000-8000-000000000000) was missing, not because of the system, so systemd-boot fell back; reattach it and reboot
+```
+
 pacman refuses in a try boot, ``booted snapshot 6 read-only; `archix rollback 6` to keep, or reboot``, and so does `archix switch`. To keep the snapshot, run [`archix rollback 6`](/docs/concepts/snapshots/#keeping-a-snapshot): it becomes the root at the next boot. To go back to the current system, reboot.
 
 ### A missing snapshot
@@ -119,7 +127,8 @@ If the snapshot an entry names is gone, deleted by hand say, the initramfs boots
 The ESP is FAT, which has no atomic rename. archix writes it so a cut leaves the old file or the new one: each file's data is on the disk before any name points at it, then it's renamed, then the old name is removed, with the whole filesystem flushed between steps. A few files keep one name, and a cut in the moment they're written is covered only by best effort:
 
 - **With boot counting off**, on systemd-boot older than 260 or with `boot.tries = 0`, an entry has no second name, so a changed entry's old file is removed before the new one is named. A cut then leaves that entry missing until the next switch or pacman transaction writes it.
-- **`loader.conf`** is rewritten in place. A cut while it's written can leave systemd-boot without archix's `default` and `preferred` lines until the next refresh; systemd-boot still lists the entries.
+- **`loader.conf` and the rescue entry** are rewritten in place. A cut while one is written can leave it empty, and systemd-boot then starts its own first entry, uncounted, with no fallback. The next boot's check writes them again, a try boot's too, `loader.conf` once the current entry is there and the rescue entry from its record while its image is on the ESP, and so does a switch with nothing else to do. archix keeps a copy of `loader.conf` beside the menu's state, `/.archix/boot/loader.conf`, refreshed by every write and by each boot that finds it whole, so an emptied one comes back with your own lines, such as `timeout` and `console-mode`, not only archix's `default` and `preferred`; `archix status` warns until then.
+- **A boot loader archix signs in place.** Under Secure Boot, archix signs systemd-boot's own file in `/usr`, `/usr/lib/systemd/boot/efi/systemd-bootx64.efi`, into `systemd-bootx64.efi.signed` beside it, whenever that copy is missing, older or not signed by archix's key; `bootctl install`, `bootctl update` and `systemd-boot-update.service` copy the signed file to the ESP, so a systemd update reaches the ESP signed without archix rewriting the loader there. A loader on the ESP that archix's key hasn't signed is still signed in place, as a step of its own: only when Secure Boot is first set up, and for Limine's loader, which has no such copy in `/usr`. A cut during that step can leave the machine with no loader until you reinstall it from a live USB, with `bootctl install` and `sbctl sign`.
 - **The removable-media loader**, `EFI/BOOT/BOOTX64.EFI`, which the [move from Limine](#moving-from-limine-to-systemd-boot) replaces, keeps its one name too. The previous one is kept as `BOOTX64.EFI.before-archix`, on the disk before the replacement starts.
 
 ## GRUB and Limine

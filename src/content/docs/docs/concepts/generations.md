@@ -19,11 +19,13 @@ The record lives in `/var/lib/archix/generations/<n>/generation.json`, and `/var
 - **The config's git commit**, if your config directory is a git repo, and whether the tree had uncommitted changes.
 - **A format version.** An archix that finds a record written in a newer format than it knows won't apply it: `generation 44's record was written by a newer archix (record format 2; this archix knows up to 1); upgrade archix`.
 
-A switch that changes nothing prints `nothing to do: the system matches generation 42 (snapshot 2026-10-15)` and creates none, though it still runs the generation's [hooks](/docs/guides/hooks/).
+A switch that changes nothing prints `nothing to do: the system matches generation 42 (snapshot 2026-10-15)` and creates none; if it has something of that generation's to finish, a boot step a power cut stopped, a boot menu file it finds empty, a move from Limine or the generation's config record, it says `the system matches generation 42 (snapshot 2026-10-15); finishing what's left of it:` and what it does; see [`switch`](/docs/reference/cli/#switch). Either way it runs the generation's [hooks](/docs/guides/hooks/).
 
 ### Root's own copy of the config
 
 A switch evaluates a copy of your config, not the directory you edit; see [Safety](/docs/concepts/safety/). Each generation's config tree, its lock and the plan it evaluated to are stored in a repository only root can write, `/.archix/config.git` on a root [laid out for rollbacks](/docs/concepts/snapshots/#the-layout), or `/var/lib/archix/config.git` otherwise. Revert and keep apply from that copy only, after checking it against the hashes the record stores, and apply the stored plan rather than evaluating old Lua with a newer archix. A copy that doesn't check out refuses before anything changes: `generation 41 can't be read back from root's repository; nothing was changed`.
+
+The check reads only that generation's objects, so one damaged generation refuses revert and keep to itself and nothing else. archix flushes the repository after writing a generation's objects and before any ref names them, but a power cut just after a switch can still leave a generation's objects missing. `archix status` then warns: `warning: generations 42 have objects missing or damaged in root's config repository, as a power cut just after their switch can leave them; revert and keep to them are refused, switches keep working, and a switch to the same config tree stores it again`. Switches keep working, and a switch that stores the same config tree writes the missing objects again.
 
 In your own config repository, the switch points `refs/archix/generations/<n>` at the tree it applied, so you can browse what each generation was built from:
 

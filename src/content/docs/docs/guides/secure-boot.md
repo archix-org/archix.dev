@@ -50,6 +50,8 @@ Many graphics cards and network cards carry firmware (option ROMs) signed by Mic
 
 ## Signing
 
+archix also signs systemd-boot's own file in `/usr` into `systemd-bootx64.efi.signed` beside it, which `bootctl install`, `bootctl update` and `systemd-boot-update.service` copy to the ESP, so a systemd update reaches the ESP signed. It signs a loader on the ESP in place only when Secure Boot is first set up and for Limine's loader.
+
 [`boot.secure_boot`](/docs/reference/options/#bootsecure_boot) decides whether archix signs. With the default, `null`, it signs whenever `sbctl` has keys; `true` always signs and declares `sbctl`; `false` never signs. Every image archix builds is signed with `sbctl sign`, one per installed kernel and distinct initramfs, and so is systemd-boot's own binary, `EFI/systemd/systemd-bootx64.efi` and `EFI/BOOT/BOOTX64.EFI`. A snapshot whose kernel and initramfs match the current system's boots the same signed image, so most snapshot entries cost nothing on the ESP; one that differs keeps its own, built and signed when the snapshot was current.
 
 archix enrolls your keys directly in the firmware. It doesn't use shim or a Machine Owner Key (MOK). Booting through shim needs a kernel signed by a distribution key that Microsoft's shim trusts, and Arch doesn't ship one, so there's nothing for shim to chain to; with your own keys in `db`, archix's signed entries boot directly.

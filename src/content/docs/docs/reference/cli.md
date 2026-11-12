@@ -404,7 +404,7 @@ $ sudo archix snapshot delete 11
 snapshot 11 deleted
 ```
 
-A number that isn't there is refused: `there's no snapshot 11`.
+It returns once btrfs has freed the snapshot's space, so a pacman transaction or switch run next counts it as free. A number that isn't there is refused: `there's no snapshot 11`.
 
 #### `snapshot setup`
 
